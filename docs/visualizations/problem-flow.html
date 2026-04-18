@@ -1,0 +1,1073 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Manex Quality Co-Pilot — Problem Flow</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<style>
+  :root {
+    --bg: #0b1020;
+    --panel: #121a33;
+    --panel-soft: #1a2447;
+    --text: #e8ecf8;
+    --muted: #9aa6c7;
+    --accent: #7dd3fc;
+    --blue: #3b82f6;
+    --amber: #f59e0b;
+    --orange: #f97316;
+    --green: #10b981;
+    --red: #ef4444;
+    --purple: #a855f7;
+    --border: #2a3664;
+
+    --p-system:   #7dd3fc; /* sky */
+    --p-operator: #fbbf24; /* amber */
+    --p-engineer: #f97316; /* orange */
+    --p-manager:  #a855f7; /* violet */
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    background: radial-gradient(ellipse at top, #161f44 0%, var(--bg) 60%) fixed;
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", system-ui, sans-serif;
+    font-feature-settings: "ss01","cv11";
+    line-height: 1.5;
+  }
+  header {
+    padding: 56px 48px 24px;
+    max-width: 1400px;
+    margin: 0 auto;
+  }
+  header .kicker {
+    text-transform: uppercase;
+    letter-spacing: 0.18em;
+    font-size: 11px;
+    color: var(--accent);
+    font-weight: 600;
+  }
+  header h1 {
+    font-size: 44px;
+    margin: 12px 0 8px;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    line-height: 1.1;
+  }
+  header p.lead {
+    color: var(--muted);
+    max-width: 820px;
+    font-size: 17px;
+    margin: 0;
+  }
+  main {
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 0 48px 96px;
+  }
+  section {
+    margin-top: 56px;
+  }
+  section > h2 {
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.2em;
+    color: var(--muted);
+    margin: 0 0 6px;
+    font-weight: 600;
+  }
+  section > h3 {
+    font-size: 28px;
+    margin: 0 0 20px;
+    font-weight: 700;
+    letter-spacing: -0.015em;
+  }
+  /* ==== Zone Legend ==== */
+  .legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-bottom: 18px;
+  }
+  .legend .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 12px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 600;
+    background: var(--panel);
+    border: 1px solid var(--border);
+  }
+  .legend .chip::before {
+    content: "";
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: currentColor;
+  }
+  .chip.blue   { color: #60a5fa; }
+  .chip.amber  { color: #fbbf24; }
+  .chip.orange { color: #fb923c; }
+  .chip.green  { color: #34d399; }
+  .chip.red    { color: #f87171; }
+  .chip.purple { color: #c084fc; }
+  .chip.system   { color: var(--p-system); }
+  .chip.operator { color: var(--p-operator); }
+  .chip.engineer { color: var(--p-engineer); }
+  .chip.manager  { color: var(--p-manager); }
+
+  /* ==== DB overview ==== */
+  .db-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 14px;
+    margin-top: 8px;
+  }
+  .db-card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 16px 18px;
+    position: relative;
+    overflow: hidden;
+  }
+  .db-card::before {
+    content: "";
+    position: absolute; left: 0; top: 0; bottom: 0;
+    width: 4px; background: var(--accent); opacity: 0.5;
+  }
+  .db-card.layer-structure::before    { background: var(--blue);   opacity: 0.9; }
+  .db-card.layer-supplychain::before  { background: var(--amber);  opacity: 0.9; }
+  .db-card.layer-events::before       { background: var(--orange); opacity: 0.9; }
+  .db-card.layer-action::before       { background: var(--green);  opacity: 0.9; }
+  .db-card .tbl {
+    font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 14px;
+    font-weight: 700;
+  }
+  .db-card .rows {
+    font-size: 28px;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    margin-top: 4px;
+  }
+  .db-card .desc {
+    color: var(--muted);
+    font-size: 12px;
+    margin-top: 6px;
+    min-height: 32px;
+  }
+  .db-card .badge {
+    position: absolute;
+    top: 12px; right: 12px;
+    font-size: 10px;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+  }
+  .badge.read  { background: rgba(148,163,184,0.15); color: #cbd5e1; }
+  .badge.write { background: rgba(16,185,129,0.18); color: #6ee7b7; }
+
+  /* ==== Archetype tiles ==== */
+  .arch-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 16px;
+  }
+  .arch {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 20px;
+    position: relative;
+    min-height: 240px;
+  }
+  .arch .num {
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+    font-size: 12px;
+    color: var(--muted);
+    letter-spacing: 0.15em;
+  }
+  .arch h4 {
+    margin: 6px 0 4px;
+    font-size: 18px;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+  }
+  .arch .type {
+    font-size: 13px;
+    font-weight: 600;
+    margin-bottom: 12px;
+  }
+  .arch.supplier .type    { color: #fbbf24; }
+  .arch.process .type     { color: #f87171; }
+  .arch.design .type      { color: #c084fc; }
+  .arch.operator .type    { color: #34d399; }
+  .arch ul {
+    margin: 0;
+    padding-left: 18px;
+    font-size: 13px;
+    color: var(--muted);
+    line-height: 1.6;
+  }
+  .arch .scope {
+    position: absolute;
+    bottom: 14px; left: 20px; right: 20px;
+    display: flex;
+    justify-content: space-between;
+    font-size: 11px;
+    color: var(--muted);
+    font-family: "JetBrains Mono", monospace;
+    padding-top: 10px;
+    border-top: 1px dashed var(--border);
+  }
+
+  /* ==== Personas ==== */
+  .persona-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0,1fr));
+    gap: 16px;
+  }
+  .persona {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-top: 4px solid;
+    border-radius: 14px;
+    padding: 22px;
+    position: relative;
+  }
+  .persona.system   { border-top-color: var(--p-system); }
+  .persona.operator { border-top-color: var(--p-operator); }
+  .persona.engineer { border-top-color: var(--p-engineer); }
+  .persona.manager  { border-top-color: var(--p-manager); }
+  .persona .role {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.18em;
+    font-weight: 700;
+  }
+  .persona.system   .role { color: var(--p-system); }
+  .persona.operator .role { color: var(--p-operator); }
+  .persona.engineer .role { color: var(--p-engineer); }
+  .persona.manager  .role { color: var(--p-manager); }
+  .persona h4 {
+    margin: 8px 0 4px;
+    font-size: 20px;
+    letter-spacing: -0.01em;
+  }
+  .persona .who {
+    color: var(--muted);
+    font-size: 13px;
+    margin-bottom: 14px;
+  }
+  .persona .label {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--muted);
+    font-weight: 600;
+    margin-top: 12px;
+  }
+  .persona ul {
+    margin: 4px 0 0;
+    padding-left: 16px;
+    font-size: 13px;
+    color: var(--text);
+    line-height: 1.55;
+  }
+  .persona ul li + li { margin-top: 3px; }
+
+  /* ==== Swimlane ==== */
+  .lanes {
+    display: grid;
+    grid-template-columns: 180px repeat(5, 1fr);
+    gap: 8px;
+    margin-top: 12px;
+  }
+  .lanes > div {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px;
+    min-height: 90px;
+    position: relative;
+    font-size: 12.5px;
+    line-height: 1.45;
+  }
+  .lanes .header {
+    background: transparent;
+    border: none;
+    font-size: 11px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--muted);
+    font-weight: 700;
+    text-align: center;
+    min-height: 32px;
+    padding: 6px 4px;
+  }
+  .lanes .actor {
+    background: transparent;
+    border: none;
+    color: var(--muted);
+    font-weight: 700;
+    font-size: 12px;
+    padding: 8px 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .lanes .actor::before {
+    content: "";
+    width: 10px; height: 10px; border-radius: 50%;
+    background: currentColor;
+  }
+  .lanes .actor.system   { color: var(--p-system); }
+  .lanes .actor.operator { color: var(--p-operator); }
+  .lanes .actor.engineer { color: var(--p-engineer); }
+  .lanes .actor.manager  { color: var(--p-manager); }
+  .lanes .step {
+    border-left: 3px solid;
+  }
+  .lanes .step.system   { border-left-color: var(--p-system); }
+  .lanes .step.operator { border-left-color: var(--p-operator); }
+  .lanes .step.engineer { border-left-color: var(--p-engineer); }
+  .lanes .step.manager  { border-left-color: var(--p-manager); }
+  .lanes .step .num {
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+    font-size: 10px;
+    color: var(--muted);
+    font-weight: 700;
+    letter-spacing: 0.1em;
+  }
+  .lanes .step strong {
+    display: block;
+    font-size: 13px;
+    margin: 2px 0 4px;
+    color: var(--text);
+  }
+  .lanes .step .ui {
+    margin-top: 6px;
+    padding-top: 6px;
+    border-top: 1px dashed var(--border);
+    font-size: 11px;
+    color: var(--muted);
+    font-style: italic;
+  }
+  .lanes .idle {
+    opacity: 0.25;
+    background: transparent;
+  }
+
+  /* ==== UI per persona ==== */
+  .ui-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0,1fr));
+    gap: 16px;
+  }
+  .screen {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+  .screen .bar {
+    padding: 10px 14px;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    font-weight: 700;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid var(--border);
+  }
+  .screen.system   .bar { background: rgba(125,211,252,0.1); color: var(--p-system); }
+  .screen.operator .bar { background: rgba(251,191,36,0.1); color: var(--p-operator); }
+  .screen.engineer .bar { background: rgba(249,115,22,0.1); color: var(--p-engineer); }
+  .screen.manager  .bar { background: rgba(168,85,247,0.1); color: var(--p-manager); }
+  .screen .body {
+    padding: 16px;
+    font-size: 12.5px;
+    color: var(--muted);
+    line-height: 1.55;
+    flex: 1;
+  }
+  .screen .body strong { color: var(--text); display: block; margin-bottom: 2px; font-size: 13px; }
+  .screen .body ul { padding-left: 18px; margin: 6px 0 0; }
+  .mock {
+    background: var(--panel-soft);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px;
+    margin-top: 10px;
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+    font-size: 11px;
+    color: var(--text);
+  }
+
+  /* ==== Mermaid panels ==== */
+  .diagram {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 32px;
+    overflow: auto;
+  }
+  .diagram .note {
+    color: var(--muted);
+    font-size: 13px;
+    margin-top: 16px;
+    padding-top: 16px;
+    border-top: 1px dashed var(--border);
+  }
+  .kpi-row {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 16px;
+    margin-top: 16px;
+  }
+  .kpi {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 18px 20px;
+  }
+  .kpi .k {
+    font-size: 32px;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+  }
+  .kpi .l {
+    font-size: 12px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    margin-top: 6px;
+    font-weight: 600;
+  }
+  .story-callout {
+    background: linear-gradient(180deg, rgba(249,115,22,0.12), rgba(168,85,247,0.08));
+    border: 1px solid rgba(249,115,22,0.3);
+    border-radius: 14px;
+    padding: 22px 26px;
+    margin-top: 28px;
+    font-size: 15px;
+  }
+  .story-callout strong { color: #fdba74; }
+  .manex-callout {
+    background: linear-gradient(180deg, rgba(125,211,252,0.10), rgba(59,130,246,0.06));
+    border: 1px solid rgba(125,211,252,0.3);
+    border-radius: 14px;
+    padding: 22px 26px;
+    margin-top: 28px;
+    font-size: 15px;
+  }
+  .manex-callout strong { color: #7dd3fc; }
+  footer {
+    color: var(--muted);
+    text-align: center;
+    padding: 40px 20px;
+    font-size: 12px;
+    border-top: 1px solid var(--border);
+    margin-top: 60px;
+  }
+  @media (max-width: 1200px) {
+    .db-grid, .arch-grid, .persona-grid, .ui-grid { grid-template-columns: repeat(2,1fr); }
+    .kpi-row { grid-template-columns: repeat(2,1fr); }
+    .lanes { grid-template-columns: 140px repeat(5, 1fr); font-size: 11.5px; }
+    header { padding: 32px 24px 16px; }
+    main { padding: 0 24px 60px; }
+    header h1 { font-size: 32px; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="kicker">Team De.Constructors · Manex Hackathon · 24h Sprint</div>
+  <h1>Manex Quality Co-Pilot — Problem Flow</h1>
+  <p class="lead">
+    Von <strong>statischem Excel-8D</strong> zu einem <strong>Living Quality Workflow</strong>.
+    Drei Personas, ein autonomer AI-Agent, eine Initiative pro Voice-of-Customer —
+    in Manex' eigenem Vokabular.
+  </p>
+</header>
+
+<main>
+
+  <!-- ============== DATA OVERVIEW ============== -->
+  <section>
+    <h2>Abschnitt 1</h2>
+    <h3>Die Daten, die wir bekommen</h3>
+
+    <div class="kpi-row">
+      <div class="kpi"><div class="k">≈7 000</div><div class="l">Rows total</div></div>
+      <div class="kpi"><div class="k">19</div><div class="l">Tabellen</div></div>
+      <div class="kpi"><div class="k">4</div><div class="l">Views (joins pre-cooked)</div></div>
+      <div class="kpi"><div class="k">2</div><div class="l">Schreib-Targets</div></div>
+      <div class="kpi"><div class="k">6 Mo</div><div class="l">Zeitfenster (Okt 25 – Mär 26)</div></div>
+    </div>
+
+    <div class="legend" style="margin-top:24px">
+      <span class="chip blue">Struktur</span>
+      <span class="chip amber">Lieferkette &amp; Produktion</span>
+      <span class="chip orange">Mess- &amp; Qualitäts-Events</span>
+      <span class="chip green">Aktions-Historie (Write!)</span>
+    </div>
+
+    <div class="db-grid">
+      <div class="db-card layer-structure"><span class="badge read">read</span><div class="tbl">factory / line / section</div><div class="rows">2 · 4 · 12</div><div class="desc">Werk Augsburg + Dresden, je 2 Linien, Montage/Prüfung/Verpackung</div></div>
+      <div class="db-card layer-structure"><span class="badge read">read</span><div class="tbl">article / configuration</div><div class="rows">5 · 10</div><div class="desc">5 Produkt-Familien (MC-200, SU-100, …), je 2 Revisionen EU/US</div></div>
+      <div class="db-card layer-structure"><span class="badge read">read</span><div class="tbl">bom / bom_node</div><div class="rows">5 · 64</div><div class="desc">Assembly→Component-Baum mit find_numbers (C12, R33, Steuerplatine, Gehaeuse)</div></div>
+      <div class="db-card layer-structure"><span class="badge read">read</span><div class="tbl">part_master</div><div class="rows">20</div><div class="desc">Elektronik-Teile: Kondensator, Widerstand, IC, LED, Gehäuse …</div></div>
+
+      <div class="db-card layer-supplychain"><span class="badge read">read</span><div class="tbl">supplier_batch</div><div class="rows">22</div><div class="desc">Inkl. SB-00007 = der <strong>schlechte ElektroParts-Batch</strong> (Story 1)</div></div>
+      <div class="db-card layer-supplychain"><span class="badge read">read</span><div class="tbl">part</div><div class="rows">920</div><div class="desc">Physische Instanzen mit batch_id (Traceability-Schlüssel)</div></div>
+      <div class="db-card layer-supplychain"><span class="badge read">read</span><div class="tbl">production_order / product</div><div class="rows">30 · 500</div><div class="desc">PO-00012 / 18 / 24 = relevant für Story 4 (Operator)</div></div>
+      <div class="db-card layer-supplychain"><span class="badge read">read</span><div class="tbl">product_part_install</div><div class="rows">3 000</div><div class="desc">Instance-Level-Traceability: welcher Part → welches Produkt → welche Section</div></div>
+
+      <div class="db-card layer-events"><span class="badge read">read</span><div class="tbl">test / test_result</div><div class="rows">8 · 2 000</div><div class="desc">PASS / MARGINAL / FAIL — MARGINAL = Leading Indicator</div></div>
+      <div class="db-card layer-events"><span class="badge read">read</span><div class="tbl">defect</div><div class="rows">150</div><div class="desc">In-Werk-Fehler, 4 Stories + Noise (Detection-Bias, False Positives)</div></div>
+      <div class="db-card layer-events"><span class="badge read">read</span><div class="tbl">field_claim</div><div class="rows">40</div><div class="desc">Voice of Customer — Kundenreklamationen, 4–12 Wo Claim-Lag</div></div>
+      <div class="db-card layer-action"><span class="badge write">write</span><div class="tbl">rework</div><div class="rows">120</div><div class="desc">INSERT/UPDATE möglich — hält <code>user_id</code>, Schlüssel für Story 4</div></div>
+
+      <div class="db-card layer-action"><span class="badge write">write</span><div class="tbl">product_action (Initiative)</div><div class="rows">50</div><div class="desc">Closed-Loop-Target: action_type = corrective / preventive / investigate / initiate_8d; status = open / in_progress / done</div></div>
+      <div class="db-card layer-structure"><span class="badge write">write</span><div class="tbl">eigene Tabellen</div><div class="rows">∞</div><div class="desc">Team darf CREATE TABLE — z.B. für Report-Drafts, FMEA-Einträge, Embeddings</div></div>
+      <div class="db-card layer-events"><span class="badge read">read</span><div class="tbl">Defekt-Bilder</div><div class="rows">≈12</div><div class="desc">Auf :9000/defect_images/ — Dateinamen semantisch (cold_solder.jpg, bulging_cap.jpg)</div></div>
+      <div class="db-card layer-events"><span class="badge read">read</span><div class="tbl">Views (pre-joined)</div><div class="rows">4</div><div class="desc">v_defect_detail, v_product_bom_parts, v_field_claim_detail, v_quality_summary</div></div>
+    </div>
+
+    <div class="story-callout">
+      <strong>Vier explizite Root-Cause-Stories</strong> sind im Datensatz versteckt.
+      Das ist <em>keine Schnitzeljagd</em> — die Muster sind dokumentiert. Unsere Aufgabe ist es,
+      einen Engineer von Symptom zu Ursache zu führen und die Initiative zu generieren, nicht die Stories zu „finden".
+    </div>
+
+    <div class="arch-grid" style="margin-top:20px">
+      <div class="arch supplier">
+        <div class="num">STORY · 01</div>
+        <h4>Supplier Batch</h4>
+        <div class="type">→ Vertikale Traceability</div>
+        <ul>
+          <li>Schlechte 100µF Caps (PM-00008)</li>
+          <li>Batch SB-00007 / ElektroParts</li>
+          <li>Field-Claim-Spike März 2026</li>
+          <li>Deutsch: „Totalausfall"</li>
+        </ul>
+        <div class="scope"><span>~30 Produkte</span><span>~25 Def + 12 FC</span></div>
+      </div>
+      <div class="arch process">
+        <div class="num">STORY · 02</div>
+        <h4>Kalibrierungs-Drift</h4>
+        <div class="type">→ Zeit+Ort-Lokalisierung</div>
+        <ul>
+          <li>VIB_TEST fails KW 49–52/2025</li>
+          <li>Section „Montage Linie 1"</li>
+          <li>Selbstkorrigiert nach KW 2/26</li>
+          <li>Rework: „Schraubmoment"</li>
+        </ul>
+        <div class="scope"><span>~20 Defekte</span><span>enges Fenster</span></div>
+      </div>
+      <div class="arch design">
+        <div class="num">STORY · 03</div>
+        <h4>Design-Thermaldrift</h4>
+        <div class="type">→ Cross-Boundary-Gap</div>
+        <ul>
+          <li>MC-200 (ART-00001)</li>
+          <li>R33 auf Steuerplatine (PM-00015)</li>
+          <li>Field fällt aus, <em>Werk sieht nichts</em></li>
+          <li>Claim-Lag 8–12 Wochen</li>
+        </ul>
+        <div class="scope"><span>~15 FC</span><span>0 in-factory</span></div>
+      </div>
+      <div class="arch operator">
+        <div class="num">STORY · 04</div>
+        <h4>Operator-Handling</h4>
+        <div class="type">→ Join über Rework</div>
+        <ul>
+          <li>Kosmetische Defekte (low sev)</li>
+          <li>PO-00012 / 18 / 24</li>
+          <li>user_042 (Packaging)</li>
+          <li>Nur via rework.user_id sichtbar</li>
+        </ul>
+        <div class="scope"><span>~15 Defekte</span><span>3 Orders</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============== PERSONAS ============== -->
+  <section>
+    <h2>Abschnitt 2</h2>
+    <h3>Die vier Akteure — Personas &amp; Rollen</h3>
+
+    <div class="persona-grid">
+      <div class="persona system">
+        <div class="role">Akteur · non-human</div>
+        <h4>System / AI-Agent</h4>
+        <div class="who">Autonomer Reasoning-Loop<br/>(Qualitatio Agent)</div>
+        <div class="label">Was es tut</div>
+        <ul>
+          <li>Überwacht Datastream kontinuierlich</li>
+          <li>Klassifiziert Anomalie → Archetyp</li>
+          <li>Tool-Call-Investigation</li>
+          <li>Draft 8D + Initiative-Vorschläge</li>
+          <li>Trackt Initiative-Progress</li>
+        </ul>
+        <div class="label">Zeit-Intensität</div>
+        <ul><li>Sekunden bis Minuten</li></ul>
+      </div>
+
+      <div class="persona operator">
+        <div class="role">Persona · Shopfloor</div>
+        <h4>QC Operator</h4>
+        <div class="who">Qualitätskontrolle an der Linie<br/>Schicht-basiert, Hands-on</div>
+        <div class="label">Jobs-to-be-done</div>
+        <ul>
+          <li>Defekt schnell reporten — ohne Papierkram</li>
+          <li>Foto + 1-Satz-Beobachtung reicht</li>
+          <li>Bestätigung: „Ist registriert"</li>
+        </ul>
+        <div class="label">Erwartungs-Horizont</div>
+        <ul><li>&lt; 30 Sekunden pro Event</li></ul>
+      </div>
+
+      <div class="persona engineer">
+        <div class="role">Persona · Investigator</div>
+        <h4>Quality Engineer</h4>
+        <div class="who">Autor des 8D-Reports<br/>Prüft AI-Hypothesen, trifft Entscheidung</div>
+        <div class="label">Jobs-to-be-done</div>
+        <ul>
+          <li>AI-Analyse reviewen, nicht tippen</li>
+          <li>Evidenz-Trail nachvollziehen</li>
+          <li>Initiative-Vorschläge annehmen / amenden</li>
+          <li>Ownership + Deadline vergeben</li>
+        </ul>
+        <div class="label">Erwartungs-Horizont</div>
+        <ul><li>Minuten statt Stunden pro Case</li></ul>
+      </div>
+
+      <div class="persona manager">
+        <div class="role">Persona · Oversight</div>
+        <h4>Quality Manager</h4>
+        <div class="who">Plant / QM-Leitung<br/>Portfolio-Sicht, Eskalation</div>
+        <div class="label">Jobs-to-be-done</div>
+        <ul>
+          <li>Überblick über alle offenen Initiativen</li>
+          <li>High-Severity-Approvals</li>
+          <li>Trend-KPIs (TTR, Closure-Rate, Kosten)</li>
+          <li>„Wiederholt es sich?"</li>
+        </ul>
+        <div class="label">Erwartungs-Horizont</div>
+        <ul><li>Tägliche / wöchentliche Sicht</li></ul>
+      </div>
+    </div>
+
+    <div class="manex-callout">
+      <strong>Manex-Ontologie-Alignment:</strong>
+      Manex beschreibt ihren Kern als <em>„Each customer voice is assigned an Initiative that is semi-automatically implemented by agents"</em>.
+      Unser System → Agent → Engineer → Manager spiegelt exakt: <em>Voice of Customer</em> (field_claim / Operator-Report) →
+      <em>AI Agent</em> tool-calling → <em>Initiative</em> in <code>product_action</code> → semi-automatische Umsetzung mit menschlichem Kontroll-Punkt.
+    </div>
+  </section>
+
+  <!-- ============== SWIMLANE ============== -->
+  <section>
+    <h2>Abschnitt 3</h2>
+    <h3>Persona-Journey — wer macht was wann</h3>
+
+    <div class="legend">
+      <span class="chip system">System / AI-Agent</span>
+      <span class="chip operator">QC Operator</span>
+      <span class="chip engineer">Quality Engineer</span>
+      <span class="chip manager">Quality Manager</span>
+    </div>
+
+    <div class="lanes">
+      <!-- Header row -->
+      <div class="header"></div>
+      <div class="header">1 · Trigger</div>
+      <div class="header">2 · Investigate</div>
+      <div class="header">3 · Report</div>
+      <div class="header">4 · Decide</div>
+      <div class="header">5 · Track &amp; Close</div>
+
+      <!-- Row: System -->
+      <div class="actor system">System / AI</div>
+      <div class="step system">
+        <div class="num">1A</div>
+        <strong>Continuous Stream-Monitoring</strong>
+        Detect Defect-Cluster, Pareto-Shift, MARGINAL-Häufung, Field-Claim-Spike
+        <div class="ui">Background Worker · Event-Bus</div>
+      </div>
+      <div class="step system">
+        <div class="num">2</div>
+        <strong>Agent-Reasoning mit Tools</strong>
+        Archetyp-Klassifikation → Hypothese-Loop → Tool-Calls (query_defects, trace_batch, bom_parts_for_product, cross_factory_field_gap, semantic_search) → Noise-Filter → Confidence-Score
+        <div class="ui">Streamt Reasoning-Trace live</div>
+      </div>
+      <div class="step system">
+        <div class="num">3A</div>
+        <strong>Draft 8D + Initiative-Vorschläge</strong>
+        Evidence-Collector → 8D-Template (D1..D8) → Viz-Selector → Initiative-Kandidaten (action_type, owner-hint)
+        <div class="ui">Generative UI Komponenten</div>
+      </div>
+      <div class="step system idle"></div>
+      <div class="step system">
+        <div class="num">5A</div>
+        <strong>Persistiert &amp; Überwacht</strong>
+        INSERT product_action + rework; monitort Closure-Metrik; Re-Trigger bei ähnlichem Signal
+        <div class="ui">Background · PostgreSQL Change-Feed</div>
+      </div>
+
+      <!-- Row: Operator -->
+      <div class="actor operator">QC Operator</div>
+      <div class="step operator">
+        <div class="num">1B</div>
+        <strong>Foto / Freitext einreichen</strong>
+        Nimmt Foto am Band, tippt 1-Satz-Prompt („Riss am Gehäuse, Linie 2")
+        <div class="ui">📱 Mobile Capture-Screen</div>
+      </div>
+      <div class="step operator idle"></div>
+      <div class="step operator idle"></div>
+      <div class="step operator idle"></div>
+      <div class="step operator">
+        <div class="num">5B</div>
+        <strong>Bestätigung / Status</strong>
+        Sieht „Dein Report wurde als Initiative PA-00102 eröffnet"
+        <div class="ui">📱 Receipt-Toast</div>
+      </div>
+
+      <!-- Row: Engineer -->
+      <div class="actor engineer">Quality Engineer</div>
+      <div class="step engineer idle"></div>
+      <div class="step engineer">
+        <div class="num">2+</div>
+        <strong>Optional: Hint geben</strong>
+        Wenn Agent „stalled" → Engineer kann Hypothese einwerfen oder Daten-Subset spezifizieren
+        <div class="ui">🖥️ Chat-Panel neben Reasoning-Trace</div>
+      </div>
+      <div class="step engineer">
+        <div class="num">3B</div>
+        <strong>Report reviewen</strong>
+        Liest 8D-Draft, klickt Evidenz-Links, prüft Confidence, öffnet Viz (Fault-Tree, BOM-Graph, Pareto)
+        <div class="ui">🖥️ Investigation Workspace</div>
+      </div>
+      <div class="step engineer">
+        <div class="num">4</div>
+        <strong>Accept / Amend / Reject</strong>
+        Pro Initiative-Vorschlag: annehmen, editieren, verwerfen. Owner + Deadline + Erfolgskriterium zuweisen
+        <div class="ui">🖥️ Initiative-Composer</div>
+      </div>
+      <div class="step engineer">
+        <div class="num">5C</div>
+        <strong>Verifiziert Closure</strong>
+        Erfolgskriterium erfüllt? Bestätigt Status=done oder Reopen
+        <div class="ui">🖥️ My-Initiatives-List</div>
+      </div>
+
+      <!-- Row: Manager -->
+      <div class="actor manager">Quality Manager</div>
+      <div class="step manager idle"></div>
+      <div class="step manager idle"></div>
+      <div class="step manager idle"></div>
+      <div class="step manager">
+        <div class="num">4+</div>
+        <strong>High-Severity Approval</strong>
+        Wenn <code>severity=critical</code> oder Cost &gt; Threshold → Manager muss co-signieren
+        <div class="ui">🖥️ Approval-Inbox</div>
+      </div>
+      <div class="step manager">
+        <div class="num">5D</div>
+        <strong>Portfolio-Dashboard</strong>
+        Alle offenen Initiativen, TTR-Trend, Closure-Rate, Kosten-Exposition, Recurrence-Warnung
+        <div class="ui">🖥️ Master-Dashboard</div>
+      </div>
+    </div>
+
+    <div class="diagram" style="margin-top: 32px; padding: 24px;">
+      <div class="note" style="border-top: none; padding-top: 0; margin-top: 0;">
+        <strong>Lesart der Journey:</strong>
+        Schritt 1 hat <em>zwei parallele Einstiegspunkte</em> (1A autonom + 1B operator) — beide münden in die gleiche Agent-Pipeline.
+        Schritt 4 ist der einzige Punkt, an dem der Engineer aktiv entscheiden muss —
+        und an dem der Manager bei hoher Severity mit co-signieren muss.
+        Schritt 5 läuft in vier Sub-Spuren parallel: System persistiert &amp; überwacht,
+        Operator sieht Bestätigung, Engineer trackt seine Initiativen, Manager sieht Portfolio.
+      </div>
+    </div>
+  </section>
+
+  <!-- ============== UI PER PERSONA ============== -->
+  <section>
+    <h2>Abschnitt 4</h2>
+    <h3>Was jede Persona auf dem Screen sieht</h3>
+
+    <div class="ui-grid">
+      <div class="screen system">
+        <div class="bar"><span>System / AI</span><span>kein UI</span></div>
+        <div class="body">
+          <strong>Unsichtbar für End-User</strong>
+          Läuft im Hintergrund. Sichtbar nur als Reasoning-Trace innerhalb des Engineer-Workspaces.
+          <div class="mock">
+agent.tool_call(<br/>&nbsp;&nbsp;"trace_batch",<br/>&nbsp;&nbsp;batch="SB-00007"<br/>)<br/>→ 712 parts · 28 products<br/>→ confidence 0.87
+          </div>
+          <ul>
+            <li>Event-Bus-Subscriber</li>
+            <li>Tool-Call-Logger</li>
+            <li>Evidence-Cache</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="screen operator">
+        <div class="bar"><span>QC Operator</span><span>Mobile</span></div>
+        <div class="body">
+          <strong>Capture-Screen (Tablet/Phone)</strong>
+          Ein-Klick-Fokus auf „Etwas ist falsch, mach damit was".
+          <div class="mock">
+┌─────────────────────┐<br/>│ 📷  Foto aufnehmen  │<br/>├─────────────────────┤<br/>│ Was siehst du?      │<br/>│ [Riss am Gehäuse_   │<br/>├─────────────────────┤<br/>│ Produkt: PRD-00128  │<br/>│ Linie:   Linie 2    │<br/>├─────────────────────┤<br/>│      ▶ Absenden     │<br/>└─────────────────────┘
+          </div>
+          <ul>
+            <li>Kamera + Whisper (Voice-to-Text)</li>
+            <li>Auto-Kontext: Linie, Section, User</li>
+            <li>Offline-Queue, wenn kein Netz</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="screen engineer">
+        <div class="bar"><span>Quality Engineer</span><span>Desktop</span></div>
+        <div class="body">
+          <strong>Investigation Workspace (Hauptfläche)</strong>
+          Drei-Panel-Layout: Reasoning-Trace (links), 8D-Report-Draft (Mitte), Evidenz-Viz (rechts).
+          <div class="mock">
+┌─────┬────────────┬─────┐<br/>│Trace│ D1..D8     │Viz  │<br/>│▸1.  │ Draft      │BOM- │<br/>│▸2.  │ [editable] │tree │<br/>│▸3.  │            │Fault│<br/>├─────┴────────────┴─────┤<br/>│ Initiatives (3 draft)  │<br/>│ ☐ corr  ☐ prev  ☐ 8D   │<br/>│ [Accept All] [Amend]   │<br/>└────────────────────────┘
+          </div>
+          <ul>
+            <li>Reasoning-Trace anklickbar → zeigt Raw-Daten</li>
+            <li>Evidenz-Links öffnen BOM/Timeline inline</li>
+            <li>Initiative-Composer mit Owner-Suggest</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="screen manager">
+        <div class="bar"><span>Quality Manager</span><span>Desktop / TV</span></div>
+        <div class="body">
+          <strong>Portfolio Dashboard</strong>
+          KPIs + Heatmap + Approval-Inbox. Designed für „Morgens 5 Sekunden reingucken".
+          <div class="mock">
+Open Initiatives: 12<br/>Avg TTR: 3.2 d  ↓0.8<br/>Closure Rate: 84%<br/>────────────────────<br/>🔴 PA-00128 crit · APPR<br/>🟡 PA-00131 rec   · view<br/>🟢 PA-00095 closed<br/>────────────────────<br/>📈 Trend: SOLDER_COLD<br/>&nbsp;&nbsp;&nbsp;+38% vs. last week
+          </div>
+          <ul>
+            <li>Approval-Inbox (high-severity co-sign)</li>
+            <li>Recurrence-Warnung bei wiederholten Patterns</li>
+            <li>Export: PDF an Supplier / Board</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============== E2E FLOW (updated) ============== -->
+  <section>
+    <h2>Abschnitt 5</h2>
+    <h3>End-to-End Flow — Zonen &amp; Datenfluss</h3>
+
+    <div class="legend">
+      <span class="chip blue">Input — Trigger &amp; Evidenz</span>
+      <span class="chip amber">Ingestion — Signal-Erfassung</span>
+      <span class="chip orange">Reasoning — unser Wertbeitrag</span>
+      <span class="chip green">Composition — Report-Assembly</span>
+      <span class="chip red">Human-in-the-Loop</span>
+      <span class="chip purple">Output — was rauskommt</span>
+    </div>
+
+    <div class="diagram">
+      <pre class="mermaid">
+flowchart TB
+  %% ========= INPUT =========
+  subgraph INPUT["🔵 INPUT — Trigger-Varianten"]
+    direction TB
+    subgraph TRIG["Trigger-Events (2 Eintrittspunkte)"]
+      T1["📈 SYSTEM: Continuous Stream-Monitoring<br/>Defect-Cluster · Pareto-Shift · MARGINAL-Häufung · Field-Claim-Spike"]
+      T2["👷 OPERATOR: Foto + Freitext<br/>Shopfloor Mobile Capture"]
+    end
+    subgraph EVIDENCE["Evidenz-Substrat (≈7000 rows, read-only)"]
+      E1["STRUKTUR · factory/line/section · article/bom/bom_node"]
+      E2["LIEFERKETTE · supplier_batch → part (920)"]
+      E3["PRODUKTION · product (500) · product_part_install (3000)"]
+      E4["MESSUNGEN · test_result (2000)"]
+      E5["EVENTS · defect (150) · field_claim (40) = Voice of Customer"]
+      E6["AKTIONS-HISTORIE · rework (120) · product_action / Initiatives (50)"]
+    end
+  end
+
+  %% ========= INGEST =========
+  subgraph INGEST["🟡 INGESTION (System)"]
+    I1["Anomalie-Detektor<br/>+ Multi-modal Ingest (Bild, Text)"]
+    I2["Signal-Normalizer<br/>→ Symptom-Descriptor"]
+  end
+
+  %% ========= REASONING =========
+  subgraph REASON["🟠 REASONING-ENGINE (AI-Agent)"]
+    direction TB
+    R1["Archetyp-Klassifizierer<br/>Story 1/2/3/4/unknown"]
+    R2{"Hypothese-Loop"}
+    R3["Tool-Calls:<br/>query_defects · trace_batch · bom_parts_for_product<br/>rework_timeline · cross_factory_field_gap<br/>semantic_search · vision_classify_image"]
+    R4["Noise-Filter<br/>Detection-Bias · False-Pos · Holiday-Dip"]
+    R5["Confidence-Scorer"]
+    R6{"Stalled?<br/>low confidence"}
+    R7["👨‍🔧 ENGINEER: Hint<br/>(optional)"]
+  end
+
+  %% ========= COMPOSE =========
+  subgraph COMPOSE["🟢 COMPOSITION (System)"]
+    C1["Evidence-Collector"]
+    C2["8D-Template-Filler<br/>D1..D8"]
+    C3["Viz-Selector<br/>Pareto · Timeline · Fault-Tree · BOM-Graph"]
+    C4["Initiative-Composer<br/>action_type + owner-hint + deadline-hint"]
+  end
+
+  %% ========= HUMAN =========
+  subgraph HUMAN["🔴 DECIDE — Human Review"]
+    H1["👨‍🔧 ENGINEER: Investigation Workspace<br/>reviewt Report + Initiative-Vorschläge"]
+    H2{"Accept / Amend / Reject"}
+    H3{"severity=critical?"}
+    H4["👔 MANAGER: Approval-Inbox<br/>High-Severity Co-Sign"]
+    H5["👨‍🔧 ENGINEER: Ownership<br/>user · deadline · Kriterium"]
+  end
+
+  %% ========= OUTPUT =========
+  subgraph OUTPUT["🟣 TRACK &amp; CLOSE"]
+    direction TB
+    O1["💾 WRITE-BACK<br/>product_action (Initiative) · rework"]
+    O2["📱 OPERATOR: Receipt<br/>„Initiative PA-00102 eröffnet"]
+    O3["👔 MANAGER: Portfolio-Dashboard<br/>TTR · Closure-Rate · Recurrence-Warnung"]
+    O4["👨‍🔧 ENGINEER: My-Initiatives<br/>Closure-Verifikation"]
+    O5["🔁 Closure-Monitor<br/>done / reopen / escalate"]
+  end
+
+  T1 --> I1
+  T2 --> I1
+  I1 --> I2 --> R1
+
+  E1 & E2 & E3 & E4 & E5 & E6 -.liest.-> R3
+
+  R1 --> R2
+  R2 <--> R3
+  R3 --> R4 --> R5 --> R6
+  R6 -- yes --> R7 --> R2
+  R6 -- no --> C1
+  C1 --> C2 --> C3
+  C2 --> C4
+  C3 --> H1
+  C4 --> H1
+  H1 --> H2
+  H2 -- amend --> R2
+  H2 -- approve --> H3
+  H3 -- yes --> H4 --> H5
+  H3 -- no --> H5
+  H5 --> O1
+  O1 --> O2
+  O1 --> O3
+  O1 --> O4
+  O1 --> O5
+  O5 -- reopen --> R2
+  O5 -.recurrence pattern.-> I1
+
+  classDef input fill:#1e3a8a,stroke:#3b82f6,color:#dbeafe
+  classDef ingest fill:#713f12,stroke:#f59e0b,color:#fef3c7
+  classDef reason fill:#7c2d12,stroke:#f97316,color:#fed7aa
+  classDef compose fill:#14532d,stroke:#10b981,color:#bbf7d0
+  classDef human fill:#7f1d1d,stroke:#ef4444,color:#fecaca
+  classDef output fill:#581c87,stroke:#a855f7,color:#e9d5ff
+
+  class T1,T2,E1,E2,E3,E4,E5,E6 input
+  class I1,I2 ingest
+  class R1,R2,R3,R4,R5,R6,R7 reason
+  class C1,C2,C3,C4 compose
+  class H1,H2,H3,H4,H5 human
+  class O1,O2,O3,O4,O5 output
+      </pre>
+      <div class="note">
+        <strong>Persona-Emoji-Konvention:</strong>
+        👷 Operator · 👨‍🔧 Engineer · 👔 Manager · 📱/🖥️ UI-Channel · keine Emoji = System läuft autonom.
+        Der Engineer ist der einzige Akteur mit <em>drei</em> Touchpoints (optionaler Hint bei Stall · Review/Decide · Closure-Verifikation).
+      </div>
+    </div>
+  </section>
+
+  <!-- ============== STATE LIFECYCLE ============== -->
+  <section>
+    <h2>Abschnitt 6</h2>
+    <h3>Lifecycle einer Initiative</h3>
+
+    <div class="diagram">
+      <pre class="mermaid">
+stateDiagram-v2
+  [*] --> Signal : Trigger (System 1A oder Operator 1B)
+  Signal --> Classified : Archetyp zugeordnet
+  Classified --> Investigating : Agent-Loop laeuft
+  Investigating --> Investigating : next tool call
+  Investigating --> Stalled : low confidence
+  Stalled --> Investigating : Engineer gibt Hint
+  Investigating --> Evidenced : confidence ≥ threshold
+  Evidenced --> Drafted : Report D1..D8 + Initiative-Kandidaten
+  Drafted --> UnderReview : Engineer Review
+  UnderReview --> Drafted : amend
+  UnderReview --> EscalatedToManager : critical severity
+  EscalatedToManager --> Approved : Manager co-signs
+  UnderReview --> Approved : non-critical
+  Approved --> Persisted : INSERT product_action
+  Persisted --> InFlight : status=in_progress
+  InFlight --> Closed : status=done + Closure-Metrik erfuellt
+  InFlight --> Reopened : Closure fehlgeschlagen
+  Reopened --> Investigating
+  Closed --> [*]
+      </pre>
+      <div class="note">
+        <strong>Closure ist verifizierbar, nicht stempelbar:</strong>
+        z.B. „keine SOLDER_COLD-Defekte bei PM-00008 in den nächsten 4 Wochen".
+        Der Closure-Monitor (O5) prüft das gegen den Live-Datenstream — und re-triggert automatisch, wenn das Pattern wiederkommt.
+        Das ist der Pillar-3-Hebel.
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  De.Constructors — Manex Hackathon 2026 · Diese Ansicht ist ein Diskussionsartefakt, kein Commit auf main.
+</footer>
+
+<script>
+  mermaid.initialize({
+    startOnLoad: true,
+    theme: 'dark',
+    themeVariables: {
+      background: '#121a33',
+      primaryColor: '#1e293b',
+      primaryTextColor: '#e8ecf8',
+      primaryBorderColor: '#475569',
+      lineColor: '#64748b',
+      secondaryColor: '#334155',
+      tertiaryColor: '#1e293b',
+      fontFamily: "-apple-system, Inter, system-ui, sans-serif",
+      fontSize: '14px'
+    },
+    flowchart: { htmlLabels: true, curve: 'basis', padding: 18 },
+    stateDiagram: { padding: 20 }
+  });
+</script>
+
+</body>
+</html>

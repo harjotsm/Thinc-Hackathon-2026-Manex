@@ -1,0 +1,1212 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Resolve — Merged Architecture · De.Constructors</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<style>
+  :root {
+    --bg: #0a0f1f;
+    --panel: #111a30;
+    --panel-soft: #17223f;
+    --panel-solid: #1d2a4d;
+    --text: #e8ecf8;
+    --muted: #9aa6c7;
+    --subtle: #6b7aa0;
+    --accent: #7dd3fc;
+    --border: #263356;
+    --blue: #3b82f6;
+    --cyan: #06b6d4;
+    --teal: #14b8a6;
+    --amber: #f59e0b;
+    --orange: #f97316;
+    --rose: #f43f5e;
+    --green: #10b981;
+    --violet: #a855f7;
+
+    --tier-primary: #f97316;
+    --tier-fast: #10b981;
+    --tier-embed: #a855f7;
+    --tier-vision: #f43f5e;
+
+    --act-listen:  #06b6d4;
+    --act-reason:  #f97316;
+    --act-resolve: #a855f7;
+
+    --p-system:   #7dd3fc;
+    --p-operator: #fbbf24;
+    --p-engineer: #f97316;
+    --p-manager:  #a855f7;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    background: radial-gradient(ellipse at top, #162045 0%, var(--bg) 60%) fixed;
+    color: var(--text);
+    font-family: -apple-system, "Inter", "Segoe UI", system-ui, sans-serif;
+    line-height: 1.55;
+  }
+  code, pre, .mono { font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace; }
+  header { padding: 56px 48px 24px; max-width: 1440px; margin: 0 auto; }
+  header .kicker {
+    text-transform: uppercase; letter-spacing: 0.18em;
+    font-size: 11px; color: var(--accent); font-weight: 600;
+  }
+  header h1 {
+    font-size: 44px; margin: 12px 0 8px;
+    font-weight: 700; letter-spacing: -0.02em; line-height: 1.1;
+  }
+  header p.lead { color: var(--muted); max-width: 860px; font-size: 17px; margin: 0; }
+  main { max-width: 1440px; margin: 0 auto; padding: 0 48px 96px; }
+  section { margin-top: 64px; }
+  section > h2 {
+    font-size: 13px; text-transform: uppercase; letter-spacing: 0.2em;
+    color: var(--muted); margin: 0 0 6px; font-weight: 600;
+  }
+  section > h3 {
+    font-size: 28px; margin: 0 0 12px;
+    font-weight: 700; letter-spacing: -0.015em;
+  }
+  section > .sub { color: var(--muted); margin: 0 0 24px; max-width: 880px; }
+
+  /* ==== Act strip ==== */
+  .acts {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+    margin-top: 12px;
+  }
+  .act {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 22px;
+    position: relative;
+    overflow: hidden;
+  }
+  .act::before {
+    content: "";
+    position: absolute; inset: 0 auto 0 0; width: 4px;
+    background: currentColor;
+  }
+  .act.listen  { color: var(--act-listen); }
+  .act.reason  { color: var(--act-reason); }
+  .act.resolve { color: var(--act-resolve); }
+  .act .tag {
+    font-size: 11px; letter-spacing: 0.2em; text-transform: uppercase;
+    font-weight: 700;
+  }
+  .act h4 { margin: 4px 0 6px; font-size: 22px; color: var(--text); letter-spacing: -0.01em; }
+  .act p { margin: 0 0 10px; font-size: 13.5px; color: var(--muted); }
+  .act .pain {
+    font-size: 11.5px; font-style: italic;
+    color: var(--subtle); margin-top: 10px;
+    padding-top: 10px; border-top: 1px dashed var(--border);
+  }
+
+  /* ==== Decision cards ==== */
+  .decisions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0,1fr));
+    gap: 14px;
+  }
+  .decision {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-left: 4px solid var(--accent);
+    border-radius: 12px; padding: 18px 20px;
+  }
+  .decision .num {
+    font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase;
+    color: var(--muted); font-weight: 700;
+  }
+  .decision h4 { margin: 4px 0 8px; font-size: 16px; letter-spacing: -0.01em; }
+  .decision p { margin: 0 0 6px; font-size: 13.5px; color: var(--text); }
+  .decision .why { color: var(--muted); font-size: 12.5px; font-style: italic; margin-top: 6px; }
+  .decision.strategic { border-left-color: var(--cyan); }
+  .decision.critical  { border-left-color: var(--orange); }
+  .decision.novel     { border-left-color: var(--violet); }
+  .decision.safety    { border-left-color: var(--rose); }
+  .decision.cost      { border-left-color: var(--green); }
+
+  /* ==== Model routing ==== */
+  .models {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0,1fr));
+    gap: 14px;
+  }
+  .model {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-top: 4px solid;
+    border-radius: 12px; padding: 20px;
+  }
+  .model.primary { border-top-color: var(--tier-primary); }
+  .model.fast    { border-top-color: var(--tier-fast); }
+  .model.embed   { border-top-color: var(--tier-embed); }
+  .model.vision  { border-top-color: var(--tier-vision); }
+  .model .tier {
+    font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase; font-weight: 700;
+  }
+  .model.primary .tier { color: var(--tier-primary); }
+  .model.fast .tier    { color: var(--tier-fast); }
+  .model.embed .tier   { color: var(--tier-embed); }
+  .model.vision .tier  { color: var(--tier-vision); }
+  .model h4 { margin: 6px 0 4px; font-size: 18px; letter-spacing: -0.01em; }
+  .model .id {
+    font-family: "JetBrains Mono", monospace; font-size: 11.5px;
+    color: var(--muted); background: var(--panel-soft);
+    padding: 3px 8px; border-radius: 6px;
+    display: inline-block; margin-bottom: 12px;
+  }
+  .model .roles { font-size: 12.5px; color: var(--muted); margin: 0; padding-left: 16px; line-height: 1.6; }
+  .model .cost {
+    margin-top: 14px; padding-top: 12px;
+    border-top: 1px dashed var(--border);
+    font-size: 11.5px; color: var(--subtle);
+    font-family: "JetBrains Mono", monospace;
+  }
+
+  /* ==== Tool groups ==== */
+  .tool-groups {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0,1fr));
+    gap: 18px;
+  }
+  .tool-group {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 14px; padding: 22px;
+  }
+  .tool-group h4 { margin: 0 0 4px; font-size: 16px; }
+  .tool-group .desc { color: var(--muted); font-size: 13px; margin: 0 0 14px; }
+  .tool {
+    border-top: 1px solid var(--border);
+    padding: 12px 0;
+    display: grid; grid-template-columns: 1fr; gap: 4px;
+  }
+  .tool:first-of-type { border-top: none; padding-top: 0; }
+  .tool .sig { font-family: "JetBrains Mono", monospace; font-size: 12.5px; color: var(--accent); }
+  .tool .sig .ret { color: var(--green); }
+  .tool .purpose { font-size: 12.5px; color: var(--muted); }
+  .tool .tag {
+    display: inline-block; font-size: 10px; padding: 2px 6px; border-radius: 4px;
+    font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; margin-right: 6px;
+  }
+  .tag.read     { background: rgba(59,130,246,0.15); color: #93c5fd; }
+  .tag.write    { background: rgba(16,185,129,0.18); color: #6ee7b7; }
+  .tag.sem      { background: rgba(168,85,247,0.18); color: #c4b5fd; }
+  .tag.vis      { background: rgba(244,63,94,0.18); color: #fda4af; }
+  .tag.correl   { background: rgba(6,182,212,0.18); color: #67e8f9; }
+
+  /* ==== Domain Agents ==== */
+  .agents {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0,1fr));
+    gap: 12px;
+  }
+  .agent-card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-top: 3px solid var(--act-resolve);
+    border-radius: 12px;
+    padding: 16px;
+    position: relative;
+  }
+  .agent-card.stubbed { opacity: 0.6; }
+  .agent-card .status {
+    position: absolute; top: 10px; right: 12px;
+    font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase;
+    font-weight: 700;
+  }
+  .agent-card.real .status    { color: #34d399; }
+  .agent-card.stubbed .status { color: #fbbf24; }
+  .agent-card h4 { margin: 8px 0 4px; font-size: 15px; }
+  .agent-card .target { font-family: "JetBrains Mono", monospace; font-size: 11px; color: var(--muted); margin-bottom: 8px; }
+  .agent-card .ex { font-size: 11.5px; color: var(--muted); line-height: 1.5; font-style: italic; }
+
+  /* ==== Playbook ==== */
+  .playbook {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0,1fr));
+    gap: 16px;
+  }
+  .play {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 12px; padding: 20px;
+  }
+  .play .head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 8px; }
+  .play .arch {
+    font-size: 11px; letter-spacing: 0.16em; text-transform: uppercase;
+    color: var(--muted); font-weight: 700;
+  }
+  .play h4 { margin: 0 0 10px; font-size: 17px; }
+  .play .chain { display: flex; flex-wrap: wrap; gap: 6px; font-family: "JetBrains Mono", monospace; font-size: 11.5px; }
+  .play .chain .step {
+    background: var(--panel-soft);
+    border: 1px solid var(--border);
+    padding: 4px 10px; border-radius: 6px; color: var(--text);
+  }
+  .play .chain .arrow { color: var(--subtle); padding: 4px 2px; }
+  .play .verdict {
+    margin-top: 12px; padding-top: 12px;
+    border-top: 1px dashed var(--border);
+    font-size: 12px; color: var(--muted); font-style: italic;
+  }
+
+  /* ==== Swimlane ==== */
+  .lanes {
+    display: grid;
+    grid-template-columns: 180px repeat(5, 1fr);
+    gap: 8px; margin-top: 12px;
+  }
+  .lanes > div {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px;
+    min-height: 96px;
+    font-size: 12.5px; line-height: 1.45;
+  }
+  .lanes .header {
+    background: transparent; border: none;
+    font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase;
+    color: var(--muted); font-weight: 700; text-align: center;
+    min-height: 32px; padding: 6px 4px;
+  }
+  .lanes .actor {
+    background: transparent; border: none; color: var(--muted);
+    font-weight: 700; font-size: 12px; padding: 8px 4px;
+    text-transform: uppercase; letter-spacing: 0.12em;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .lanes .actor::before {
+    content: ""; width: 10px; height: 10px; border-radius: 50%; background: currentColor;
+  }
+  .lanes .actor.system   { color: var(--p-system); }
+  .lanes .actor.operator { color: var(--p-operator); }
+  .lanes .actor.engineer { color: var(--p-engineer); }
+  .lanes .actor.manager  { color: var(--p-manager); }
+  .lanes .step { border-left: 3px solid; }
+  .lanes .step.system   { border-left-color: var(--p-system); }
+  .lanes .step.operator { border-left-color: var(--p-operator); }
+  .lanes .step.engineer { border-left-color: var(--p-engineer); }
+  .lanes .step.manager  { border-left-color: var(--p-manager); }
+  .lanes .step .num {
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+    font-size: 10px; color: var(--muted); font-weight: 700; letter-spacing: 0.1em;
+  }
+  .lanes .step strong { display: block; font-size: 13px; margin: 2px 0 4px; color: var(--text); }
+  .lanes .step .ui {
+    margin-top: 6px; padding-top: 6px;
+    border-top: 1px dashed var(--border);
+    font-size: 11px; color: var(--muted); font-style: italic;
+  }
+  .lanes .idle { opacity: 0.25; background: transparent; }
+
+  /* ==== Guardrails ==== */
+  .guards {
+    display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 14px;
+  }
+  .guard {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 12px; padding: 18px; position: relative;
+  }
+  .guard::before {
+    content: "🛡️"; position: absolute; top: 16px; right: 16px;
+    font-size: 20px; opacity: 0.5;
+  }
+  .guard h4 { margin: 0 0 6px; font-size: 15px; }
+  .guard p { margin: 0; font-size: 12.5px; color: var(--muted); }
+
+  /* ==== Diagrams ==== */
+  .diagram {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 16px; padding: 32px; overflow: auto;
+  }
+  .diagram .note {
+    color: var(--muted); font-size: 13px;
+    margin-top: 16px; padding-top: 16px;
+    border-top: 1px dashed var(--border);
+  }
+
+  /* ==== Contract ==== */
+  .contract {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 14px; padding: 24px; overflow-x: auto;
+  }
+  .contract pre {
+    margin: 0; font-family: "JetBrains Mono", monospace;
+    font-size: 12.5px; color: var(--text); line-height: 1.55;
+  }
+  .contract .comment { color: var(--subtle); }
+  .contract .kw      { color: #c084fc; }
+  .contract .str     { color: #86efac; }
+  .contract .num     { color: #fbbf24; }
+
+  /* ==== Cost table ==== */
+  .cost-table {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 14px; overflow: hidden;
+  }
+  .cost-table table { width: 100%; border-collapse: collapse; }
+  .cost-table th, .cost-table td {
+    padding: 12px 18px; text-align: left; font-size: 13px;
+    border-bottom: 1px solid var(--border);
+  }
+  .cost-table th {
+    background: var(--panel-soft); font-weight: 700;
+    font-size: 11px; text-transform: uppercase;
+    letter-spacing: 0.12em; color: var(--muted);
+  }
+  .cost-table td.num { font-family: "JetBrains Mono", monospace; color: var(--accent); }
+  .cost-table tr:last-child td { border-bottom: none; font-weight: 700; background: var(--panel-soft); }
+
+  .callout {
+    background: linear-gradient(180deg, rgba(249,115,22,0.12), rgba(168,85,247,0.08));
+    border: 1px solid rgba(249,115,22,0.3);
+    border-radius: 14px; padding: 22px 26px; margin-top: 20px;
+    font-size: 14.5px;
+  }
+  .callout strong { color: #fdba74; }
+  .manex-callout {
+    background: linear-gradient(180deg, rgba(6,182,212,0.12), rgba(59,130,246,0.08));
+    border: 1px solid rgba(6,182,212,0.3);
+    border-radius: 14px; padding: 22px 26px; margin-top: 20px;
+    font-size: 14.5px;
+  }
+  .manex-callout strong { color: #67e8f9; }
+
+  footer {
+    color: var(--muted); text-align: center; padding: 40px 20px;
+    font-size: 12px; border-top: 1px solid var(--border); margin-top: 60px;
+  }
+  @media (max-width: 1200px) {
+    .decisions, .tool-groups, .playbook { grid-template-columns: 1fr; }
+    .models { grid-template-columns: repeat(2,1fr); }
+    .guards { grid-template-columns: 1fr; }
+    .acts { grid-template-columns: 1fr; }
+    .agents { grid-template-columns: repeat(2, 1fr); }
+    .lanes { grid-template-columns: 140px repeat(5, 1fr); font-size: 11.5px; }
+    header { padding: 32px 24px 16px; }
+    main { padding: 0 24px 60px; }
+    header h1 { font-size: 32px; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="kicker">Resolve · Merged Architecture · De.Constructors × Manex Hackathon 2026</div>
+  <h1>Every voice becomes an initiative.</h1>
+  <p class="lead">
+    Closed-loop quality intelligence layer for Manex. Signals — internal production or external customer voices — are correlated into
+    <strong>incidents</strong>, reasoned over on a live <strong>canvas</strong>, and routed as <strong>initiatives</strong> by domain agents
+    into each system of record. 8D and FMEA fall out as projections, not primary artifacts.
+  </p>
+</header>
+
+<main>
+
+  <!-- ============== THREE ACTS ============== -->
+  <section>
+    <h2>Strategic framing</h2>
+    <h3>Three Acts — Listen · Reason · Resolve</h3>
+    <p class="sub">The three pillars from the brief (Generation · Visualization · Closed-Loop) fall out as side-effects. Acts are mapped 1:1 to the three Manex slide-2 pain points.</p>
+
+    <div class="acts">
+      <div class="act listen">
+        <div class="tag">Act I</div>
+        <h4>Listen</h4>
+        <p>Ingest signals from 13+ internal &amp; external sources. Normalize into the canonical <code>signal</code> record. Deterministic + semantic correlator clusters them into <code>incidents</code>.</p>
+        <div class="pain">Answers: <em>"Customer voices get lost, market adaptations very slow"</em></div>
+      </div>
+      <div class="act reason">
+        <div class="tag">Act II</div>
+        <h4>Reason</h4>
+        <p>Incident Canvas: root-cause graph, timeline, BOM trace, contribution stream from nine stakeholder domains. Orchestrated 4-phase agent grounds every claim in a <code>tool_call_id</code>.</p>
+        <div class="pain">Answers: <em>"Quality indicators lost due to high complexity"</em></div>
+      </div>
+      <div class="act resolve">
+        <div class="tag">Act III</div>
+        <h4>Resolve</h4>
+        <p>Five domain agents dispatch initiatives into MES / SRM / Dev-backlog / ERP / CRM. Impact Simulator shows € avoided pre-dispatch. Closure monitor verifies outcomes. Lessons embed for network effect.</p>
+        <div class="pain">Answers: <em>"High FTE effort for the overall process"</em></div>
+      </div>
+    </div>
+
+    <div class="manex-callout">
+      <strong>Why this isn't a prettier 8D form-filler:</strong>
+      Manex slide 8 says <em>"Challenge the process itself. Do not just digitize what exists."</em>
+      Resolve makes 8D <em>obsolete as a primary artifact</em> — it becomes a regulatory-export projection of a richer underlying record.
+      The canvas and the incident are the real product.
+    </div>
+  </section>
+
+  <!-- ============== KEY DECISIONS ============== -->
+  <section>
+    <h2>Section 1</h2>
+    <h3>The 12 load-bearing decisions</h3>
+    <p class="sub">Strategic + engineering commitments. "We pick X because Y" — no hedging.</p>
+
+    <div class="decisions">
+      <div class="decision strategic">
+        <div class="num">D1 · Core abstraction</div>
+        <h4>Signal → Incident → Initiative (3-level)</h4>
+        <p>A <code>signal</code> is one normalized fact. An <code>incident</code> is a cluster of signals worth reasoning about (the unit of UX). An <code>initiative</code> is the dispatched action across domain agents.</p>
+        <div class="why">Why: the supplier story is invisible at the signal level — only a cluster of ESR near-misses + field claims makes it show up. Without Incident as first-class entity, we lose the win.</div>
+      </div>
+
+      <div class="decision strategic">
+        <div class="num">D2 · Canvas, not document</div>
+        <h4>8D / FMEA / Ishikawa / Pareto are projections</h4>
+        <p>The canonical workspace is the Incident Canvas. 8D view is a toggle, not a file. Export to PDF is a side-effect.</p>
+        <div class="why">Why: Manex slide 8 explicitly forbids digitizing 8D as-is. Projection architecture lets us serve regulatory requirements without the document paradigm dominating the UX.</div>
+      </div>
+
+      <div class="decision critical">
+        <div class="num">D3 · Agent topology</div>
+        <h4>Orchestrated 4-phase pipeline inside Reason</h4>
+        <p>Deterministic outer loop: <code>Classify → Investigate → Compose → Propose</code>. Tool calls live <em>inside</em> Investigate (bounded ReAct, max 8 turns).</p>
+        <div class="why">Why: demo must be reproducible; phases make reasoning observable; retries are bounded; free-form ReAct is hackathon roulette.</div>
+      </div>
+
+      <div class="decision strategic">
+        <div class="num">D4 · Domain agents for dispatch</div>
+        <h4>Five agents writing to five systems of record</h4>
+        <p>Production · Supplier · R&amp;D (real) + Logistics · Customer-Response (stubbed). Each owns its tool manifest and system prompt.</p>
+        <div class="why">Why: Manex slide 3 literally says <em>"implemented by agents in development, supplier management, marketing, production"</em>. Domain specialization is the brief.</div>
+      </div>
+
+      <div class="decision cost">
+        <div class="num">D5 · Model routing</div>
+        <h4>Two-tier: Sonnet 4.6 + Haiku 4.5, Opus 4.7 as fallback</h4>
+        <p>Haiku: archetype classification, noise filter, summarization. Sonnet: reasoning loop, narrative, initiatives. Opus: stall recovery only.</p>
+        <div class="why">Why: Haiku is 8× cheaper, 3× faster for deterministic tasks. ~70% inference cost savings without quality loss.</div>
+      </div>
+
+      <div class="decision safety">
+        <div class="num">D6 · Tool layer</div>
+        <h4>Typed, deterministic tools — never free-form SQL</h4>
+        <p>Zod schemas per tool, bounded SQL (<code>LIMIT 50</code>), structured return. The LLM never calls <code>executeSQL(string)</code>.</p>
+        <div class="why">Why: hallucinated table names = demo abort. Typed tools = predictable latency, validated args, cacheable, grounded.</div>
+      </div>
+
+      <div class="decision safety">
+        <div class="num">D7 · Grounding contract</div>
+        <h4>Every claim cites a <code>tool_call_id</code></h4>
+        <p>System prompt enforces <code>{claim, evidence: [ids]}</code>. Post-validator checks every ID exists in the log.</p>
+        <div class="why">Why: 8D in front of a juror + hallucination = catastrophe. Evidence traceability is our single most important trust marker.</div>
+      </div>
+
+      <div class="decision cost">
+        <div class="num">D8 · Prompt caching</div>
+        <h4>Anthropic prompt cache on the system prompt (5-min TTL)</h4>
+        <p>System prompt = domain knowledge + archetype few-shots + tool schemas (~8k tokens). Cache breakpoint right after the system block.</p>
+        <div class="why">Why: expected hit rate &gt;80% during demo. ~60% input cost, ~3× latency reduction. Non-negotiable for live demo.</div>
+      </div>
+
+      <div class="decision novel">
+        <div class="num">D9 · Semantic layer</div>
+        <h4>pgvector for free-text only</h4>
+        <p>Embed <code>signal</code>, <code>complaint_text</code>, <code>action_text</code>, <code>defect.notes</code>, and <code>lesson</code>. Structured queries stay SQL.</p>
+        <div class="why">Why: RAG over structured data is an anti-pattern (SQL is more precise). RAG over free text finds supplier names and symptom phrases that no code filter catches.</div>
+      </div>
+
+      <div class="decision novel">
+        <div class="num">D10 · Network effect via lessons</div>
+        <h4><code>lesson</code> embeddings retrieved per new incident</h4>
+        <p>Every resolved incident writes a <code>lesson</code> row with embedding. New incidents pull nearest neighbors first.</p>
+        <div class="why">Why: the platform gets smarter per plant it runs in. Defensibility story for the pitch — compounding value.</div>
+      </div>
+
+      <div class="decision critical">
+        <div class="num">D11 · Impact Simulator (pre-dispatch)</div>
+        <h4>Show € avoided before the user hits Resolve</h4>
+        <p>Rule-based prior + one embedding-similarity term over <code>lesson</code>. Outputs projected claims avoided, cost, confidence band.</p>
+        <div class="why">Why: judges and operators both want to see ROI before approving. This is the business-case artifact baked into UX.</div>
+      </div>
+
+      <div class="decision novel">
+        <div class="num">D12 · Closure predicates</div>
+        <h4>Programmatic, not stampable</h4>
+        <p>Each initiative registers typed <code>ClosurePredicate</code>. Cron worker evaluates against live DB. Deadline exceeded + unsatisfied → auto-reopen.</p>
+        <div class="why">Why: Pillar-3 scoring demands verifiable loop. "status = done" is stampable; "no SOLDER_COLD on PM-00008 for 4 weeks" is verifiable.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============== MODEL ROUTING ============== -->
+  <section>
+    <h2>Section 2</h2>
+    <h3>Model routing — who does what</h3>
+    <p class="sub">Four models, four roles. Route by task type.</p>
+
+    <div class="models">
+      <div class="model primary">
+        <div class="tier">Primary · Reasoning</div>
+        <h4>Claude Sonnet 4.6</h4>
+        <div class="id mono">claude-sonnet-4-6</div>
+        <ul class="roles">
+          <li>Investigate loop (tool use)</li>
+          <li>8D narrative (DE/EN adaptive)</li>
+          <li>Initiative proposals</li>
+          <li>Vision call for defect photos</li>
+        </ul>
+        <div class="cost">≈ $3 / $15 per 1M tok<br/>Cached input: $0.30 / 1M</div>
+      </div>
+      <div class="model fast">
+        <div class="tier">Fast · Classifier</div>
+        <h4>Claude Haiku 4.5</h4>
+        <div class="id mono">claude-haiku-4-5-20251001</div>
+        <ul class="roles">
+          <li>Archetype classification</li>
+          <li>Noise-filter pre-stage</li>
+          <li>Tool-result summarization</li>
+          <li>Stall heuristic</li>
+        </ul>
+        <div class="cost">≈ $0.80 / $4 per 1M tok<br/>4× cheaper than Sonnet</div>
+      </div>
+      <div class="model embed">
+        <div class="tier">Embedding · Semantic</div>
+        <h4>OpenAI text-embedding-3-small</h4>
+        <div class="id mono">text-embedding-3-small</div>
+        <ul class="roles">
+          <li>signal.embedding (all sources)</li>
+          <li>complaint_text, action_text, notes</li>
+          <li>lesson signatures</li>
+          <li>Query-time embedding</li>
+        </ul>
+        <div class="cost">≈ $0.02 / 1M tok · 1536 dims<br/>~$0.01 for initial index</div>
+      </div>
+      <div class="model vision">
+        <div class="tier">Fallback · Deep think</div>
+        <h4>Claude Opus 4.7</h4>
+        <div class="id mono">claude-opus-4-7</div>
+        <ul class="roles">
+          <li>Activated only on stall + engineer hint</li>
+          <li>Cross-archetype reasoning</li>
+          <li>Optional final-report review</li>
+        </ul>
+        <div class="cost">≈ $15 / $75 per 1M tok<br/>Gated, max_calls=2</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============== MAIN E2E DIAGRAM ============== -->
+  <section>
+    <h2>Section 3</h2>
+    <h3>End-to-end pipeline — Listen · Reason · Resolve</h3>
+    <p class="sub">Each box is an implementation unit with a typed I/O contract. Color groups = acts.</p>
+
+    <div class="diagram">
+      <pre class="mermaid">
+flowchart TB
+  %% ======== ACT I: LISTEN ========
+  subgraph LISTEN["🟦 ACT I — LISTEN"]
+    direction TB
+    subgraph SRC_INT["Internal sources"]
+      S_VOICE["🎤 Worker voice (Whisper)"]
+      S_EOL["🧪 EOL test FAIL/MARGINAL"]
+      S_SPC["📉 SPC drift / Cpk erosion"]
+      S_SUPP["📦 Supplier inbound anomaly"]
+      S_REWORK["🔧 Rework concentration"]
+      S_MAINT["🛠️ Maintenance / FMEA"]
+    end
+    subgraph SRC_EXT["External sources"]
+      S_FC["📞 Field claim"]
+      S_WAR["🎫 Warranty / RMA"]
+      S_NPS["⭐ NPS / reviews / social"]
+      S_IOT["📡 IoT telemetry"]
+    end
+    IN1["Intake Normalizer (Zod)<br/>→ canonical signal row"]
+    COR["🧲 Signal Correlator<br/>deterministic joins + pgvector cosine"]
+    INC[("incident row")]
+  end
+
+  %% ======== ACT II: REASON ========
+  subgraph REASON["🟧 ACT II — REASON"]
+    direction TB
+    CLS["🟢 Classify · Haiku 4.5<br/>→ archetype + playbook"]
+    INV["🟠 Investigate · Sonnet 4.6<br/>bounded ReAct (max 8 turns)"]
+    TOOLS["🔧 Typed Tool Layer (Zod)<br/>retrieval · cross-boundary · semantic · vision"]
+    EV[("evidence cache")]
+    STALL{"Confidence ≥ 0.75?"}
+    HINT["⚠️ Stall → request_hint<br/>engineer injects constraint"]
+    CM["🔵 Compose · Sonnet 4.6<br/>8D projection + render_hints"]
+    CONTRIB["9 domain contributions<br/>Market · Central Q · Plant Q × 2 · Process<br/>Tech · Supplier · Biz-Analytics · Marketing"]
+    PR["🟣 Propose · Sonnet 4.6<br/>N initiative candidates + closure predicates"]
+  end
+
+  %% ======== ACT III: RESOLVE ========
+  subgraph RESOLVE["🟪 ACT III — RESOLVE"]
+    direction TB
+    SIM["💡 Impact Simulator<br/>€ avoided · claims avoided · confidence"]
+    HITL["🔴 Engineer Review<br/>Accept / Amend / Reject"]
+    MGR["👔 Manager Approval<br/>if severity=critical"]
+    subgraph AGENTS["Domain agents (parallel dispatch)"]
+      AG_PROD["🏭 Production"]
+      AG_SUPP["📦 Supplier"]
+      AG_RND["🔬 R&amp;D / Dev"]
+      AG_LOG["🚚 Logistics (stubbed)"]
+      AG_CX["💬 Customer-Response (stubbed)"]
+    end
+    WRITE[("initiative + product_action INSERT")]
+    MEAS[("impact_measurement")]
+    LESSON[("lesson embedding")]
+    MON["🔁 Closure Monitor (cron 60s)<br/>evaluates typed predicate"]
+  end
+
+  %% edges: listen
+  S_VOICE & S_EOL & S_SPC & S_SUPP & S_REWORK & S_MAINT --> IN1
+  S_FC & S_WAR & S_NPS & S_IOT --> IN1
+  IN1 --> COR --> INC
+
+  %% edges: reason
+  INC --> CLS --> INV
+  INV <--> TOOLS
+  TOOLS --> EV
+  EV --> INV
+  INV --> STALL
+  STALL -- "no · max turns" --> HINT --> INV
+  STALL -- "yes" --> CM
+  CONTRIB -.feed into.-> CM
+  CM --> PR
+
+  %% edges: resolve
+  PR --> SIM --> HITL
+  HITL -- "amend" --> INV
+  HITL -- "critical" --> MGR
+  MGR --> AGENTS
+  HITL -- "approve non-critical" --> AGENTS
+  AG_PROD & AG_SUPP & AG_RND & AG_LOG & AG_CX --> WRITE
+  WRITE --> MON
+  MON -- "satisfied" --> MEAS --> LESSON
+  MON -- "deadline exceeded" --> INV
+  LESSON -.retrieved on next incident.-> CLS
+
+  classDef listen fill:#164e63,stroke:#06b6d4,color:#cffafe
+  classDef reason fill:#7c2d12,stroke:#f97316,color:#fed7aa
+  classDef resolve fill:#581c87,stroke:#a855f7,color:#e9d5ff
+
+  class S_VOICE,S_EOL,S_SPC,S_SUPP,S_REWORK,S_MAINT,S_FC,S_WAR,S_NPS,S_IOT,IN1,COR,INC listen
+  class CLS,INV,TOOLS,EV,STALL,HINT,CM,PR,CONTRIB reason
+  class SIM,HITL,MGR,AG_PROD,AG_SUPP,AG_RND,AG_LOG,AG_CX,WRITE,MEAS,LESSON,MON resolve
+      </pre>
+      <div class="note">
+        <strong>What to notice:</strong>
+        (1) Listen has 10 parallel sources, not 3. The old architecture missed this — Story 1 only shows up when near-misses + field claims cluster.
+        (2) <code>incident</code> is the durable unit between Listen and Reason; sessions can re-open it.
+        (3) Domain agents fan out in parallel; the Manex native <code>product_action</code> is one of five write targets, not the only one.
+        (4) The lesson → Classify back-edge is the network-effect: past resolutions bias future classifications.
+      </div>
+    </div>
+  </section>
+
+  <!-- ============== PERSONAS & SWIMLANE ============== -->
+  <section>
+    <h2>Section 4</h2>
+    <h3>Persona journey — who does what, when, on which UI</h3>
+    <p class="sub">Three human lenses on the same canvas + one autonomous actor (the AI pipeline). Five phases left-to-right.</p>
+
+    <div class="lanes">
+      <div class="header"></div>
+      <div class="header">1 · Trigger</div>
+      <div class="header">2 · Investigate</div>
+      <div class="header">3 · Report</div>
+      <div class="header">4 · Decide</div>
+      <div class="header">5 · Track &amp; Close</div>
+
+      <!-- System row -->
+      <div class="actor system">System / AI</div>
+      <div class="step system">
+        <div class="num">1A</div>
+        <strong>Continuous monitor + Correlator</strong>
+        Ingests 10 source streams; clusters signals → <code>incident</code>
+        <div class="ui">background worker · pg LISTEN/NOTIFY</div>
+      </div>
+      <div class="step system">
+        <div class="num">2</div>
+        <strong>Agent reasoning with tools</strong>
+        Archetype → playbook → tool-call loop → noise filter → confidence
+        <div class="ui">streams reasoning trace live</div>
+      </div>
+      <div class="step system">
+        <div class="num">3A</div>
+        <strong>Draft 8D + initiative candidates</strong>
+        Evidence bundler · 8D projection · render_hints · initiative composer with owner + closure predicate
+        <div class="ui">generative UI stream</div>
+      </div>
+      <div class="step system idle"></div>
+      <div class="step system">
+        <div class="num">5A</div>
+        <strong>Persist &amp; monitor</strong>
+        INSERT initiative + product_action · evaluates closure predicate · writes lesson
+        <div class="ui">cron worker · 60s tick</div>
+      </div>
+
+      <!-- Operator row -->
+      <div class="actor operator">QC Operator</div>
+      <div class="step operator">
+        <div class="num">1B</div>
+        <strong>Floor lens capture</strong>
+        Photo · voice (Whisper) · 1-sentence prompt ("Riss am Gehäuse, Linie 2")
+        <div class="ui">📱 mobile capture page</div>
+      </div>
+      <div class="step operator idle"></div>
+      <div class="step operator idle"></div>
+      <div class="step operator idle"></div>
+      <div class="step operator">
+        <div class="num">5B</div>
+        <strong>Receipt toast</strong>
+        "Signal S-00438 joined Incident I-00042 → initiative PA-00102 opened"
+        <div class="ui">📱 receipt + link</div>
+      </div>
+
+      <!-- Engineer row -->
+      <div class="actor engineer">Quality Engineer</div>
+      <div class="step engineer idle"></div>
+      <div class="step engineer">
+        <div class="num">2+</div>
+        <strong>Optional hint on stall</strong>
+        Engineer injects constraint ("focus on supplier batches received in Feb")
+        <div class="ui">🖥️ chat panel next to trace</div>
+      </div>
+      <div class="step engineer">
+        <div class="num">3B</div>
+        <strong>Review on Incident Canvas</strong>
+        Root-cause graph · timeline · BOM trace · contribution stream · 8D toggle
+        <div class="ui">🖥️ Incident Canvas (3-panel)</div>
+      </div>
+      <div class="step engineer">
+        <div class="num">4</div>
+        <strong>Accept / Amend / Reject</strong>
+        Per initiative candidate: edit · assign owner · set deadline · confirm predicate
+        <div class="ui">🖥️ initiative composer</div>
+      </div>
+      <div class="step engineer">
+        <div class="num">5C</div>
+        <strong>Verify closure</strong>
+        Sees Impact Simulator vs. measured outcome; confirms or reopens
+        <div class="ui">🖥️ my-initiatives list</div>
+      </div>
+
+      <!-- Manager row -->
+      <div class="actor manager">Quality Manager</div>
+      <div class="step manager idle"></div>
+      <div class="step manager idle"></div>
+      <div class="step manager idle"></div>
+      <div class="step manager">
+        <div class="num">4+</div>
+        <strong>High-severity co-sign</strong>
+        Approval inbox for <code>severity=critical</code> or cost &gt; threshold
+        <div class="ui">🖥️ approval inbox</div>
+      </div>
+      <div class="step manager">
+        <div class="num">5D</div>
+        <strong>Leadership lens dashboard</strong>
+        Portfolio · cross-plant incident map · TTR trend · recurrence warning · Pareto
+        <div class="ui">🖥️ leadership dashboard</div>
+      </div>
+    </div>
+
+    <div class="callout">
+      <strong>The three lenses share one data model.</strong>
+      Floor lens is intentionally Reonic-invisible — no "LLM", "prompt", or "8D" copy — just "Report something weird."
+      Engineer lens is the full canvas. Leadership lens is the portfolio. Same <code>incident</code> record underneath; projections differ.
+    </div>
+  </section>
+
+  <!-- ============== DOMAIN AGENTS ============== -->
+  <section>
+    <h2>Section 5</h2>
+    <h3>Domain agents — Act III dispatch</h3>
+    <p class="sub">Three real + two stubbed. Each owns its tool manifest and target system of record.</p>
+
+    <div class="agents">
+      <div class="agent-card real">
+        <span class="status">real</span>
+        <h4>🏭 Production</h4>
+        <div class="target">MES · product_action · rework</div>
+        <div class="ex">Quarantine products with batch SB-00007. Add inspection step at Montage Linie 1.</div>
+      </div>
+      <div class="agent-card real">
+        <span class="status">real</span>
+        <h4>📦 Supplier</h4>
+        <div class="target">SRM · supplier 8D PDF · scorecards</div>
+        <div class="ex">Issue supplier 8D to ElektroParts GmbH. Demand incoming ESR screening. Update scorecard.</div>
+      </div>
+      <div class="agent-card real">
+        <span class="status">real</span>
+        <h4>🔬 R&amp;D / Dev</h4>
+        <div class="target">Dev backlog · FMEA registry</div>
+        <div class="ex">Update PM-00008 design note. Add ESR tolerance to acceptance spec. FMEA revision.</div>
+      </div>
+      <div class="agent-card stubbed">
+        <span class="status">stubbed</span>
+        <h4>🚚 Logistics</h4>
+        <div class="target">ERP · WMS</div>
+        <div class="ex">Hold shipments of affected PO range. Reroute inventory to quarantine.</div>
+      </div>
+      <div class="agent-card stubbed">
+        <span class="status">stubbed</span>
+        <h4>💬 Customer-Response</h4>
+        <div class="target">CRM · field-service · marketing-ops</div>
+        <div class="ex">Proactive outreach to customers with affected serials. Warranty reserve flag.</div>
+      </div>
+    </div>
+
+    <div class="callout">
+      <strong>Why stubbed is not fake.</strong>
+      Logistics and Customer-Response agents run through the full prompt → structured-output → render-JSON pipeline in the demo.
+      The <em>write</em> path is mocked (no real ERP / CRM connector). That's honest scope-cutting, not theater.
+    </div>
+  </section>
+
+  <!-- ============== TOOL CATALOG ============== -->
+  <section>
+    <h2>Section 6</h2>
+    <h3>Tool catalog — signatures, return types, purpose</h3>
+    <p class="sub">All tools in <code>app/server/tools/*.ts</code>, typed via Zod, max-latency-budgeted.</p>
+
+    <div class="tool-groups">
+
+      <div class="tool-group">
+        <h4>🧲 Signal &amp; Incident (new)</h4>
+        <div class="desc">The Listen act. Normalize, correlate, form incidents.</div>
+        <div class="tool">
+          <div class="sig"><span class="tag write">write</span>ingest_signal(payload: <span class="ret">RawSignal</span>) → <span class="ret">{ signal_id }</span></div>
+          <div class="purpose">Normalizes any source into the canonical <code>signal</code> schema. Computes embedding, persists.</div>
+        </div>
+        <div class="tool">
+          <div class="sig"><span class="tag correl">corr</span>correlate_signals(signal_id: <span class="ret">string</span>) → <span class="ret">{ incident_id, matched_signals[] }</span></div>
+          <div class="purpose">Runs deterministic joins + pgvector cosine. Returns existing incident to join or creates new one.</div>
+        </div>
+        <div class="tool">
+          <div class="sig"><span class="tag read">read</span>list_open_incidents(filter?: <span class="ret">IncidentFilter</span>) → <span class="ret">Incident[]</span></div>
+          <div class="purpose">Leadership lens portfolio feed. Supports filter by severity, plant, product family.</div>
+        </div>
+      </div>
+
+      <div class="tool-group">
+        <h4>🔍 Retrieval (deterministic SQL)</h4>
+        <div class="desc">The Investigate phase. Bounded by <code>LIMIT 50</code>.</div>
+        <div class="tool">
+          <div class="sig"><span class="tag read">read</span>query_defects(filter: <span class="ret">DefectFilter</span>) → <span class="ret">Defect[]</span></div>
+          <div class="purpose">Default entry point. Filter: code, section, severity, window, article.</div>
+        </div>
+        <div class="tool">
+          <div class="sig"><span class="tag read">read</span>trace_batch(batch_id: <span class="ret">string</span>) → <span class="ret">BatchTrace</span></div>
+          <div class="purpose">{ parts, products, defects, claims }. Mandatory for Story 1.</div>
+        </div>
+        <div class="tool">
+          <div class="sig"><span class="tag read">read</span>bom_parts_for_product(product_id: <span class="ret">string</span>) → <span class="ret">BomInstall[]</span></div>
+          <div class="purpose">Full BOM tree with supplier/batch. Reads <code>v_product_bom_parts</code>.</div>
+        </div>
+        <div class="tool">
+          <div class="sig"><span class="tag read">read</span>pareto_defect_codes(window?, article_id?) → <span class="ret">ParetoBucket[]</span></div>
+          <div class="purpose">Top-N defect codes + count + %. Emits <code>render_hint.pareto_chart</code>.</div>
+        </div>
+        <div class="tool">
+          <div class="sig"><span class="tag read">read</span>test_results_marginal(test_key?, window?) → <span class="ret">TestResult[]</span></div>
+          <div class="purpose">Leading indicator: near-limit MARGINAL values.</div>
+        </div>
+      </div>
+
+      <div class="tool-group">
+        <h4>🌐 Cross-boundary (where stories surface)</h4>
+        <div class="desc">The exact joins that make each archetype visible.</div>
+        <div class="tool">
+          <div class="sig"><span class="tag read">read</span>field_vs_factory_gap(article_id: <span class="ret">string</span>) → <span class="ret">GapReport</span></div>
+          <div class="purpose">Anti-join: field_claim without matching defect. Mandatory for Story 3.</div>
+        </div>
+        <div class="tool">
+          <div class="sig"><span class="tag read">read</span>operator_effect_analysis(user_id?, order_ids?) → <span class="ret">OperatorPattern</span></div>
+          <div class="purpose">Rework density per user vs. baseline. Mandatory for Story 4.</div>
+        </div>
+        <div class="tool">
+          <div class="sig"><span class="tag read">read</span>rework_timeline_by_section(section_id, window) → <span class="ret">TimelineEvent[]</span></div>
+          <div class="purpose">Rework + defect events on one timeline per section. Essential for Story 2.</div>
+        </div>
+        <div class="tool">
+          <div class="sig"><span class="tag read">read</span>weekly_quality_summary(article_id?) → <span class="ret">WeeklySummary[]</span></div>
+          <div class="purpose">Wrapper over <code>v_quality_summary</code> — drift baseline.</div>
+        </div>
+      </div>
+
+      <div class="tool-group">
+        <h4>🧬 Semantic + Vision + Lessons</h4>
+        <div class="desc">pgvector and multimodal, for free-text and images.</div>
+        <div class="tool">
+          <div class="sig"><span class="tag sem">vec</span>semantic_search_signals(query: <span class="ret">string</span>, top_k=10) → <span class="ret">Signal[]</span></div>
+          <div class="purpose">Cosine over all <code>signal.embedding</code>. Cross-source retrieval.</div>
+        </div>
+        <div class="tool">
+          <div class="sig"><span class="tag sem">vec</span>retrieve_lessons(incident_id: <span class="ret">string</span>, top_k=5) → <span class="ret">Lesson[]</span></div>
+          <div class="purpose">Network effect: nearest past resolutions inform current hypothesis + Impact Simulator.</div>
+        </div>
+        <div class="tool">
+          <div class="sig"><span class="tag vis">vis</span>classify_defect_image(image_url: <span class="ret">string</span>) → <span class="ret">ImageClassification</span></div>
+          <div class="purpose">Sonnet 4.6 Vision. For operator-photo trigger.</div>
+        </div>
+      </div>
+
+      <div class="tool-group">
+        <h4>💡 Simulation</h4>
+        <div class="desc">Pre-dispatch impact projection.</div>
+        <div class="tool">
+          <div class="sig"><span class="tag sem">sim</span>simulate_impact(initiative: <span class="ret">InitiativeDraft</span>) → <span class="ret">ImpactEstimate</span></div>
+          <div class="purpose">Rule-based prior + lesson-embedding similarity. Returns { claims_avoided, eur_avoided, confidence }.</div>
+        </div>
+      </div>
+
+      <div class="tool-group">
+        <h4>✍️ Write (gated, post-approval)</h4>
+        <div class="desc">Not exposed inside the Investigate loop. Orchestrator calls post-approval.</div>
+        <div class="tool">
+          <div class="sig"><span class="tag write">write</span>create_initiative(payload: <span class="ret">InitiativePayload</span>) → <span class="ret">{ initiative_id, action_id? }</span></div>
+          <div class="purpose">INSERT into <code>initiative</code> + (if Manex-native) <code>product_action</code>.</div>
+        </div>
+        <div class="tool">
+          <div class="sig"><span class="tag write">write</span>register_closure_predicate(pred: <span class="ret">ClosurePredicate</span>) → <span class="ret">{ predicate_id }</span></div>
+          <div class="purpose">Typed union persisted in <code>team_closure_predicate</code>. Evaluated by cron.</div>
+        </div>
+        <div class="tool">
+          <div class="sig"><span class="tag write">write</span>emit_lesson(incident_id: <span class="ret">string</span>, summary: <span class="ret">string</span>) → <span class="ret">{ lesson_id }</span></div>
+          <div class="purpose">Fired by closure monitor on resolved incidents. Embeds and indexes.</div>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ============== PLAYBOOKS ============== -->
+  <section>
+    <h2>Section 7</h2>
+    <h3>Archetype playbooks — codified domain knowledge as few-shots</h3>
+    <p class="sub">Each playbook is a prompt snippet in the system prompt. Classifier picks one; the Investigate loop follows (and may deviate).</p>
+
+    <div class="playbook">
+      <div class="play">
+        <div class="head"><span class="arch">Story 01 · Supplier</span></div>
+        <h4>Vertical traceability</h4>
+        <div class="chain">
+          <span class="step">pareto_defect_codes</span><span class="arrow">→</span>
+          <span class="step">query_defects(code=top)</span><span class="arrow">→</span>
+          <span class="step">bom_parts_for_product</span><span class="arrow">→</span>
+          <span class="step">trace_batch</span><span class="arrow">→</span>
+          <span class="step">semantic_search_signals("batch supplier")</span><span class="arrow">→</span>
+          <span class="step">retrieve_lessons</span>
+        </div>
+        <div class="verdict">Signal: code cluster + field-lag 4–8w. Root: batch with &gt;10× baseline defect rate.</div>
+      </div>
+      <div class="play">
+        <div class="head"><span class="arch">Story 02 · Drift</span></div>
+        <h4>Time + place localization</h4>
+        <div class="chain">
+          <span class="step">weekly_quality_summary</span><span class="arrow">→</span>
+          <span class="step">query_defects(code=VIB_FAIL)</span><span class="arrow">→</span>
+          <span class="step">rework_timeline_by_section</span><span class="arrow">→</span>
+          <span class="step">semantic_search_signals("torque")</span><span class="arrow">→</span>
+          <span class="step">retrieve_lessons</span>
+        </div>
+        <div class="verdict">Signal: narrow window + one section + self-healing. Root: tool calibration.</div>
+      </div>
+      <div class="play">
+        <div class="head"><span class="arch">Story 03 · Design</span></div>
+        <h4>Cross-boundary gap</h4>
+        <div class="chain">
+          <span class="step">field_vs_factory_gap</span><span class="arrow">→</span>
+          <span class="step">query_defects → [ ]</span><span class="arrow">→</span>
+          <span class="step">bom_parts_for_product</span><span class="arrow">→</span>
+          <span class="step">semantic_search_signals("thermal drift")</span>
+        </div>
+        <div class="verdict">Signal: claims &gt; 0, defects = 0. Root: latent design; tests don't catch it.</div>
+      </div>
+      <div class="play">
+        <div class="head"><span class="arch">Story 04 · Operator</span></div>
+        <h4>Join through rework</h4>
+        <div class="chain">
+          <span class="step">query_defects(sev=low)</span><span class="arrow">→</span>
+          <span class="step">group_by(order_id)</span><span class="arrow">→</span>
+          <span class="step">operator_effect_analysis</span><span class="arrow">→</span>
+          <span class="step">rework_timeline_by_section</span>
+        </div>
+        <div class="verdict">Signal: cluster on few orders + one user_id. Root: operator handling.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============== OUTPUT CONTRACT ============== -->
+  <section>
+    <h2>Section 8</h2>
+    <h3>Output contract — what the agent emits</h3>
+    <p class="sub">Zod schema. UI consumes exactly this shape. Lineage back to tool calls on every field.</p>
+
+    <div class="contract">
+<pre><span class="comment">// app/server/schemas/agent-output.ts</span>
+<span class="kw">const</span> AgentOutput <span class="kw">=</span> z.object({
+  session_id: z.string(),
+  incident_id: z.string(),                              <span class="comment">// the durable anchor</span>
+  trigger: z.object({
+    source_type: z.enum([<span class="str">"continuous_monitor"</span>, <span class="str">"operator_capture"</span>, <span class="str">"user_query"</span>]),
+    seed_signal_ids: z.array(z.string()),
+  }),
+  archetype: z.object({
+    primary: z.enum([<span class="str">"supplier"</span>, <span class="str">"drift"</span>, <span class="str">"design"</span>, <span class="str">"operator"</span>, <span class="str">"unknown"</span>]),
+    confidence: z.number().min(<span class="num">0</span>).max(<span class="num">1</span>),
+    rationale: z.string(),
+  }),
+  contributions: z.array(Contribution),                 <span class="comment">// from the 9 stakeholder domains</span>
+  report_8d: z.object({ d1_team: Section, ... d8_closure: Section }),
+  visualizations: z.array(z.object({
+    component: z.enum([<span class="str">"pareto_chart"</span>, <span class="str">"timeline"</span>, <span class="str">"fault_tree"</span>, <span class="str">"bom_graph"</span>, <span class="str">"image_row"</span>, <span class="str">"kpi_card"</span>]),
+    props: z.record(z.unknown()),
+    source_tool_call_id: z.string(),
+  })),
+  initiatives: z.array(z.object({
+    agent_domain: z.enum([<span class="str">"production"</span>, <span class="str">"supplier"</span>, <span class="str">"rnd"</span>, <span class="str">"logistics"</span>, <span class="str">"cx"</span>]),
+    target_system: z.string(),
+    action_type: z.enum([<span class="str">"corrective"</span>, <span class="str">"preventive"</span>, <span class="str">"investigate"</span>, <span class="str">"initiate_8d"</span>]),
+    rationale: z.string(),
+    suggested_owner_hint: z.string().optional(),
+    suggested_deadline_days: z.number().int().positive(),
+    closure_predicate: ClosurePredicate,
+    impact_estimate: ImpactEstimate,                    <span class="comment">// from Impact Simulator</span>
+    confidence: z.number(),
+    evidence: z.array(z.string()),                      <span class="comment">// tool_call_ids</span>
+  })),
+  meta: z.object({
+    model_calls: z.array(ModelCallLog),
+    tool_calls: z.array(ToolCallLog),
+    lessons_retrieved: z.array(z.string()),
+    total_cost_usd: z.number(),
+    total_latency_ms: z.number(),
+  }),
+});</pre>
+    </div>
+  </section>
+
+  <!-- ============== GUARDRAILS ============== -->
+  <section>
+    <h2>Section 9</h2>
+    <h3>Guardrails &amp; failure modes</h3>
+    <p class="sub">Defensive design — the demo must not die from typical agent pitfalls.</p>
+
+    <div class="guards">
+      <div class="guard"><h4>Tool-loop cap</h4><p><code>max_iterations = 8</code> per Investigate phase. After 8 → stall state.</p></div>
+      <div class="guard"><h4>Output validator (Zod)</h4><p>Every LLM emission runs through Zod. On failure: max 1 retry with error fed back.</p></div>
+      <div class="guard"><h4>Evidence-cite check</h4><p>Every <code>evidence[]</code> ID must exist in <code>meta.tool_calls</code>. Unknown IDs → reject.</p></div>
+      <div class="guard"><h4>Amend budget</h4><p>Engineer can amend max 2× per session. After that: full restart.</p></div>
+      <div class="guard"><h4>Per-phase token budget</h4><p>Classify 1k · Investigate 16k · Compose 8k · Propose 4k. Overflow → Haiku summarize + retry.</p></div>
+      <div class="guard"><h4>Tool-arg Zod gate</h4><p>Args validated before SQL execution. Invalid filter → agent error message (self-corrects).</p></div>
+      <div class="guard"><h4>Rate limit / timeout</h4><p>Max 5 concurrent tool calls. Tool timeout 5s. Agent total 60s.</p></div>
+      <div class="guard"><h4>Write gate</h4><p>Write tools unavailable in Investigate loop. Orchestrator invokes post-approval only.</p></div>
+      <div class="guard"><h4>Cache TTL</h4><p>Evidence cache 15min · embedding index 24h. Warm before demo to &gt;80% hit rate.</p></div>
+    </div>
+  </section>
+
+  <!-- ============== COST ============== -->
+  <section>
+    <h2>Section 10</h2>
+    <h3>Cost envelope — per end-to-end run</h3>
+    <p class="sub">One symptom → Incident joined → 8D + 3 initiatives. Prompt caching on.</p>
+
+    <div class="cost-table">
+      <table>
+        <thead><tr><th>Stage</th><th>Model</th><th>Input (tok)</th><th>Output (tok)</th><th>Cost</th></tr></thead>
+        <tbody>
+          <tr><td>Classify</td><td>Haiku 4.5</td><td class="num">2 000</td><td class="num">150</td><td class="num">$0.0022</td></tr>
+          <tr><td>Investigate · 6 turns avg</td><td>Sonnet 4.6</td><td class="num">18 000 (80% cached)</td><td class="num">3 000</td><td class="num">$0.0498</td></tr>
+          <tr><td>Compose · 8D</td><td>Sonnet 4.6</td><td class="num">6 000</td><td class="num">2 500</td><td class="num">$0.0555</td></tr>
+          <tr><td>Propose · initiatives</td><td>Sonnet 4.6</td><td class="num">3 000</td><td class="num">1 500</td><td class="num">$0.0315</td></tr>
+          <tr><td>Noise filter pre-emit</td><td>Haiku 4.5</td><td class="num">1 500</td><td class="num">200</td><td class="num">$0.0020</td></tr>
+          <tr><td>Vision (if operator photo)</td><td>Sonnet 4.6</td><td class="num">2 500</td><td class="num">300</td><td class="num">$0.0120</td></tr>
+          <tr><td>Embedding (one-time index)</td><td>OpenAI 3-small</td><td class="num">50 000</td><td class="num">—</td><td class="num">$0.0010</td></tr>
+          <tr><td><strong>Total per run</strong></td><td></td><td></td><td></td><td class="num"><strong>≈ $0.15</strong></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="callout">
+      <strong>Total hackathon budget:</strong> ~$33 across 200 dev runs + 20 demo runs. Opus fallback adds ~$5 across max 5 runs.
+    </div>
+  </section>
+
+  <!-- ============== 24H MILESTONES ============== -->
+  <section>
+    <h2>Section 11</h2>
+    <h3>24h delivery milestones</h3>
+    <p class="sub">Three parallel pods. Each milestone is demoable standalone.</p>
+
+    <div class="decisions" style="grid-template-columns: 1fr;">
+      <div class="decision strategic">
+        <div class="num">M1 · +3h</div>
+        <h4>Skeleton · signal schema · first 2 tools · classifier</h4>
+        <p>pgvector extension on. Signal row, incident row (typed). Anthropic SDK wired. <code>classify</code> + <code>query_defects</code> + <code>pareto_defect_codes</code>. Mock-response test against Story 1.</p>
+      </div>
+      <div class="decision strategic">
+        <div class="num">M2 · +6h</div>
+        <h4>Signal Correlator + Investigate loop + retrieval tools</h4>
+        <p>Deterministic join + pgvector cosine. Full ReAct loop (max 8). All 9 retrieval + cross-boundary tools. Stories 1 and 3 trace end-to-end.</p>
+      </div>
+      <div class="decision critical">
+        <div class="num">M3 · +10h</div>
+        <h4>Incident Canvas · Compose · Propose · streaming</h4>
+        <p>3-panel Canvas with React Flow root-cause graph. 8D projection. Initiative composer. Streaming via AI SDK, generative-UI hints.</p>
+      </div>
+      <div class="decision novel">
+        <div class="num">M4 · +14h</div>
+        <h4>Semantic layer · vision · playbooks · lessons</h4>
+        <p>pgvector index on signals + lessons. <code>retrieve_lessons</code> live. Vision for operator photos. 4 archetype playbooks in system prompt.</p>
+      </div>
+      <div class="decision strategic">
+        <div class="num">M5 · +18h</div>
+        <h4>Domain agents (3 real + 2 stubbed) · Impact Simulator · Leadership lens</h4>
+        <p>Production / Supplier / R&amp;D agents with tool manifests. Logistics + CX stubbed. Simulator rule+embed. Portfolio + incidents map.</p>
+      </div>
+      <div class="decision safety">
+        <div class="num">M6 · +20h</div>
+        <h4>Guardrails · closure monitor · prompt cache verified</h4>
+        <p>All 9 guardrails live. Closure-predicate cron. Prompt-cache breakpoints verified at &gt;80% hit rate.</p>
+      </div>
+      <div class="decision critical">
+        <div class="num">M7 · +22h</div>
+        <h4>Demo seed · lessons pre-seeded · E2E rehearsal per story</h4>
+        <p>Deterministic triggers. 2–3 pre-seeded lesson rows. All 4 stories runnable in &lt;60s. Snapshot for reset. 2h pitch buffer.</p>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  De.Constructors — Manex Hackathon 2026 · Resolve merged architecture · canonical version committed to repo (docs/ARCHITECTURE.md)
+</footer>
+
+<script>
+  mermaid.initialize({
+    startOnLoad: true,
+    theme: 'dark',
+    themeVariables: {
+      background: '#111a30',
+      primaryColor: '#1e293b',
+      primaryTextColor: '#e8ecf8',
+      primaryBorderColor: '#475569',
+      lineColor: '#64748b',
+      secondaryColor: '#334155',
+      tertiaryColor: '#1e293b',
+      fontFamily: "-apple-system, Inter, system-ui, sans-serif",
+      fontSize: '13px'
+    },
+    flowchart: { htmlLabels: true, curve: 'basis', padding: 16 },
+  });
+</script>
+
+</body>
+</html>
