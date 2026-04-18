@@ -18,9 +18,8 @@ SEED_FILE="$REPO_ROOT/supabase/seed.sql"
 
 log "resetting team=$SLUG"
 
-# Truncate only seed tables. Workflow tables (product_action, rework) +
-# team-created tables are preserved so teams don't lose their work.
-# If you want a hard reset, also TRUNCATE product_action, rework.
+# Truncate all challenge seed/workflow tables and reload seed.sql.
+# Team-created custom tables are preserved.
 team_psql "$SLUG" <<'SQL'
 TRUNCATE TABLE
   field_claim, rework, product_action, defect, test_result, test,
