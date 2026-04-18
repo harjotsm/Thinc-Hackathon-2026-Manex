@@ -1,6 +1,7 @@
 .env
 .env.*
 !.env.example
+/node_modules/
 handouts/team-*.txt
 volumes/
 data-generation/.venv/
