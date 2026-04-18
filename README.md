@@ -8,9 +8,9 @@ measurable initiative. 8D and FMEA fall out as projections.
 
 ## Canonical reference
 
-- **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** — the complete merged architecture
-- **[docs/visualizations/architecture.html](docs/visualizations/architecture.html)** — engineering dashboard (open locally in browser)
-- **[docs/visualizations/problem-flow.html](docs/visualizations/problem-flow.html)** — problem flow + persona journey
+- **[planning/ARCHITECTURE.md](planning/ARCHITECTURE.md)** — the complete merged architecture
+- **[planning/visualizations/architecture.html](planning/visualizations/architecture.html)** — engineering dashboard (open locally in browser)
+- **[planning/visualizations/problem-flow.html](planning/visualizations/problem-flow.html)** — problem flow + persona journey
 - **[CLAUDE.md](CLAUDE.md)** — context for Claude Code / SDK agents working in this repo
 
 ## Team & ownership

@@ -444,7 +444,7 @@ System owns the rest.
 | **Quality Manager** | idle | idle | idle | High-severity co-sign | Portfolio dashboard + recurrence warning |
 
 The visual equivalent of this table is in
-[docs/visualizations/architecture.html](visualizations/architecture.html).
+[planning/visualizations/architecture.html](visualizations/architecture.html).
 
 ---
 
@@ -567,16 +567,18 @@ workers/
   embedding-indexer.ts                      one-shot on first session
 supabase/
   migrations/                               pgvector + our tables
-docs/
+planning/
   ARCHITECTURE.md                           this file
   visualizations/                           HTML dashboards
+docs/                                       (Manex challenge scaffold docs)
+  CASE.md · SCHEMA.md · QUICKSTART.md · API_REFERENCE.md · DATA_PATTERNS.md
 ```
 
 ---
 
 ## 14. Visualizations
 
-- [docs/visualizations/architecture.html](visualizations/architecture.html) — engineering dashboard: decisions, model routing, E2E pipeline diagram, tool catalog, swimlane journey, guardrails, cost envelope, milestones
-- [docs/visualizations/problem-flow.html](visualizations/problem-flow.html) — problem understanding + persona journey
+- [planning/visualizations/architecture.html](visualizations/architecture.html) — engineering dashboard: decisions, model routing, E2E pipeline diagram, tool catalog, swimlane journey, guardrails, cost envelope, milestones
+- [planning/visualizations/problem-flow.html](visualizations/problem-flow.html) — problem understanding + persona journey
 
 Both are standalone HTML with Mermaid via CDN. Open locally in any browser.

@@ -11,9 +11,9 @@ Tagline: *Every voice becomes an initiative.*
 
 ## Start here
 
-- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — canonical architecture (source of truth)
-- [docs/visualizations/architecture.html](docs/visualizations/architecture.html) — engineering dashboard
-- [docs/visualizations/problem-flow.html](docs/visualizations/problem-flow.html) — problem understanding + persona journey
+- [planning/ARCHITECTURE.md](planning/ARCHITECTURE.md) — canonical architecture (source of truth)
+- [planning/visualizations/architecture.html](planning/visualizations/architecture.html) — engineering dashboard
+- [planning/visualizations/problem-flow.html](planning/visualizations/problem-flow.html) — problem understanding + persona journey
 
 If any of these conflict with something you read elsewhere, the markdown wins.
 
