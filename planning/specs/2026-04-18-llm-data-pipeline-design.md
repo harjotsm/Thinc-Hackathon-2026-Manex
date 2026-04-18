@@ -51,9 +51,9 @@ Story 1 (Supplier batch — ElektroParts/SB-00007/PM-00008) and Story 3 (Design 
 
 ## 2. Entry-Points · Trigger Model
 
-Three independent paths produce signals. All three end in the same correlator.
+Three ways to enter the pipeline. Paths A + C produce signals (which flow to the correlator). Path B operates on existing incidents — it starts an Investigate session, no new signal is created.
 
-### 2.1 Path A — Operator Push
+### 2.1 Path A — Operator Push (produces signal)
 
 - Operator on the shop floor opens Floor lens (mobile-first)
 - Submits free-text + optional photo attachments + optional voice note
@@ -61,13 +61,14 @@ Three independent paths produce signals. All three end in the same correlator.
 - Server: Whisper transcribes voice → text; Vision classifier annotates photos; text embedded via `text-embedding-3-small`
 - Signal persisted, Correlator runs synchronously
 
-### 2.2 Path B — Engineer Push
+### 2.2 Path B — Engineer-initiated Investigation (starts session on existing incident)
 
 - Engineer opens Engineer lens, sees inbox of open incidents
 - Manual "Analyze" button on an incident → `POST /api/incident/:id/investigate`
 - Session created, worker enqueued, 202 + session_id returned
+- **No new signal is created here.** This path operates on signals that already exist (from Path A, C, or historical backfill §2.5) and are clustered into the target incident.
 
-### 2.3 Path C — Autonomous Detector (SPC + LLM Triage Hybrid)
+### 2.3 Path C — Autonomous Detector (SPC + LLM Triage Hybrid, produces signals)
 
 **Layer 1 — SPC rule-based detector** runs on 60s cron (configurable `DETECTOR_CRON_INTERVAL_SEC`). Queries:
 
@@ -90,6 +91,8 @@ After the correlator attaches or creates an incident, trigger Investigate automa
 - `incident.severity ∈ {high, critical}` at creation time, OR
 - `signal_count >= 3` within a 24h rolling window on the same incident, OR
 - **Early-burst:** `signal_count >= 2` within 6h with the same `defect_code`
+
+**Auto-trigger is SUPPRESSED when `incident.is_provisional = true`.** Provisional incidents (customer-mail without product_id clearly identified) must be promoted by the engineer first (via `POST /api/incident/:id/promote`), because running Investigate on unknown product scope wastes tool calls and risks false-confident hypotheses. On promote: server re-evaluates the auto-trigger conditions with `is_provisional=false`; if any condition is met, Investigate fires automatically at that point.
 
 Otherwise the incident waits for a manual engineer trigger.
 
@@ -123,10 +126,23 @@ One-shot terminates when all rows processed. Idempotent — re-running does no d
 
 **Mode 2 — Incremental cron** (`server/worker/handlers/backfill-incremental.ts`), runs every `BACKFILL_CRON_INTERVAL_SEC` (default 120s), controlled by env flag `BACKFILL_CRON_ENABLED=true|false`:
 
-- Maintains watermark in `backfill_watermark` table: `{source_table, last_seen_ts, last_id}`
-- Each run: `SELECT * FROM <source> WHERE ts > last_seen_ts ORDER BY ts LIMIT 500`
+- Maintains watermark in `backfill_watermark` table: `{source_table, last_seen_ts, last_id}` (compound cursor — timestamp + tiebreaker pk — avoids data loss on ties)
+- **Per-table timestamp columns** (Manex schema, verified):
+  - `defect.ts`
+  - `field_claim.claim_ts`
+  - `test_result.ts`
+  - `rework.ts`
+- Each run (parameterized per source_table):
+  ```sql
+  SELECT * FROM <source>
+   WHERE (<ts_col>, <id_col>) > (:last_seen_ts, :last_id)
+     [AND overall_result IN ('MARGINAL','FAIL') for test_result]
+  ORDER BY <ts_col> ASC, <id_col> ASC
+  LIMIT 500;
+  ```
+- Compound-cursor ordering guarantees: if two rows share `ts`, we still advance past both deterministically.
 - Transforms + ingests exactly like Mode 1 (shared code)
-- Updates watermark on success
+- Updates watermark on success: `UPDATE backfill_watermark SET last_seen_ts=max(ts), last_id=max(id_at_that_ts) WHERE source_table=?`
 - Handles idempotency via same `idempotency_key` scheme — replaying is safe
 
 **Env flag for demo stability:** `BACKFILL_CRON_ENABLED=false` disables Mode 2 entirely during the live demo (prevents the cron from injecting surprise signals mid-pitch). Default `true` in dev.
@@ -142,7 +158,7 @@ backfill_watermark {
 ```
 
 **Seed choreography (for demo):**
-1. `pnpm db:reset` → loads Manex tables + Resolve tables (migrations 00001-00012)
+1. `pnpm db:reset` → loads Manex tables + Resolve tables (migrations 00001-00013)
 2. `pnpm db:seed:demo` → injects 3 pre-approved lessons
 3. `pnpm backfill:seed` (wrapper around `scripts/backfill-signals.ts`) → ingests all Manex rows as signals, correlator groups them into the 4 demo incidents
 4. `pnpm dev` → runs Next.js + worker; detector cron + embedding-recovery cron run live, backfill cron depends on env flag
@@ -176,8 +192,8 @@ signal {
   section_id: text | null                           // FK section.section_id (Manex's canonical section; replaces old "station")
   defect_code: text | null                          // from defect.defect_code or detector_evidence.defect_code
   test_key: text | null                             // from test_result.test_key (for marginal_test signals)
-  order_id: text | null                             // FK product_order.order_id (for Story 4)
-  user_id: text | null                              // FK app_user.user_id (operator who caused defect; from rework.user_id)
+  order_id: text | null                             // FK production_order.order_id (for Story 4)
+  user_id: text | null                              // FK app_user.user_id (Resolve-side table — Manex only has user_id strings in rework.user_id, no user dimension; §16.2 migration 00013_resolve_app_user.sql creates the dimension and seeds demo operators)
   market: text | null                               // from field_claim.market
   shift: 'early' | 'late' | 'night' | null
 
@@ -194,13 +210,13 @@ signal {
   raw_payload: jsonb                                // always present; full original record from source system (for audit)
 
   // Pending-cluster state (§5.1 Phase 3)
-  cluster_state: 'attached' | 'pending_cluster'     // pending_cluster = waiting for ≥2 signals in arch §2's clustering rule
+  cluster_state: 'attached' | 'pending_cluster' | 'expired'   // pending_cluster = waiting for ≥2 signals (arch §2); expired = sweep found no cluster-partner within CORRELATOR_CLUSTER_WINDOW_DAYS, signal retained for audit only (never surfaces in UI)
   pending_until: timestamptz | null                 // stale-pending sweep threshold
 
   idempotency_key: text                             // hash(source_system + source_ref) for backfills; hash(raw_text + created_by + minute_bucket) for operator
 
   // Audit (correlator results)
-  match_type: 'det_prod_def'|'det_sec_def'|'det_rule'|'sem'|'new'|'pending'|null
+  match_type: 'det_prod_def'|'det_sec_def'|'det_rule'|'sem'|'new'|'new_strong_detector'|'pending'|'expired'|null
   match_score: float | null
   attach_reason: text | null
   matched_incident_id: text | null
@@ -260,6 +276,8 @@ incident {
   primary_part_number: text | null                                       // FK part_master.part_number
   linked_product_ids: text[]                                             // denormalized from attached signals
   centroid_embedding: vector(1536)                                       // mean of attached signals' embeddings; recomputed on attach
+  signature_text: text | null                                            // 150-250 word condensed abstract composed by Classify phase from attached signals; used for retrieve_lessons embedding knn + compose prompt snippet
+  signature_embedding: vector(1536) | null                               // embedding of signature_text (separate from centroid_embedding which is mean of signals); used by retrieve_lessons + find_related_incidents
   signal_count: int                                                      // denormalized (counts attached signals only, not pending_cluster)
   hypothesis_tree: jsonb | null                                          // populated by Investigate phase (per arch §5 incident.hypothesis_tree)
   last_activity_at
@@ -388,7 +406,11 @@ The rule for whether to create an incident from an un-matched signal depends on 
 | `customer_email` | **Cluster-based with severity shortcut**. Default: pending_cluster like detector. Exception: if signal has `severity='high'` or `'critical'` AND a recognizable `product_id` / `reported_part_number` / `batch_id` — create provisional incident immediately (single-signal, `is_provisional=true`). Engineer promotes or dismisses in UI. |
 | `detector` with strong deterministic match | **Immediate incident bypass** — if a detector-emitted signal has `detector_evidence.baseline_count >= 5 AND deviation_factor >= 3` (i.e., rule fires on a clearly statistically-significant anomaly), create incident with `signal_count=1`. Logs `match_type='new_strong_detector'`. |
 
-**Pending-cluster sweep job:** Every `CORRELATOR_PENDING_SWEEP_INTERVAL_SEC` (default 300s = 5min), worker scans `signal WHERE cluster_state='pending_cluster' AND pending_until < now()`. For each: look for new deterministic matches among other pending-cluster signals; promote pairs to incident if found; else mark `cluster_state='expired'`.
+**Pending-cluster promotion — two triggers:**
+
+1. **Immediate (on every new signal ingest)** — When correlator processes any signal that would otherwise go to `pending_cluster`, it first checks if there's an existing `pending_cluster` signal matching on the same deterministic key (product_id+defect_code, section_id+defect_code, or detector_rule+product_id) within `CORRELATOR_CLUSTER_WINDOW_DAYS`. If found: **promote both signals** into a new incident (signal_count=2), set both to `cluster_state='attached'`, and emit the trigger-check (§2.4). This is the primary promotion path — most pending-cluster signals never wait for the sweep because the second matching signal's ingest triggers promotion synchronously.
+
+2. **Expiry sweep (cron, fallback cleanup)** — Every `CORRELATOR_PENDING_SWEEP_INTERVAL_SEC` (default 300s = 5min), worker scans `signal WHERE cluster_state='pending_cluster' AND pending_until < now()`. These are signals whose window has expired without a cluster-partner. Action: mark `cluster_state='expired'`, preserve the row for audit, do NOT create an incident. (Previously-described "look for matches among pending-cluster signals" behavior is redundant — if two pending-cluster signals matched, they would have been promoted by trigger 1 at the time the second one was ingested. Sweep only handles expiration.)
 
 ### 5.2 Priority rules when multiple incidents match
 
@@ -891,7 +913,7 @@ Manual only. Engineer UI has "Supersede by [new lesson]" action on a lesson deta
 
 ### 11.5 Demo seed
 
-Three pre-approved lessons seeded in migration `00012_resolve_seed_demo_lessons.sql` with `seed_source='demo'`:
+Three pre-approved lessons seeded in migration `00013_resolve_seed_demo_lessons.sql` with `seed_source='demo'`:
 
 - Story 1 (Supplier batch signature)
 - Story 2 (Calibration drift signature)
@@ -921,6 +943,15 @@ initiative {
   closed_at, failure_reason: text | null
   patience_until: timestamptz                      // deadline for "stale initiative" alert
   consecutive_error_count: int                     // reset on any non-error check
+
+  -- Leadership co-sign gate (§13.10) — fields required for high-severity dispatch
+  cosign_required: bool DEFAULT false              // computed at create: severity IN (high, critical) AND target_system != 'email_stub' AND kind != 'customer_response'
+  co_signed: bool DEFAULT false
+  co_signed_by_user_id: text | null                // must be user.role='leadership'
+  co_signed_at: timestamptz | null
+
+  -- Dispatch idempotency (§13.7) — regenerated at approve-time after engineer edits
+  dispatch_idempotency_key: text | null            // sha256(canonical_json({id, final_template, final_predicate, patience_until})); retries use "{key}:attempt_{n}" suffix
 }
 
 initiative_check {                                 -- append-only audit log
@@ -952,7 +983,7 @@ type ClosurePredicate =
   | { kind: 'composite';
       op: 'and' | 'or';
       children: ClosurePredicate[] }
-  | { kind: 'external_state_check';                // STUB for 24h — adapter returns not_implemented
+  | { kind: 'external_state_check';                // implemented for all target_systems; for stub adapters (email_stub, slack_stub, supplier_portal_stub, plm_stub), evaluates against dispatch_attempt.status — see §13.11
       target_system: string;
       target_ref: string;
       expected_state: string };
@@ -985,9 +1016,10 @@ For each initiative evaluated:
 
 ### 12.5 Concurrency
 
-- Workers use `SELECT ... FOR UPDATE SKIP LOCKED` on the initiative batch
-- `UNIQUE(initiative_id, checked_at)` on `initiative_check` prevents double-record from concurrent workers
-- Idempotent write-path: if row already exists, abort with no-op
+- **Primary guard (row-level lock):** Workers use `SELECT ... FROM initiative WHERE status IN (...) FOR UPDATE SKIP LOCKED LIMIT 50` per cron run. A row locked by one worker is skipped entirely by concurrent workers — prevents parallel evaluation of the same initiative.
+- **Secondary guard (idempotent write):** Insert of `initiative_check` uses `INSERT ... ON CONFLICT (initiative_id, checked_at) DO NOTHING`. The unique constraint is per-second timestamp granularity — not a primary race prevention (two workers could in theory get `checked_at=same-second`), but a last-line defense. The primary guard is the row-lock; ON CONFLICT handles clock-skew or retries within the same second.
+- **Single cron tick invariant:** Only one worker runs the closure-monitor cron at a time per Node process (`worker:dev` is single-process). For multi-node deploys (Inngest), the Inngest scheduler guarantees one concurrent run per cron job by design. No additional distributed-lock needed for 24h scope.
+- **Manual re-eval (`POST /api/closure/check/:id`):** takes the same row lock; if the cron is currently evaluating that initiative, returns 409 Conflict "check in progress".
 
 ### 12.6 Patience window
 
@@ -1055,8 +1087,8 @@ Adapters registered in `server/dispatcher/adapters/index.ts`.
 | `manex_native` | **real** | `INSERT INTO product_action (...)`, returns PA-ID, binds `initiative.product_action_id` |
 | `email_stub` | functional | Insert into `dispatch_attempt` with status='preview', rendered in Engineer UI as email-preview card, "Mark as sent" button |
 | `slack_stub` | functional | Insert into `dispatch_attempt` with status='preview', rendered as slack-message card |
-| `supplier_portal_stub` | placeholder | Adapter returns `{ok: false, error: {code: 'not_implemented'}}`. Registered for interface completeness. |
-| `plm_stub` | placeholder | Same as above. |
+| `supplier_portal_stub` | placeholder-functional | Adapter inserts `dispatch_attempt` with `status='preview'` + payload rendered as "Portal action preview" card. Engineer can "Mark as sent" to set status='sent' — closure predicates of kind `external_state_check` can evaluate this (§13.11). No real external integration. |
+| `plm_stub` | placeholder-functional | Same pattern as `supplier_portal_stub`: inserts preview → "Mark as sent" → evaluable via external_state_check. |
 
 ### 13.3 Action template taxonomy
 
@@ -1241,29 +1273,49 @@ Exposure level: `received | in_progress | resolved` enum + short `resolution_sum
 ### 14.3 Engineer-Lens (Quality, desktop) — complete scope
 
 ```
+# Incidents
 GET    /api/incidents?status=&severity=&archetype=&product_id=&window=&q=&page=&since=
-GET    /api/incident/:id                      → full payload: signals[], sessions[], reports[], initiatives[], linked_lessons[], closure_checks[]
-POST   /api/incident/:id/investigate          → 202 + { session_id }
-POST   /api/incident/:id/dismiss              → body: { reason }
-POST   /api/incident/:id/promote              → promote provisional incident (engineer hint or accept)
+GET    /api/incident/:id                           → full payload: signals[], contributions[], sessions[], reports[], initiatives[], linked_lessons[], closure_checks[]
+POST   /api/incident/:id/investigate               → 202 + { session_id }
+POST   /api/incident/:id/dismiss                   → body: { reason }
+POST   /api/incident/:id/promote                   → promote provisional incident
+POST   /api/incident/:id/reopen                    → from reopen state → new session (§12.4 step 7)
 
-GET    /api/session/:id?since=:seq            → turn history
-GET    /api/session/:id/stream?since=:seq (SSE) → live + replay
-POST   /api/session/:id/hint                  → body: { text }
-POST   /api/session/:id/cancel                → status='cancelled'
+# Contributions (§4.3)
+GET    /api/incident/:id/contributions             → Contribution[] (9 cards, 3 functional + 6 stub)
+POST   /api/incident/:id/contribution              → body: { domain, content, evidence_refs?, structured_payload? } (source='user')
+POST   /api/incident/:id/contribution/refresh      → re-runs 3 functional domain tools
 
-POST   /api/initiative/:id/approve            → body: { edits?, patience_days? } → dispatches
+# Sessions
+GET    /api/session/:id?since=:seq                 → turn history
+GET    /api/session/:id/stream?since=:seq (SSE)    → live + replay
+POST   /api/session/:id/hint                       → body: { text }
+POST   /api/session/:id/cancel                     → status='cancelled'
+
+# Reports (§7.5)
+GET    /api/report/:id                             → single report detail
+POST   /api/report/:id/accept                      → transitions draft → current (superseded previous)
+GET    /api/report/:id/pdf                         → rendered PDF (stub = client-side print)
+
+# Initiatives (write)
+POST   /api/initiative/:id/approve                 → body: { edits?, patience_days? } → dispatches (blocked if cosign_required AND !co_signed → 409)
 POST   /api/initiative/:id/cancel
-POST   /api/initiative/:id/amend              → opens new session with context
+POST   /api/initiative/:id/amend                   → opens new session with context
 
-POST   /api/closure/check/:initiative_id      → manual re-eval
+# Closure
+POST   /api/closure/check/:initiative_id           → manual re-eval
 
-GET    /api/lessons?validated=pending&page=   → pending lesson queue
-GET    /api/lesson/:id                        → detail
-POST   /api/lesson/:id/validate               → body: { decision: 'approved'|'rejected', edits? }
-POST   /api/lesson/:id/supersede              → body: { new_lesson_id }
+# Lessons
+GET    /api/lessons?validated=pending&page=        → pending-lesson queue
+GET    /api/lesson/:id                             → detail
+POST   /api/lesson/:id/validate                    → body: { decision: 'approved'|'rejected', edits? }
+POST   /api/lesson/:id/supersede                   → body: { new_lesson_id }
 
-POST   /api/detector/scan                     → manual detector run
+# Detector
+POST   /api/detector/scan                          → manual detector run
+
+# System (observability — Engineer + Leadership both read)
+GET    /api/system/health                          → { embedding_service: 'ok'|'degraded', pending_embeddings_count, closure_monitor_paused: bool, circuit_breaker: { anthropic: 'ok'|'cooldown', seconds_until_retry } }
 ```
 
 ### 14.4 Leadership-Lens (Analytics, scaffold scope)
@@ -1275,7 +1327,7 @@ GET    /api/analytics/products/top?by=&window=      → top-N products
 GET    /api/analytics/impact?window=                → aggregated impact_measurement
 ```
 
-Read-only. Server-side enforces via RBAC: Leadership role gets 403 on any POST/PATCH/DELETE outside `/api/analytics/*`. Polling every 30s on focus.
+Mostly read-only + one explicit write for governance. Server-side enforces via RBAC: Leadership role gets 403 on any POST/PATCH/DELETE **except** the explicit governance endpoints listed in §14.1 (currently only `POST /api/initiative/:id/cosign` + reading from `GET /api/initiatives/pending_cosign`). Polling every 30s on focus.
 
 ### 14.5 Shared contracts (Zod)
 
@@ -1474,8 +1526,8 @@ server/                                     # server-only
       manex-native.ts
       email-stub.ts
       slack-stub.ts
-      supplier-portal-stub.ts                # placeholder → not_implemented
-      plm-stub.ts                            # placeholder → not_implemented
+      supplier-portal-stub.ts                # stub adapter (preview+sent pattern, evaluable via external_state_check)
+      plm-stub.ts                            # stub adapter (same preview+sent pattern as supplier-portal-stub)
       index.ts
     idempotency.ts
   db/
@@ -1553,16 +1605,17 @@ supabase/
   migrations/
     00001_create_schema.sql                 # Manex, untouched
     00002_create_views.sql                  # Manex, untouched
-    00003_resolve_signal_incident.sql         # signal + incident + incident_signal (join) + audit indexes
-    00004_resolve_contribution.sql             # contribution table (§4.3)
-    00005_resolve_session_events.sql           # session + session_turn + session_event (§6)
-    00006_resolve_report.sql                   # report table (§7.5)
-    00007_resolve_initiative_closure.sql       # initiative + initiative_check + dispatch_attempt + impact_measurement (§12, §13)
-    00008_resolve_lesson.sql                   # lesson + lesson_usage (§11)
-    00009_resolve_backfill.sql                 # backfill_watermark (§2.5)
-    00010_resolve_pipeline_error_log.sql       # pipeline_error_log (§15.4)
-    00011_resolve_pgvector_indexes.sql         # all vector indexes (ivfflat on signal.embedding, incident.centroid_embedding, lesson.embedding)
-    00012_resolve_seed_demo_lessons.sql        # 3 pre-approved demo lessons (§11.5)
+    00003_resolve_app_user.sql                 # app_user dimension (Manex has only user_id strings in rework.user_id; we add a proper users table for RBAC + demo personas) — seeds 4 demo users (Operator × 2, Engineer, Leadership)
+    00004_resolve_signal_incident.sql          # signal + incident + incident_signal (join) + audit indexes
+    00005_resolve_contribution.sql             # contribution table (§4.3)
+    00006_resolve_session_events.sql           # session + session_turn + session_event (§6)
+    00007_resolve_report.sql                   # report table (§7.5)
+    00008_resolve_initiative_closure.sql       # initiative + initiative_check + dispatch_attempt + impact_measurement (§12, §13)
+    00009_resolve_lesson.sql                   # lesson + lesson_usage (§11)
+    00010_resolve_backfill.sql                 # backfill_watermark (§2.5)
+    00011_resolve_pipeline_error_log.sql       # pipeline_error_log (§15.4)
+    00012_resolve_pgvector_indexes.sql         # all vector indexes (ivfflat on signal.embedding, incident.centroid_embedding, incident.signature_embedding, lesson.embedding)
+    00013_resolve_seed_demo_lessons.sql        # 3 pre-approved demo lessons (§11.5)
   seed.sql                                  # Manex, untouched
 
 scripts/
@@ -1650,7 +1703,7 @@ DEMO_USER_HEADER=X-Demo-User
 Bootstrap flow for any team-member:
 1. `pnpm install`
 2. `pnpm db:up` (one-time per session)
-3. `pnpm db:reset` (loads migrations 00001-00012 + seed.sql)
+3. `pnpm db:reset` (loads migrations 00001-00013 + seed.sql)
 4. `pnpm db:seed:demo` (adds 3 pre-approved demo lessons)
 5. `pnpm backfill:seed` (ingests Manex defect/field_claim/marginal-test rows as signals, correlator clusters them into 4 demo incidents)
 6. `pnpm dev` (Next.js + worker; detector + embedding-recovery + pending-cluster-sweep crons active; backfill cron toggled by env)
