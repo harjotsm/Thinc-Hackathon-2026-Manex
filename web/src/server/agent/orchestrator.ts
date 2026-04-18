@@ -173,6 +173,11 @@ export const runOrchestrator = async (incidentId: string): Promise<OrchestratorR
     phases,
   };
 
-  validateEvidenceContract(result);
+  const validation = validateEvidenceContract(result);
+  if (!validation.ok) {
+    throw new Error(
+      `Evidence contract failed (L1/L3): ${validation.issues.map((i) => i.code).join(", ")}`,
+    );
+  }
   return result;
 };
