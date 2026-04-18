@@ -8,6 +8,7 @@ import {
 } from "@/server/agent/evidence-validator";
 import { logTurn, logPhaseStart, logPhaseComplete } from "@/server/agent/session-logger";
 import { publishSessionEvent } from "@/lib/event-bus";
+import { makeId } from "@/server/utils/id";
 import { buildSysCompose } from "./prompts";
 import type { ClassifyOutput, IncidentSeed } from "./classify";
 import type { InvestigateOutput } from "./investigate";
@@ -16,6 +17,11 @@ import type { OrchestratorResult } from "@/server/agent/types";
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export type Draft8D = OrchestratorResult["draft_8d"];
+
+export type ComposeOutput = {
+  draft_8d: Draft8D;
+  report_id: string;
+};
 
 // ─── Zod schema for the Compose output ───────────────────────────────────────
 
@@ -114,7 +120,7 @@ export const runCompose = async (
   incident: IncidentSeed,
   classified: ClassifyOutput,
   investigated: InvestigateOutput,
-): Promise<Draft8D> => {
+): Promise<ComposeOutput> => {
   const client = getAnthropicClient();
   if (!client) throw new Error("ANTHROPIC_API_KEY is not set — cannot run LLM phases.");
 
@@ -266,17 +272,81 @@ export const runCompose = async (
     }
   }
 
+  // ─── Persist report to DB ────────────────────────────────────────────────
+
+  const supabase = getSupabaseServerClient();
+  const reportId = makeId("RPT");
+  const confidence = Math.min(
+    0.95,
+    0.5 + draft8d.claims.length * 0.05 + draft8d.evidence.length * 0.02,
+  );
+
+  const reportRow = {
+    id: reportId,
+    incident_id: incident.incident_id,
+    session_id,
+    version: 1,
+    status: "current" as const,
+    report_8d: draft8d as unknown as Record<string, unknown>,
+    composed_by_model: resp.model,
+    composed_at: new Date().toISOString(),
+    confidence,
+    compose_tokens_in: resp.usage.input_tokens,
+    compose_tokens_out: resp.usage.output_tokens,
+  };
+
+  const { error: insertError } = await supabase.from("report").insert(reportRow);
+
+  if (insertError) {
+    // Unique partial index violation: a 'current' report already exists for this incident
+    if (
+      insertError.code === "23505" ||
+      insertError.message?.includes("report_one_current_per_incident") ||
+      insertError.message?.toLowerCase().includes("unique")
+    ) {
+      // Supersede the existing current report
+      await supabase
+        .from("report")
+        .update({ status: "superseded" })
+        .eq("incident_id", incident.incident_id)
+        .eq("status", "current");
+
+      // Determine next version number
+      const { data: maxRow } = await supabase
+        .from("report")
+        .select("version")
+        .eq("incident_id", incident.incident_id)
+        .order("version", { ascending: false })
+        .limit(1)
+        .single();
+
+      const nextVersion = ((maxRow as { version: number } | null)?.version ?? 1) + 1;
+
+      const { error: retryError } = await supabase.from("report").insert({
+        ...reportRow,
+        version: nextVersion,
+      });
+
+      if (retryError) {
+        console.error(`[compose] report re-insert failed: ${retryError.message}`);
+      }
+    } else {
+      console.error(`[compose] report insert failed: ${insertError.message}`);
+    }
+  }
+
   await logPhaseComplete(session_id, "compose", {
     evidence_count: draft8d.evidence.length,
     claims_count: draft8d.claims.length,
+    report_id: reportId,
   });
 
   publishSessionEvent(session_id, {
     event_seq: nextSeq(),
     event_type: "phase_complete",
-    payload: { phase: "compose", evidence_count: draft8d.evidence.length },
+    payload: { phase: "compose", evidence_count: draft8d.evidence.length, report_id: reportId },
     ts: new Date().toISOString(),
   });
 
-  return draft8d;
+  return { draft_8d: draft8d, report_id: reportId };
 };
