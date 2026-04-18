@@ -31,3 +31,15 @@ export const signalRowSchema = z.object({
 });
 
 export type SignalRow = z.infer<typeof signalRowSchema>;
+
+export const signalCaptureResponseSchema = z.object({
+  signal: signalRowSchema,
+  correlator: z
+    .object({
+      linkedSignals: z.number().int().nonnegative(),
+      incidentIds: z.array(z.string()),
+    })
+    .nullable(),
+});
+
+export type SignalCaptureResponse = z.infer<typeof signalCaptureResponseSchema>;

@@ -15,9 +15,9 @@ export const createEmbedding = async (text: string): Promise<number[] | null> =>
   return first?.embedding ?? null;
 };
 
-export const vectorLiteral = (embedding: number[] | null): string | null => {
+export const vectorLiteral = (embedding: number[] | null): number[] | null => {
   if (!embedding) {
     return null;
   }
-  return `[${embedding.join(",")}]`;
+  return embedding;
 };

@@ -6,6 +6,10 @@ import { queryClaims } from "@/server/tools/query-claims";
 import { traceBatch } from "@/server/tools/trace-batch";
 import { weeklyQualitySummary } from "@/server/tools/weekly-quality-summary";
 import { semanticSearchComplaints } from "@/server/tools/semantic-search-complaints";
+import { validateEvidenceContract } from "@/server/agent/evidence-validator";
+import { buildProductionInitiative } from "@/server/domain-agents/production";
+import { buildSupplierInitiative } from "@/server/domain-agents/supplier";
+import { buildRndInitiative } from "@/server/domain-agents/rnd";
 import type { OrchestratorResult, ToolCallResult } from "@/server/agent/types";
 
 type IncidentSeed = {
@@ -39,6 +43,26 @@ const runTool = async (tool: string, args: ReturnType<typeof makeToolArgs>): Pro
   }
 };
 
+const getPrimaryDefectCode = (toolCalls: ToolCallResult[]) => {
+  const defectCall = toolCalls.find((call) => call.tool === "query_defects");
+  if (!defectCall || !Array.isArray(defectCall.data) || defectCall.data.length === 0) {
+    return undefined;
+  }
+  const first = defectCall.data[0] as Record<string, unknown>;
+  const defectCode = first.defect_code;
+  return typeof defectCode === "string" ? defectCode : undefined;
+};
+
+const getSupplierName = (toolCalls: ToolCallResult[]) => {
+  const supplierCall = toolCalls.find((call) => call.tool === "trace_batch");
+  if (!supplierCall || !Array.isArray(supplierCall.data) || supplierCall.data.length === 0) {
+    return undefined;
+  }
+  const first = supplierCall.data[0] as Record<string, unknown>;
+  const supplierName = first.supplier_name;
+  return typeof supplierName === "string" ? supplierName : undefined;
+};
+
 export const runOrchestrator = async (incidentId: string): Promise<OrchestratorResult> => {
   const supabase = getSupabaseServerClient();
   const { data: incident, error: incidentError } = await supabase
@@ -70,6 +94,8 @@ export const runOrchestrator = async (incidentId: string): Promise<OrchestratorR
   });
 
   const evidenceIds = toolCalls.map((call) => call.tool_call_id);
+  const primaryDefectCode = getPrimaryDefectCode(toolCalls);
+  const supplierName = getSupplierName(toolCalls);
   const draft8d: OrchestratorResult["draft_8d"] = {
     problem:
       typedIncident.summary ??
@@ -84,47 +110,54 @@ export const runOrchestrator = async (incidentId: string): Promise<OrchestratorR
       "Secondary hypotheses remain open until owner validation.",
     ],
     evidence: evidenceIds,
+    claims: [
+      {
+        claim:
+          primaryDefectCode !== undefined
+            ? `Dominant defect signal suggests ${primaryDefectCode} as leading containment target.`
+            : `Correlated quality signals indicate a non-random, multi-source incident pattern.`,
+        evidence: evidenceIds.slice(0, 2),
+      },
+      {
+        claim:
+          supplierName !== undefined
+            ? `Supplier context indicates upstream influence from ${supplierName}.`
+            : "Cross-source complaints and in-plant indicators point to upstream/downstream coupling.",
+        evidence: evidenceIds.slice(0, 3),
+      },
+    ],
   };
   phases.push({ phase: "compose", detail: "Built draft 8D projection with evidence references." });
 
   const initiatives: OrchestratorResult["initiatives"] = [
-    {
-      title: "Production containment for affected flow",
-      domain: "production",
-      rationale: "Reduce immediate defect propagation while investigation closes.",
-      confidence: 0.82,
-      evidence: evidenceIds.slice(0, 2),
-      closure_predicate: {
-        type: "no_defect_code_in_window",
-        params: { defect_code: "SOLDER_COLD", days: 14, product_id: typedIncident.primary_product_id ?? undefined },
-      },
-    },
-    {
-      title: "Supplier corrective action request",
-      domain: "supplier",
-      rationale: "Trace upstream batch and enforce corrective screening.",
-      confidence: 0.74,
-      evidence: evidenceIds.slice(0, 3),
-      closure_predicate: {
-        type: "manual_confirmation",
-        params: { confirmed_by: "supplier_quality_lead" },
-      },
-    },
-    {
-      title: "R&D design/FMEA update",
-      domain: "rnd",
-      rationale: "Codify recurrence prevention in design and FMEA controls.",
-      confidence: 0.66,
-      evidence: evidenceIds.slice(0, 2),
-      closure_predicate: {
-        type: "manual_confirmation",
-        params: { confirmed_by: "rnd_owner" },
-      },
-    },
+    buildProductionInitiative({
+      incidentId,
+      evidenceIds,
+      productId: typedIncident.primary_product_id ?? undefined,
+      partNumber: typedIncident.primary_part ?? undefined,
+      primaryDefectCode,
+      supplierName,
+    }),
+    buildSupplierInitiative({
+      incidentId,
+      evidenceIds,
+      productId: typedIncident.primary_product_id ?? undefined,
+      partNumber: typedIncident.primary_part ?? undefined,
+      primaryDefectCode,
+      supplierName,
+    }),
+    buildRndInitiative({
+      incidentId,
+      evidenceIds,
+      productId: typedIncident.primary_product_id ?? undefined,
+      partNumber: typedIncident.primary_part ?? undefined,
+      primaryDefectCode,
+      supplierName,
+    }),
   ];
   phases.push({ phase: "propose", detail: "Generated 3 initiative candidates." });
 
-  return {
+  const result: OrchestratorResult = {
     incident_id: incidentId,
     archetype,
     tool_calls: toolCalls,
@@ -132,4 +165,7 @@ export const runOrchestrator = async (incidentId: string): Promise<OrchestratorR
     initiatives,
     phases,
   };
+
+  validateEvidenceContract(result);
+  return result;
 };

@@ -6,7 +6,8 @@ import { getSupabaseServerClient } from "@/lib/supabase-server";
 import { makeId } from "@/server/utils/id";
 
 const makeProductActionId = () => {
-  return `PA-${Date.now()}${randomInt(100000, 999999)}`;
+  const numeric = randomInt(0, 100000).toString().padStart(5, "0");
+  return `PA-${numeric}`;
 };
 
 const approveResultSchema = z.object({

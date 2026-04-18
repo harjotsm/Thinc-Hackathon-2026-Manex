@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { signalCaptureSchema } from "@/server/schemas/signal";
+import { signalCaptureResponseSchema, signalCaptureSchema } from "@/server/schemas/signal";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
 import { makeId } from "@/server/utils/id";
 import { createEmbedding, vectorLiteral } from "@/server/embeddings";
@@ -50,8 +50,18 @@ export async function POST(request: Request) {
     correlatorResult = await runCorrelator();
   }
 
-  return NextResponse.json({
+  const responsePayload = {
     signal,
     correlator: correlatorResult,
-  });
+  };
+
+  const validated = signalCaptureResponseSchema.safeParse(responsePayload);
+  if (!validated.success) {
+    return NextResponse.json(
+      { error: "Invalid capture response shape.", details: validated.error.flatten() },
+      { status: 500 },
+    );
+  }
+
+  return NextResponse.json(validated.data);
 }

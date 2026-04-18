@@ -1,12 +1,5 @@
 BEGIN;
 
-ALTER TABLE product_action
-  DROP CONSTRAINT IF EXISTS product_action_action_id_check;
-
-ALTER TABLE product_action
-  ADD CONSTRAINT product_action_action_id_check
-  CHECK (action_id ~ '^PA-[0-9]{5,20}$');
-
 CREATE OR REPLACE FUNCTION resolve_approve_initiative(
   _initiative_id TEXT,
   _incident_id TEXT,

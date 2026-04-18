@@ -1,4 +1,5 @@
 import { runOrchestrator } from "@/server/agent/orchestrator";
+import { orchestratorResultSchema } from "@/server/schemas/orchestrator";
 
 const encodeEvent = (event: string, payload: unknown) =>
   `event: ${event}\ndata: ${JSON.stringify(payload)}\n\n`;
@@ -17,10 +18,14 @@ export async function GET(request: Request) {
       try {
         controller.enqueue(encoder.encode(encodeEvent("status", { message: "starting" })));
         const result = await runOrchestrator(incidentId);
+        const validated = orchestratorResultSchema.safeParse(result);
+        if (!validated.success) {
+          throw new Error("Invalid orchestrator response shape.");
+        }
         for (const phase of result.phases) {
           controller.enqueue(encoder.encode(encodeEvent("phase", phase)));
         }
-        controller.enqueue(encoder.encode(encodeEvent("result", result)));
+        controller.enqueue(encoder.encode(encodeEvent("result", validated.data)));
         controller.enqueue(encoder.encode(encodeEvent("done", { ok: true })));
       } catch (error) {
         controller.enqueue(

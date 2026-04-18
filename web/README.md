@@ -14,6 +14,8 @@ cp .env.example .env.local
 
 ```bash
 psql "postgres://<team_writer...>" -f ../supabase/migrations/00003_resolve_core.sql
+psql "postgres://<team_writer...>" -f ../supabase/migrations/00004_resolve_workflow_atomic.sql
+psql "postgres://<team_writer...>" -f ../supabase/migrations/00005_resolve_semantic_helpers.sql
 ```
 
 3. Run app:
@@ -36,6 +38,8 @@ npm run dev
 - `POST /api/agent/run`
 - `GET /api/agent/stream?incident_id=...`
 - `POST /api/initiative/approve`
+- `POST /api/demo/seed`
+- `POST /api/workers/closure-monitor` (optional `Authorization: Bearer $CRON_SECRET`)
 
 ## Worker
 

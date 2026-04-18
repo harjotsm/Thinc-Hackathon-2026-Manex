@@ -9,17 +9,23 @@ export type PhaseName = "classify" | "investigate" | "compose" | "propose";
 
 export type OrchestratorResult = {
   incident_id: string;
-  archetype: string;
+  archetype: "supplier" | "drift" | "design" | "operator" | "unknown";
   tool_calls: ToolCallResult[];
   draft_8d: {
     problem: string;
     containment: string[];
     likely_root_causes: string[];
     evidence: string[];
+    claims: Array<{
+      claim: string;
+      evidence: string[];
+    }>;
   };
   initiatives: Array<{
     title: string;
     domain: "production" | "supplier" | "rnd";
+    target_system: string;
+    owner_hint: string;
     rationale: string;
     confidence: number;
     evidence: string[];
