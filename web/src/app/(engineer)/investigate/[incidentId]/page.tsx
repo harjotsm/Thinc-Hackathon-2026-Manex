@@ -39,10 +39,26 @@ type ToolCall = {
   summary: string;
 };
 
-type AgentResult = {
-  archetype: string;
-  tool_calls: ToolCall[];
-  phases: Array<{ phase: string; detail: string }>;
+type Initiative = {
+  title: string;
+  domain: "production" | "supplier" | "rnd";
+  target_system: string;
+  owner_hint: string;
+  rationale: string;
+  confidence: number;
+  evidence: string[];
+  closure_predicate: { type: string; params: Record<string, unknown> };
+};
+
+type ReportData = {
+  report_id: string;
+  incident_id: string;
+  session_id: string;
+  version: number;
+  composed_by_model: string | null;
+  composed_at: string | null;
+  confidence: number | null;
+  archetype: string | null;
   draft_8d: {
     problem: string;
     containment: string[];
@@ -50,14 +66,8 @@ type AgentResult = {
     evidence: string[];
     claims?: Array<{ claim: string; evidence: string[] }>;
   };
-  initiatives: Array<{
-    title: string;
-    domain: "production" | "supplier" | "rnd";
-    rationale: string;
-    confidence: number;
-    evidence: string[];
-    closure_predicate: { type: string; params: Record<string, unknown> };
-  }>;
+  initiatives: Initiative[];
+  tool_calls: ToolCall[];
 };
 
 // ─── SSE event shape ──────────────────────────────────────────────────────────
@@ -92,8 +102,8 @@ export default function EngineerInvestigatePage() {
   const [liveText, setLiveText] = useState<string>("");
   const [statusMsg, setStatusMsg] = useState<string>("");
 
-  // ── Final result (fetched after session_complete) ─────────────────────────
-  const [result, setResult] = useState<AgentResult | null>(null);
+  // ── Final report (fetched after session_complete) ─────────────────────────
+  const [report, setReport] = useState<ReportData | null>(null);
 
   // ── Approval state ────────────────────────────────────────────────────────
   const [saving, setSaving] = useState<string>("");
@@ -118,6 +128,22 @@ export default function EngineerInvestigatePage() {
       const signalData = (await signalRes.json()) as { signals: Signal[] };
       setIncident(incidentData.incident);
       setSignals(signalData.signals ?? []);
+
+      // If session already succeeded, try to load existing report
+      if (active) {
+        try {
+          const reportRes = await fetch(`/api/incident/${incidentId}/report`);
+          if (reportRes.ok) {
+            const reportData = (await reportRes.json()) as ReportData;
+            setReport(reportData);
+            setRunStatus("succeeded");
+            setCurrentPhase("complete");
+            setStatusMsg("Report loaded from previous session.");
+          }
+        } catch {
+          // no existing report — that's fine
+        }
+      }
     };
 
     void load();
@@ -132,7 +158,7 @@ export default function EngineerInvestigatePage() {
     setRunStatus("running");
     setPhaseEvents([]);
     setLiveText("");
-    setResult(null);
+    setReport(null);
     setStatusMsg("Starting investigation...");
 
     const r = await fetch(`/api/incident/${incidentId}/investigate`, {
@@ -233,15 +259,18 @@ export default function EngineerInvestigatePage() {
       es.close();
       esRef.current = null;
 
-      // Fetch the final result from the batch run endpoint via the incident route
+      // Small delay to let the report persist before fetching
+      await new Promise((resolve) => setTimeout(resolve, 800));
+
+      // Fetch the final report from the report endpoint
       try {
-        const resultRes = await fetch(`/api/incident/${incidentId}/investigate/result`);
-        if (resultRes.ok) {
-          const data = (await resultRes.json()) as AgentResult;
-          setResult(data);
+        const reportRes = await fetch(`/api/incident/${incidentId}/report`);
+        if (reportRes.ok) {
+          const reportData = (await reportRes.json()) as ReportData;
+          setReport(reportData);
         }
       } catch {
-        // result endpoint not yet available — that's fine for demo
+        // report endpoint not available — that's fine for demo
       }
     });
 
@@ -263,25 +292,24 @@ export default function EngineerInvestigatePage() {
   }, [sessionId, incidentId]);
 
   // ── Approve an initiative ─────────────────────────────────────────────────
-  const approve = async (initiativeIndex: number) => {
-    if (!incident?.primary_product_id || !result) {
+  const approve = async (initiative: Initiative) => {
+    if (!incident?.primary_product_id) {
       setSaving("Need primary_product_id on incident before approval.");
       return;
     }
-    const selected = result.initiatives[initiativeIndex];
-    setSaving(`Approving "${selected.title}"...`);
+    setSaving(`Approving "${initiative.title}"...`);
     const response = await fetch("/api/initiative/approve", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         incident_id: incidentId,
-        agent_domain: selected.domain,
-        target_system: selected.domain === "rnd" ? "jira" : "manex_product_action",
-        owner_user_id: "quality_engineer",
+        agent_domain: initiative.domain,
+        target_system: initiative.target_system ?? (initiative.domain === "rnd" ? "jira" : "manex_product_action"),
+        owner_user_id: initiative.owner_hint ?? "quality_engineer",
         status: "approved",
-        closure_predicate: selected.closure_predicate,
+        closure_predicate: initiative.closure_predicate,
         product_id: incident.primary_product_id,
-        comments: selected.rationale,
+        comments: initiative.rationale,
       }),
     });
 
@@ -317,14 +345,20 @@ export default function EngineerInvestigatePage() {
   }, [signals]);
 
   const citedEvidence = useMemo(
-    () => new Set(result?.draft_8d.evidence ?? []),
-    [result?.draft_8d.evidence],
+    () => new Set(report?.draft_8d.evidence ?? []),
+    [report?.draft_8d.evidence],
   );
 
   const severityPill = useMemo(() => {
     const severity = incident?.severity ?? "unknown";
+    const colorMap: Record<string, string> = {
+      critical: "bg-red-100 text-red-700",
+      high: "bg-orange-100 text-orange-700",
+      medium: "bg-yellow-100 text-yellow-700",
+      low: "bg-green-100 text-green-700",
+    };
     return (
-      <span className="rounded bg-zinc-100 px-2 py-1 text-xs uppercase tracking-wide">
+      <span className={`rounded px-2 py-1 text-xs uppercase tracking-wide ${colorMap[severity] ?? "bg-zinc-100 text-zinc-600"}`}>
         {severity}
       </span>
     );
@@ -349,6 +383,17 @@ export default function EngineerInvestigatePage() {
       </span>
     );
   });
+
+  // ─── 8D section renderer ──────────────────────────────────────────────────
+
+  const evidenceBadge = (id: string) => (
+    <span
+      key={id}
+      className="inline-block rounded bg-blue-50 px-1.5 py-0.5 text-xs font-mono text-blue-700"
+    >
+      {id.slice(0, 12)}…
+    </span>
+  );
 
   // ─── Render ───────────────────────────────────────────────────────────────
 
@@ -477,40 +522,12 @@ export default function EngineerInvestigatePage() {
           </ul>
         </section>
 
-        {/* Draft 8D — shown after completion */}
-        <section className="rounded border border-zinc-200 p-4">
-          <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide">Draft 8D</h2>
-          {result ? (
-            <div className="space-y-3 text-sm">
-              <p>
-                <strong>Archetype:</strong> {result.archetype}
-              </p>
-              <p>
-                <strong>Problem:</strong> {result.draft_8d.problem}
-              </p>
-              <p>
-                <strong>Containment:</strong> {result.draft_8d.containment.join("; ")}
-              </p>
-              <p>
-                <strong>Likely root causes:</strong> {result.draft_8d.likely_root_causes.join("; ")}
-              </p>
-              <p>
-                <strong>Evidence IDs:</strong> {result.draft_8d.evidence.join(", ")}
-              </p>
-            </div>
-          ) : (
-            <p className="text-sm text-zinc-500">
-              {runStatus === "running" ? "Analysis in progress…" : "Run investigation to generate draft."}
-            </p>
-          )}
-        </section>
-
         {/* Evidence trace */}
         <section className="rounded border border-zinc-200 p-4">
           <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide">Evidence trace</h2>
-          {result ? (
+          {report && report.tool_calls.length > 0 ? (
             <ul className="space-y-2 text-sm">
-              {result.tool_calls.map((call) => (
+              {report.tool_calls.map((call) => (
                 <li key={call.tool_call_id} className="rounded bg-zinc-50 p-2">
                   <p className="font-medium">
                     {call.tool}{" "}
@@ -519,62 +536,154 @@ export default function EngineerInvestigatePage() {
                   <p className="text-zinc-600">{call.summary}</p>
                   <p className="text-xs">
                     {citedEvidence.has(call.tool_call_id)
-                      ? "Cited in draft 8D evidence."
+                      ? "Cited in 8D evidence."
                       : "Not cited in final draft."}
                   </p>
                 </li>
               ))}
             </ul>
           ) : (
-            <p className="text-sm text-zinc-500">No evidence yet.</p>
+            <p className="text-sm text-zinc-500">
+              {runStatus === "running" ? "Evidence gathering…" : "No evidence yet."}
+            </p>
           )}
         </section>
-
-        {/* Initiatives */}
-        <section className="rounded border border-zinc-200 p-4 lg:col-span-3">
-          <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide">Initiatives</h2>
-          <div className="grid gap-3 md:grid-cols-3">
-            {result?.initiatives.map((initiative, index) => (
-              <div key={initiative.title} className="rounded bg-zinc-50 p-3 text-sm">
-                <p className="font-medium">{initiative.title}</p>
-                <p className="text-xs uppercase text-zinc-600">{initiative.domain}</p>
-                <p className="mt-1">{initiative.rationale}</p>
-                <p className="mt-2 text-xs text-zinc-600">
-                  Confidence: {(initiative.confidence * 100).toFixed(0)}%
-                </p>
-                <p className="text-xs text-zinc-600">
-                  Evidence: {initiative.evidence.join(", ")}
-                </p>
-                <button
-                  onClick={() => void approve(index)}
-                  className="mt-3 rounded bg-black px-3 py-1.5 text-xs text-white"
-                >
-                  Approve
-                </button>
-              </div>
-            ))}
-            {!result ? (
-              <p className="text-zinc-500">
-                {runStatus === "running" ? "Initiatives being generated…" : "No initiatives yet."}
-              </p>
-            ) : null}
-          </div>
-        </section>
-
-        {/* Reasoning phases (from final result) */}
-        {result && (
-          <section className="rounded border border-zinc-200 p-4 lg:col-span-3">
-            <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide">Reasoning phases</h2>
-            <ol className="space-y-2 text-sm">
-              {result.phases.map((phase, index) => (
-                <li key={`${phase.phase}-${index}`} className="rounded bg-zinc-50 p-2">
-                  <strong>{phase.phase}</strong>: {phase.detail}
-                </li>
-              ))}
-            </ol>
-          </section>
-        )}
       </div>
+
+      {/* ── Final Report — shown after session complete ── */}
+      {(runStatus === "succeeded" || report) && (
+        <section className="rounded border border-zinc-200 bg-white p-6">
+          <div className="mb-4 flex items-center justify-between">
+            <h2 className="text-lg font-semibold">Final Report</h2>
+            {report && (
+              <div className="flex items-center gap-3 text-xs text-zinc-500">
+                <span>
+                  Confidence:{" "}
+                  <strong className="text-zinc-800">
+                    {report.confidence != null ? `${(report.confidence * 100).toFixed(0)}%` : "—"}
+                  </strong>
+                </span>
+                <span>
+                  Model: <strong className="text-zinc-800">{report.composed_by_model ?? "—"}</strong>
+                </span>
+                <span>v{report.version}</span>
+              </div>
+            )}
+          </div>
+
+          {report ? (
+            <div className="space-y-6">
+              {/* 8D Report */}
+              <div>
+                <h3 className="mb-3 text-sm font-semibold uppercase tracking-wide text-zinc-500">
+                  8D Analysis
+                </h3>
+                <div className="grid gap-4 md:grid-cols-2">
+                  {/* D2 Problem */}
+                  <div className="rounded border border-zinc-100 bg-zinc-50 p-3">
+                    <p className="mb-1 text-xs font-bold uppercase tracking-wide text-zinc-400">D2 — Problem</p>
+                    <p className="text-sm">{report.draft_8d.problem}</p>
+                  </div>
+
+                  {/* D3 Containment */}
+                  <div className="rounded border border-zinc-100 bg-zinc-50 p-3">
+                    <p className="mb-1 text-xs font-bold uppercase tracking-wide text-zinc-400">D3 — Containment</p>
+                    <ul className="space-y-1 text-sm">
+                      {report.draft_8d.containment.map((c, i) => (
+                        <li key={i} className="flex gap-2">
+                          <span className="mt-0.5 shrink-0 text-zinc-400">•</span>
+                          {c}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+
+                  {/* D4 Root Cause */}
+                  <div className="rounded border border-zinc-100 bg-zinc-50 p-3 md:col-span-2">
+                    <p className="mb-1 text-xs font-bold uppercase tracking-wide text-zinc-400">D4 — Likely Root Causes</p>
+                    <ul className="space-y-1 text-sm">
+                      {report.draft_8d.likely_root_causes.map((rc, i) => (
+                        <li key={i} className="flex gap-2">
+                          <span className="mt-0.5 shrink-0 text-zinc-400">•</span>
+                          {rc}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+
+                  {/* Claims with evidence */}
+                  {report.draft_8d.claims && report.draft_8d.claims.length > 0 && (
+                    <div className="rounded border border-zinc-100 bg-zinc-50 p-3 md:col-span-2">
+                      <p className="mb-2 text-xs font-bold uppercase tracking-wide text-zinc-400">Claims + Evidence</p>
+                      <ul className="space-y-3 text-sm">
+                        {report.draft_8d.claims.map((claim, i) => (
+                          <li key={i}>
+                            <p className="font-medium">{claim.claim}</p>
+                            <div className="mt-1 flex flex-wrap gap-1">
+                              {claim.evidence.map(evidenceBadge)}
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {/* Evidence IDs */}
+                  <div className="rounded border border-zinc-100 bg-zinc-50 p-3 md:col-span-2">
+                    <p className="mb-2 text-xs font-bold uppercase tracking-wide text-zinc-400">Evidence Citations</p>
+                    <div className="flex flex-wrap gap-1">
+                      {report.draft_8d.evidence.map(evidenceBadge)}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Initiatives */}
+              {report.initiatives.length > 0 && (
+                <div>
+                  <h3 className="mb-3 text-sm font-semibold uppercase tracking-wide text-zinc-500">
+                    Initiatives
+                  </h3>
+                  <div className="grid gap-3 md:grid-cols-3">
+                    {report.initiatives.map((initiative, idx) => {
+                      const confPct = Math.round(initiative.confidence * 100);
+                      const confColor =
+                        confPct >= 80 ? "text-blue-700" : confPct >= 50 ? "text-yellow-700" : "text-zinc-500";
+                      return (
+                        <div
+                          key={`${initiative.title}-${idx}`}
+                          className="rounded border border-zinc-200 bg-zinc-50 p-4 text-sm"
+                        >
+                          <p className="font-semibold">{initiative.title}</p>
+                          <p className="mt-0.5 text-xs uppercase text-zinc-500">{initiative.domain}</p>
+                          <p className="mt-2 text-zinc-700">{initiative.rationale}</p>
+                          <div className="mt-2 flex items-center justify-between text-xs text-zinc-500">
+                            <span className={`font-semibold ${confColor}`}>{confPct}% confidence</span>
+                            <span>{initiative.evidence.length} evidence item{initiative.evidence.length !== 1 ? "s" : ""}</span>
+                          </div>
+                          {initiative.owner_hint && (
+                            <p className="mt-1 text-xs text-zinc-400">Owner: {initiative.owner_hint}</p>
+                          )}
+                          <button
+                            onClick={() => void approve(initiative)}
+                            className="mt-3 w-full rounded bg-black px-3 py-1.5 text-xs text-white hover:bg-zinc-800"
+                          >
+                            Approve
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : (
+            <p className="text-sm text-zinc-500">
+              {runStatus === "running" ? "Report generating…" : "Report will appear here after investigation completes."}
+            </p>
+          )}
+        </section>
+      )}
     </main>
   );
 }
