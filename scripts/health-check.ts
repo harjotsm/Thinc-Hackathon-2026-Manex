@@ -1,7 +1,7 @@
 import { config as loadEnv } from "dotenv";
 import { resolve } from "node:path";
 import { Client } from "pg";
-import { createClient } from "@supabase/supabase-js";
+import { PostgrestClient } from "@supabase/postgrest-js";
 
 loadEnv({ path: resolve(process.cwd(), ".env.local") });
 loadEnv({ path: resolve(process.cwd(), "web/.env.local"), override: false });
@@ -23,14 +23,20 @@ const checks: Check[] = [
     },
   },
   {
-    name: "PostgREST via supabase-js",
+    name: "PostgREST (Manex root-mounted)",
     async run() {
-      if (!MANEX_API_URL || !(MANEX_SERVICE_ROLE_KEY ?? MANEX_ANON_KEY))
-        throw new Error("MANEX_API_URL and MANEX_ANON_KEY/SERVICE_ROLE_KEY required");
-      const sb = createClient(MANEX_API_URL, (MANEX_SERVICE_ROLE_KEY ?? MANEX_ANON_KEY)!, { auth: { persistSession: false } });
-      const { data, error } = await sb.from("product").select("product_id").limit(1);
-      if (error) throw new Error(`postgrest: ${error.message}`);
-      return `product rows reachable (${data?.length ?? 0} sample)`;
+      const key = MANEX_SERVICE_ROLE_KEY ?? MANEX_ANON_KEY;
+      if (!MANEX_API_URL || !key) throw new Error("MANEX_API_URL and MANEX_ANON_KEY/SERVICE_ROLE_KEY required");
+      const baseUrl = MANEX_API_URL.replace(/\/+$/, "");
+      const client = new PostgrestClient(baseUrl, {
+        headers: { apikey: key, Authorization: `Bearer ${key}` },
+      });
+      const res = await client.from("product").select("product_id").limit(1);
+      if (res.error) {
+        const diag = { message: res.error.message, code: res.error.code, details: res.error.details, hint: res.error.hint, status: res.status };
+        throw new Error(`postgrest: ${JSON.stringify(diag)}`);
+      }
+      return `product rows reachable (${res.data?.length ?? 0} sample, first=${res.data?.[0]?.product_id ?? "n/a"})`;
     },
   },
   {
@@ -45,14 +51,21 @@ const checks: Check[] = [
   },
 ];
 
-let failed = 0;
-for (const c of checks) {
-  try {
-    const msg = await c.run();
-    console.log(`\u2713 ${c.name} — ${msg}`);
-  } catch (err) {
-    failed++;
-    console.error(`\u2717 ${c.name} — ${(err as Error).message}`);
+async function main() {
+  let failed = 0;
+  for (const c of checks) {
+    try {
+      const msg = await c.run();
+      console.log(`\u2713 ${c.name} \u2014 ${msg}`);
+    } catch (err) {
+      failed++;
+      console.error(`\u2717 ${c.name} \u2014 ${(err as Error).message}`);
+    }
   }
+  process.exit(failed ? 1 : 0);
 }
-process.exit(failed ? 1 : 0);
+
+main().catch((err) => {
+  console.error(err);
+  process.exit(1);
+});
