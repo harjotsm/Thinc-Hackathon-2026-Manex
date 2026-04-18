@@ -86,6 +86,12 @@ export const runPropose = async (
     incident_id: incident.incident_id,
     archetype: classified.archetype,
   });
+  publishSessionEvent(session_id, {
+    event_seq: nextSeq(),
+    event_type: "phase_start",
+    payload: { phase: "propose", archetype: classified.archetype },
+    ts: new Date().toISOString(),
+  });
 
   const toolCallSummary = investigated.tool_calls.map((tc) => ({
     tool_call_id: tc.tool_call_id,
@@ -110,12 +116,24 @@ export const runPropose = async (
   const sysMsg = buildSysPropose();
   const t0 = Date.now();
 
-  const resp = await client.messages.create({
+  // Stream the Sonnet call so we can emit token_delta events live (not persisted).
+  const streamHandle = client.messages.stream({
     model: "claude-sonnet-4-6",
     max_tokens: 2000,
     system: sysMsg,
     messages: [{ role: "user", content: userContent }],
   });
+
+  streamHandle.on("text", (textDelta: string) => {
+    publishSessionEvent(session_id, {
+      event_seq: 0, // ephemeral — not persisted (spec §6.3)
+      event_type: "token_delta",
+      payload: { phase: "propose", text: textDelta },
+      ts: new Date().toISOString(),
+    });
+  });
+
+  const resp = await streamHandle.finalMessage();
 
   const text = resp.content
     .map((c) => (c.type === "text" ? c.text : ""))
@@ -157,12 +175,23 @@ export const runPropose = async (
     ].join("\n");
 
     const retryT0 = Date.now();
-    const retryResp = await client.messages.create({
+    const retryStreamHandle = client.messages.stream({
       model: "claude-sonnet-4-6",
       max_tokens: 2000,
       system: sysMsg,
       messages: [{ role: "user", content: retryContent }],
     });
+
+    retryStreamHandle.on("text", (textDelta: string) => {
+      publishSessionEvent(session_id, {
+        event_seq: 0,
+        event_type: "token_delta",
+        payload: { phase: "propose_retry", text: textDelta },
+        ts: new Date().toISOString(),
+      });
+    });
+
+    const retryResp = await retryStreamHandle.finalMessage();
 
     const retryText = retryResp.content
       .map((c) => (c.type === "text" ? c.text : ""))

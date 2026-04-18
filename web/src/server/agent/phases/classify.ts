@@ -76,6 +76,12 @@ export const runClassify = async (
 ): Promise<ClassifyOutput> => {
   const client = requireAnthropicClient();
   await logPhaseStart(session_id, "classify", { incident_id: incident.incident_id });
+  publishSessionEvent(session_id, {
+    event_seq: nextSeq(),
+    event_type: "phase_start",
+    payload: { phase: "classify", incident_id: incident.incident_id },
+    ts: new Date().toISOString(),
+  });
   const t0 = Date.now();
 
   const userContent = [

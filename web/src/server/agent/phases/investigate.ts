@@ -69,6 +69,12 @@ export const runInvestigate = async (
     incident_id: incident.incident_id,
     archetype: classified.archetype,
   });
+  publishSessionEvent(session_id, {
+    event_seq: nextSeq(),
+    event_type: "phase_start",
+    payload: { phase: "investigate", archetype: classified.archetype },
+    ts: new Date().toISOString(),
+  });
 
   const toolList = buildAnthropicTools();
   const allToolCalls: ToolCallResult[] = [];
@@ -102,13 +108,27 @@ export const runInvestigate = async (
   for (let turn = 0; turn < MAX_TURNS; turn++) {
     t0 = Date.now();
 
-    const resp = await client.messages.create({
+    // Use streaming API so we can emit token_delta events live.
+    // finalMessage() gives us the complete Message (content blocks + usage) once done.
+    const streamHandle = client.messages.stream({
       model: "claude-sonnet-4-6",
       max_tokens: 2000,
       system: systemMsg,
       tools: toolList,
       messages,
     });
+
+    // Emit token_delta for each text chunk — NOT persisted (spec §6.3)
+    streamHandle.on("text", (textDelta: string) => {
+      publishSessionEvent(session_id, {
+        event_seq: 0, // ephemeral — not persisted
+        event_type: "token_delta",
+        payload: { phase: "investigate", text: textDelta },
+        ts: new Date().toISOString(),
+      });
+    });
+
+    const resp = await streamHandle.finalMessage();
 
     const assistantContent = resp.content;
     messages.push({ role: "assistant", content: assistantContent });

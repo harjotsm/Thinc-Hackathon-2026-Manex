@@ -122,6 +122,12 @@ export const runCompose = async (
     incident_id: incident.incident_id,
     tool_call_count: investigated.tool_calls.length,
   });
+  publishSessionEvent(session_id, {
+    event_seq: nextSeq(),
+    event_type: "phase_start",
+    payload: { phase: "compose", tool_call_count: investigated.tool_calls.length },
+    ts: new Date().toISOString(),
+  });
 
   const toolCallSummary = investigated.tool_calls.map((tc) => ({
     tool_call_id: tc.tool_call_id,
@@ -154,12 +160,24 @@ export const runCompose = async (
   const sysMsg = buildSysCompose();
   const t0 = Date.now();
 
-  const resp = await client.messages.create({
+  // Stream the Sonnet call so we can emit token_delta events live (not persisted).
+  const streamHandle = client.messages.stream({
     model: "claude-sonnet-4-6",
     max_tokens: 2000,
     system: sysMsg,
     messages: [{ role: "user", content: userContent }],
   });
+
+  streamHandle.on("text", (textDelta: string) => {
+    publishSessionEvent(session_id, {
+      event_seq: 0, // ephemeral — not persisted (spec §6.3)
+      event_type: "token_delta",
+      payload: { phase: "compose", text: textDelta },
+      ts: new Date().toISOString(),
+    });
+  });
+
+  const resp = await streamHandle.finalMessage();
 
   const text = resp.content
     .map((c) => (c.type === "text" ? c.text : ""))
@@ -203,12 +221,23 @@ export const runCompose = async (
     ].join("\n");
 
     const retryT0 = Date.now();
-    const retryResp = await client.messages.create({
+    const retryStreamHandle = client.messages.stream({
       model: "claude-sonnet-4-6",
       max_tokens: 2000,
       system: sysMsg,
       messages: [{ role: "user", content: retryContent }],
     });
+
+    retryStreamHandle.on("text", (textDelta: string) => {
+      publishSessionEvent(session_id, {
+        event_seq: 0,
+        event_type: "token_delta",
+        payload: { phase: "compose_retry", text: textDelta },
+        ts: new Date().toISOString(),
+      });
+    });
+
+    const retryResp = await retryStreamHandle.finalMessage();
 
     const retryText = retryResp.content
       .map((c) => (c.type === "text" ? c.text : ""))

@@ -2,6 +2,7 @@ import "server-only";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
 import { makeId } from "@/server/utils/id";
 import { logEvent, updateSessionStatus } from "@/server/agent/session-logger";
+import { publishSessionEvent } from "@/lib/event-bus";
 import { runClassify } from "@/server/agent/phases/classify";
 import { runInvestigate } from "@/server/agent/phases/investigate";
 import { runCompose, EvidenceCiteUnfixableError } from "@/server/agent/phases/compose";
@@ -132,6 +133,14 @@ export const runOrchestratorWithSession = async (
       initiative_count: initiatives.length,
     });
 
+    // Publish live so SSE consumers can close the stream immediately
+    publishSessionEvent(p.session_id, {
+      event_seq: 0,
+      event_type: "session_complete",
+      payload: { archetype: classified.archetype, initiative_count: initiatives.length },
+      ts: new Date().toISOString(),
+    });
+
     return result;
   } catch (err) {
     const failureReason = isEvidenceCiteUnfixable(err)
@@ -151,6 +160,14 @@ export const runOrchestratorWithSession = async (
     await logEvent(p.session_id, "session_failed", {
       error: (err as Error).message,
       reason: failureReason,
+    });
+
+    // Publish live so SSE consumers know the session ended
+    publishSessionEvent(p.session_id, {
+      event_seq: 0,
+      event_type: "session_failed",
+      payload: { reason: failureReason },
+      ts: new Date().toISOString(),
     });
 
     throw err;
