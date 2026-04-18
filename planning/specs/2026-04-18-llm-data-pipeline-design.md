@@ -18,7 +18,7 @@ The full vertical from ingest (operator / engineer / detector) through reasoning
 
 - Trigger model, signal schema, correlator, session layer
 - Prompt architecture, evidence-cite enforcement, context management
-- Tool layer (18 tools, Zod-typed), models and routing
+- Tool layer (19 core tools exposed to Investigate loop + 4 support tools for contributions & impact, all Zod-typed), models and routing
 - Lessons store, closure monitor, dispatcher
 - API contracts per lens, error paths, observability, dev environment
 
@@ -72,8 +72,8 @@ Three independent paths produce signals. All three end in the same correlator.
 **Layer 1 — SPC rule-based detector** runs on 60s cron (configurable `DETECTOR_CRON_INTERVAL_SEC`). Queries:
 
 - Rolling z-score on `(product_id, defect_code, week)` — fires at `|z| > 2.5`
-- CUSUM / EWMA on `rework.duration_minutes` per `(product_id, section)`
-- Rate-shift on marginal-fail fraction per `test_step` (week-over-week)
+- CUSUM / EWMA on `rework.time_minutes` per `(product_id, rework_section_id)`
+- Rate-shift on marginal-fail fraction per `test_key` (week-over-week)
 - Pareto-shift: top-5 defect_code distribution change > 20% on a product_id over 7d
 - Field-vs-factory gap: customer complaints on product_id with low factory defect rate (Story-3 signature)
 
@@ -93,6 +93,60 @@ After the correlator attaches or creates an incident, trigger Investigate automa
 
 Otherwise the incident waits for a manual engineer trigger.
 
+### 2.5 Historical Backfill (Manex → Signal)
+
+Per arch §7 H2-10, the pipeline's first-run input is the existing Manex data: `defect`, `field_claim`, and `test_result` rows with `overall_result ∈ {MARGINAL, FAIL}`. Without backfill, the demo stories have no signals to correlate.
+
+**Two modes, sequenced:**
+
+**Mode 1 — One-shot seed script** (`scripts/backfill-signals.ts`), runs after `pnpm db:reset`:
+
+```
+For each source table:
+  1. defect       → signal_type='factory_defect',   source='backfill_defect',      signal_count = all rows in seed
+  2. field_claim  → signal_type='field_claim',      source='backfill_field_claim', signal_count = all rows in seed
+  3. test_result  → signal_type='marginal_test',    source='backfill_test_result', signal_count = rows WHERE overall_result IN ('MARGINAL','FAIL')
+
+For each source row:
+  - Compose raw_text summary from structured fields (defect_code + part + section + notes, or complaint_text, or test_key+value+unit)
+  - Populate structured FKs (product_id, section_id, defect_code, test_key, etc.)
+  - raw_payload = full original row as jsonb
+  - idempotency_key = hash(source_system + source_ref)  — re-runnable safely
+  - captured_ts = source row's timestamp (defect.ts, field_claim.claim_ts, test_result.ts)
+  - Embed raw_text via OpenAI; skip embedding on API error, set cluster_state='pending_cluster' with embedding=null (embedding-recovery sweep picks up later — §15.1 row 18)
+  - Run correlator (same as live ingest)
+
+Pending-cluster signals are promoted naturally as their second-signal matches land.
+```
+
+One-shot terminates when all rows processed. Idempotent — re-running does no duplicate inserts (unique idempotency_key).
+
+**Mode 2 — Incremental cron** (`server/worker/handlers/backfill-incremental.ts`), runs every `BACKFILL_CRON_INTERVAL_SEC` (default 120s), controlled by env flag `BACKFILL_CRON_ENABLED=true|false`:
+
+- Maintains watermark in `backfill_watermark` table: `{source_table, last_seen_ts, last_id}`
+- Each run: `SELECT * FROM <source> WHERE ts > last_seen_ts ORDER BY ts LIMIT 500`
+- Transforms + ingests exactly like Mode 1 (shared code)
+- Updates watermark on success
+- Handles idempotency via same `idempotency_key` scheme — replaying is safe
+
+**Env flag for demo stability:** `BACKFILL_CRON_ENABLED=false` disables Mode 2 entirely during the live demo (prevents the cron from injecting surprise signals mid-pitch). Default `true` in dev.
+
+**Schema:**
+```ts
+backfill_watermark {
+  source_table: text PRIMARY KEY              // 'defect' | 'field_claim' | 'test_result'
+  last_seen_ts: timestamptz
+  last_id: text
+  updated_at: timestamptz
+}
+```
+
+**Seed choreography (for demo):**
+1. `pnpm db:reset` → loads Manex tables + Resolve tables (migrations 00001-00012)
+2. `pnpm db:seed:demo` → injects 3 pre-approved lessons
+3. `pnpm backfill:seed` (wrapper around `scripts/backfill-signals.ts`) → ingests all Manex rows as signals, correlator groups them into the 4 demo incidents
+4. `pnpm dev` → runs Next.js + worker; detector cron + embedding-recovery cron run live, backfill cron depends on env flag
+
 ---
 
 ## 3. Signal Schema · Lifecycle
@@ -102,31 +156,58 @@ Otherwise the incident waits for a manual engineer trigger.
 ```ts
 signal {
   id: "SIG-xxxxx"                                   // Manex-convention prefix
-  created_at: timestamptz
-  source: 'operator' | 'engineer' | 'detector' | 'customer_email'
-  source_ref: text | null                           // e.g. "defect:DEF-0042", "email:msg-id"
-  raw_text: text                                    // always present; detector emits rule-name + summary
+  signal_type: 'operator_report'|'engineer_report'|'detector_anomaly'|'field_claim'|'factory_defect'|'marginal_test'
+  source: 'operator' | 'engineer' | 'detector' | 'customer_email' | 'backfill_defect' | 'backfill_field_claim' | 'backfill_test_result'
+  source_system: text                               // 'resolve_ui' | 'manex_defect' | 'manex_field_claim' | 'manex_test_result' | 'spc_detector' | 'customer_inbox'
+  created_at: timestamptz                           // when signal was ingested into resolve
+  captured_ts: timestamptz                          // when the underlying event actually happened (defect.ts, field_claim.claim_ts, operator-report-time)
+  source_ref: text | null                           // e.g. "defect:DEF-0042", "field_claim:FC-0012", "email:msg-id"
+
+  raw_text: text                                    // always present; detector emits rule-name + summary; backfilled rows get composed summary
   lang: 'de' | 'en'                                 // langdetect at ingest
-  embedding: vector(1536)                           // OpenAI text-embedding-3-small
+  embedding: vector(1536) | null                    // OpenAI text-embedding-3-small; null in degraded mode, back-filled by embedding-recovery sweep (§15.1 row 18)
   attachments: jsonb                                // [{kind:'image'|'audio', url, vision_out?, transcript?, status}]
-  product_id: text | null
-  station: text | null
-  section: text | null
+
+  // Structured references — all Manex-aligned FK (nullable; backfill populates from source row)
+  product_id: text | null                           // FK product.product_id
+  part_number: text | null                          // FK part_master.part_number
+  reported_part_number: text | null                 // from defect.reported_part_number / field_claim.reported_part_number
+  batch_id: text | null                             // FK supplier_batch.batch_id (for supplier-archetype signals)
+  section_id: text | null                           // FK section.section_id (Manex's canonical section; replaces old "station")
+  defect_code: text | null                          // from defect.defect_code or detector_evidence.defect_code
+  test_key: text | null                             // from test_result.test_key (for marginal_test signals)
+  order_id: text | null                             // FK product_order.order_id (for Story 4)
+  user_id: text | null                              // FK app_user.user_id (operator who caused defect; from rework.user_id)
+  market: text | null                               // from field_claim.market
   shift: 'early' | 'late' | 'night' | null
+
   severity: 'low' | 'medium' | 'high' | 'critical'
+  severity_hint: numeric | null                     // from defect.severity / detector score; optional numeric continuous
+
   triage: jsonb | null                              // {real:bool, reasoning:string, score:number}
   incident_id: text | null                          // set by correlator (nullable at ingest)
   created_by_user_id: text | null
+
+  // Source-specific metadata
   detector_rule: text | null                        // only when source='detector'
   detector_evidence: jsonb | null
-  idempotency_key: text                             // hash(raw_text + source_ref + created_by + minute_bucket)
+  raw_payload: jsonb                                // always present; full original record from source system (for audit)
+
+  // Pending-cluster state (§5.1 Phase 3)
+  cluster_state: 'attached' | 'pending_cluster'     // pending_cluster = waiting for ≥2 signals in arch §2's clustering rule
+  pending_until: timestamptz | null                 // stale-pending sweep threshold
+
+  idempotency_key: text                             // hash(source_system + source_ref) for backfills; hash(raw_text + created_by + minute_bucket) for operator
+
   // Audit (correlator results)
-  match_type: 'det_prod_def'|'det_sta_def'|'det_rule'|'sem'|'new'|null
+  match_type: 'det_prod_def'|'det_sec_def'|'det_rule'|'sem'|'new'|'pending'|null
   match_score: float | null
   attach_reason: text | null
-  matched_incident_id: text | null                  // same as incident_id but explicit for audit chain
+  matched_incident_id: text | null
 }
 UNIQUE(idempotency_key)
+INDEX signal (cluster_state) WHERE cluster_state = 'pending_cluster';
+INDEX signal USING ivfflat (embedding vector_cosine_ops);
 ```
 
 ### 3.2 Lifecycle
@@ -146,6 +227,22 @@ No translation. Embeddings are multi-lingual (OpenAI `text-embedding-3-small` ha
 
 Supabase Storage. `.env.local` has `SUPABASE_STORAGE_BUCKET=resolve-attachments`. Client uploads directly (signed URL), server stores URL only. Fallback for 24h if storage setup slips: local filesystem `/assets/uploads/` with URL `http://localhost:3000/assets/uploads/<uuid>.jpg`. Choice finalized at implementation M1.
 
+### 3.5 Embedding-recovery sweep (degraded-mode backfill)
+
+When the OpenAI embedding API is unavailable, ingest proceeds in **degraded mode**: signals are persisted with `embedding=null`, the correlator runs deterministic-only (Phase 1 matches), and `cluster_state='pending_cluster'` defaults apply.
+
+Once the embedding API recovers, a cron worker (`server/worker/handlers/embedding-recovery.ts`, interval `EMBEDDING_RECOVERY_INTERVAL_SEC`, default 60s) runs:
+
+1. **Batch select:** `SELECT id, raw_text FROM signal WHERE embedding IS NULL ORDER BY created_at LIMIT 100`
+2. **Embed:** batch-call `text-embedding-3-small`; update rows with embeddings in a single transaction
+3. **Re-correlate:** for each newly-embedded signal with `cluster_state != 'attached'`:
+   - Re-run Correlator Phase 2 (semantic fallback) — the signal may now match a semantically-close incident that was unreachable without its embedding
+   - If attached: update `cluster_state='attached'`, re-run auto-trigger rules
+   - If still unmatched: leave `cluster_state='pending_cluster'` with refreshed `pending_until` (resets the window so the signal gets fair semantic-clustering opportunity)
+4. **Degraded-mode badge:** UI exposes `GET /api/system/health` returning `{ embedding_service: 'ok'|'degraded', pending_embeddings_count }` — engineer-lens shows a yellow banner while degraded.
+
+Env flag `EMBEDDING_RECOVERY_ENABLED=true|false` (default true). Disabling stops the sweep but leaves degraded-mode ingest functional.
+
 ---
 
 ## 4. Incident Schema · Status Machine
@@ -156,15 +253,22 @@ incident {
   created_at
   archetype: 'supplier' | 'drift' | 'design' | 'operator' | 'unknown'    // set by Classify; 'unknown' initially
   severity: 'low' | 'medium' | 'high' | 'critical'
-  status: 'triage' | 'reasoning' | 'resolving' | 'closed' | 'dismissed'
+  status: 'triage' | 'reasoning' | 'resolving' | 'closed' | 'dismissed' | 'reopen'
   title: text                                                            // composed from signals (human-readable)
   summary: text                                                          // running summary, updated per session
-  linked_product_ids: text[]                                             // denormalized from signals
+  primary_product_id: text | null                                        // FK product.product_id (from clustering seed)
+  primary_part_number: text | null                                       // FK part_master.part_number
+  linked_product_ids: text[]                                             // denormalized from attached signals
   centroid_embedding: vector(1536)                                       // mean of attached signals' embeddings; recomputed on attach
-  signal_count: int                                                      // denormalized
+  signal_count: int                                                      // denormalized (counts attached signals only, not pending_cluster)
+  hypothesis_tree: jsonb | null                                          // populated by Investigate phase (per arch §5 incident.hypothesis_tree)
   last_activity_at
-  closed_at | dismissed_at
+  closed_at | dismissed_at | reopened_at
   dismiss_reason: text | null
+  reopen_reason: text | null
+  cosign_required: bool                                                  // true iff severity ∈ {high, critical} AND has initiatives (§13.10)
+  cosigned_by_user_id: text | null
+  cosigned_at: timestamptz | null
   is_provisional: bool                                                   // true when created from customer-mail without product_id
 }
 ```
@@ -174,12 +278,15 @@ incident {
 ```
 triage → reasoning (on investigate start)
 triage → dismissed (manual, engineer marks false positive)
-reasoning → resolving (on initiatives approved + dispatched)
+reasoning → resolving (on initiatives approved + dispatched, AND cosign if required)
 reasoning → triage (on stall without resolution; engineer re-triages)
 resolving → closed (all initiatives closed by monitor)
-resolving → reasoning (on initiative failed; amend flow opens new session)
-closed → reasoning (reopened manually by engineer; rare)
+resolving → reopen (on initiative failed OR closure predicate deadline-exceeded; per arch §4.4)
+reopen → reasoning (on engineer-clicked "Reopen" → new session starts with context of failure)
+closed → reopen (reopened manually by engineer; rare, e.g., new evidence contradicts resolution)
 ```
+
+**"reopen" is a distinct state** (not `resolving` or `reasoning`): incident is awaiting engineer decision on whether to re-investigate. Once the engineer clicks "Reopen", a new session is created and `status → reasoning`.
 
 ### 4.2 Provisional incidents
 
@@ -188,6 +295,62 @@ Customer-email signals without `product_id` and below the strict semantic thresh
 - Visible in engineer inbox with a "Provisional" badge
 - Investigate cannot run until engineer promotes them (via UI action that asks for product_id hint or dismisses)
 - Promotes by setting `is_provisional=false` after engineer confirms identification
+
+### 4.3 Contribution records (9 domains per arch §3.2)
+
+Every incident accumulates auditable `contribution` records — one per domain that provided input to the reasoning. Each contribution is queryable, challengeable, and feeds into Compose input.
+
+**Schema:**
+```ts
+contribution {
+  id: "CTR-xxxxx"
+  incident_id: text
+  domain: 'market_research' | 'central_quality' | 'plant_quality_indirect' | 'plant_quality_direct'
+        | 'process_planner' | 'technology_planning' | 'supplier_quality'
+        | 'business_analytics' | 'marketing'
+  author_user_id: text | null                    // null if system-generated
+  source: 'tool' | 'user' | 'stub'               // tool = derived via domain tool; user = engineer text input; stub = unavailable placeholder
+  content: text                                  // human-readable summary
+  structured_payload: jsonb | null               // domain-specific typed data (e.g. SPC cards, supplier scorecards)
+  evidence_refs: jsonb                           // {tool_call_ids: string[], deep_links?: string[]}
+  weight: numeric DEFAULT 1.0                    // contribution weight in hypothesis ranking
+  status: 'available' | 'unavailable' | 'pending'
+  created_at: timestamptz
+}
+INDEX contribution (incident_id, domain);
+UNIQUE(incident_id, domain, source);              -- one record per (incident, domain, source) combination
+```
+
+**Domain registry & 24h scope:**
+
+| Domain | 24h status | Source (24h) | 48h+ path |
+|---|---|---|---|
+| `central_quality` | **functional** | tool `contrib_central_quality(incident_id)` — retrieves similar past incidents + lessons | same |
+| `plant_quality_direct` | **functional** | tool `contrib_plant_quality(incident_id)` — defect history, rework patterns, operator logs | same |
+| `supplier_quality` | **functional** | tool `contrib_supplier_quality(incident_id)` — batch certificates, supplier scorecards | same |
+| `market_research` | stub | static "unavailable" placeholder record | external CRM API |
+| `plant_quality_indirect` | stub | static placeholder | SPC service integration |
+| `process_planner` | stub | static placeholder | ERP routing integration |
+| `technology_planning` | stub | static placeholder | FMEA registry |
+| `business_analytics` | stub | static placeholder | cost-accounting integration |
+| `marketing` | stub | static placeholder | communications platform |
+
+Stub contributions are inserted with `source='stub'`, `status='unavailable'`, `content="Domain not yet integrated"`. They appear in the contribution-stream UI greyed out — visible so the engineer knows the full picture, not hidden.
+
+**Pipeline integration:**
+- At Classify phase start: 3 functional domain tools are invoked in parallel (`contrib_central_quality`, `contrib_plant_quality`, `contrib_supplier_quality`), results persisted as `contribution` rows
+- 6 stub contributions inserted synchronously at incident-create time (so contribution-stream UI has 9 cards from the start)
+- Compose input receives `contributions: Contribution[]` alongside evidence_ledger + hypotheses + selected summaries
+- Engineer can manually add contributions via `POST /api/incident/:id/contribution` with `source='user'` (free-text + optional evidence refs)
+
+**API:**
+```
+GET  /api/incident/:id/contributions          → Contribution[]
+POST /api/incident/:id/contribution           → body: { domain, content, evidence_refs?, structured_payload? } (engineer-only, source='user')
+POST /api/incident/:id/contribution/refresh   → re-runs the 3 functional domain tools (engineer-trigger)
+```
+
+**UI:** Canvas "Contribution stream" panel renders 9 cards (3 filled, 6 greyed). Each card has: domain badge, content, evidence-link popovers, weight slider (engineer adjustable — updates ranking), "Challenge" button (opens amend flow).
 
 ---
 
@@ -202,10 +365,10 @@ For each new signal:
 | Match type | Condition | Time window |
 |---|---|---|
 | `det_prod_def` | `(product_id, defect_code)` match on open incident | **14d** |
-| `det_sta_def` | `(station, defect_code)` match | **3d** |
+| `det_sec_def` | `(section_id, defect_code)` match | **3d** |
 | `det_rule` | `source='detector'` + same `detector_rule` + same `product_id` | **7d** |
 
-Candidates collected across all three rules; pick highest-specificity match (prod_def > sta_def > rule) with most recent `last_activity_at` as tiebreaker.
+Candidates collected across all three rules; pick highest-specificity match (prod_def > sec_def > rule) with most recent `last_activity_at` as tiebreaker.
 
 **Phase 2 — Semantic fallback** (pgvector, runs only if Phase 1 empty):
 
@@ -214,9 +377,18 @@ Candidates collected across all three rules; pick highest-specificity match (pro
 - Threshold: **0.82–0.85** when signal has structured fields (product_id or part_number present), **≥0.90** for pure free-text signals (no structured identifiers).
 - For customer-mail without product_id: require threshold ≥0.90 AND secondary evidence (reported_part_number mentioned in raw_text OR article_number). Without secondary evidence → create provisional incident.
 
-**Phase 3 — New incident**:
+**Phase 3 — Incident formation (hybrid, per arch §2 ≥2-cluster rule + user-push exception):**
 
-- If no attach: create incident with `archetype='unknown'`, `status='triage'`, `severity = max('medium', signal.severity)`, `centroid_embedding = signal.embedding`, `signal_count = 1`.
+The rule for whether to create an incident from an un-matched signal depends on the signal source:
+
+| Signal source | Phase 3 behavior |
+|---|---|
+| `operator`, `engineer` | **Immediate incident** — explicit human-authored problem reports are trusted; create incident with `signal_count=1`, `status='triage'`, `centroid_embedding=signal.embedding`. `cluster_state='attached'`. |
+| `detector`, `backfill_*` | **Pending cluster** — signal sits in `cluster_state='pending_cluster'` for a window defined by `CORRELATOR_CLUSTER_WINDOW_DAYS` (default 7). Waits for a second signal matching the same deterministic key (product_id+defect_code, section_id+defect_code, or detector_rule+product_id). On match: both signals promote to an incident (signal_count=2). Without match within window: signal expires (stays in DB for audit, but `cluster_state='expired'`, never surfaces in UI). |
+| `customer_email` | **Cluster-based with severity shortcut**. Default: pending_cluster like detector. Exception: if signal has `severity='high'` or `'critical'` AND a recognizable `product_id` / `reported_part_number` / `batch_id` — create provisional incident immediately (single-signal, `is_provisional=true`). Engineer promotes or dismisses in UI. |
+| `detector` with strong deterministic match | **Immediate incident bypass** — if a detector-emitted signal has `detector_evidence.baseline_count >= 5 AND deviation_factor >= 3` (i.e., rule fires on a clearly statistically-significant anomaly), create incident with `signal_count=1`. Logs `match_type='new_strong_detector'`. |
+
+**Pending-cluster sweep job:** Every `CORRELATOR_PENDING_SWEEP_INTERVAL_SEC` (default 300s = 5min), worker scans `signal WHERE cluster_state='pending_cluster' AND pending_until < now()`. For each: look for new deterministic matches among other pending-cluster signals; promote pairs to incident if found; else mark `cluster_state='expired'`.
 
 ### 5.2 Priority rules when multiple incidents match
 
@@ -226,7 +398,7 @@ Candidates collected across all three rules; pick highest-specificity match (pro
 
 ### 5.3 On attach
 
-- Transactional: `BEGIN; UPDATE signal SET incident_id=?, match_type=?, match_score=?, attach_reason=?; UPDATE incident SET signal_count=signal_count+1, centroid_embedding=<recompute>, severity=GREATEST(severity, ?), last_activity_at=now(); COMMIT;`
+- Transactional: `BEGIN; UPDATE signal SET incident_id=?, match_type=?, match_score=?, attach_reason=?, cluster_state='attached'; UPDATE incident SET signal_count=signal_count+1, centroid_embedding=<recompute>, severity=GREATEST(severity, ?), last_activity_at=now(); COMMIT;`
 - Row-lock `FOR UPDATE` on the target incident to prevent race conditions when two signals concurrently attach to the same incident.
 
 ### 5.4 Audit chain
@@ -237,12 +409,14 @@ Every signal carries `match_type`, `match_score`, `attach_reason`, `matched_inci
 
 ```bash
 CORRELATOR_DET_PROD_DEF_DAYS=14
-CORRELATOR_DET_STA_DEF_DAYS=3
+CORRELATOR_DET_SEC_DEF_DAYS=3
 CORRELATOR_DET_RULE_DAYS=7
 CORRELATOR_COSINE_STRUCTURED=0.82
 CORRELATOR_COSINE_FREETEXT=0.90
 CORRELATOR_SEMANTIC_WINDOW_INTERNAL_DAYS=30
 CORRELATOR_SEMANTIC_WINDOW_EXTERNAL_DAYS=60
+CORRELATOR_CLUSTER_WINDOW_DAYS=7
+CORRELATOR_PENDING_SWEEP_INTERVAL_SEC=300
 ```
 
 ---
@@ -366,9 +540,11 @@ worker.enqueueInvestigate
     → terminal: evidence_ledger + root_cause_hypotheses + confidence
   Compose (Sonnet)
     ← compact input: evidence_ledger + hypotheses + selected tool summaries (NOT full transcript)
+       + contributions[] (from §4.3, 3 functional + 6 stub domains)
     → 8D D1-D8 + visualizations spec
+    → persists as `report` row (§7.5)
   Propose (Sonnet)
-    ← root_causes + archetype + domain-agent-registry
+    ← root_causes + archetype + domain-agent-registry + report_id
     ← must invoke simulate_impact tool for each initiative's impact_estimate
     → initiatives[] with closure_predicate + impact_estimate (cited to simulate_impact)
     → post-validator with semantic LLM-as-judge layer (Haiku)
@@ -394,6 +570,39 @@ When confidence drops (< threshold, LLM self-reports, or post-validator fails):
 
 1. **First resort:** `request_hint` tool → session transitions to `status='stalled'`, engineer receives notification with open questions, can `POST /api/session/:id/hint` with free-text
 2. **Fallback:** `abandon_with_partial_finding` when no hint arrives within patience window OR LLM still uncertain after hint → `session.status='stalled'` with partial output, UI shows un-cited claims for engineer to curate
+
+### 7.5 Report persistence
+
+Compose produces a structured 8D report + visualization spec. This is persisted as a versioned `report` row tied to the session + incident:
+
+**Schema:**
+```ts
+report {
+  id: text PRIMARY KEY                       // "REP-xxxxx"
+  incident_id: text REFERENCES incident(id)
+  session_id: text REFERENCES session(id)
+  version: int                               // incremented on amend-flow re-compose (1, 2, 3, ...)
+  status: 'draft' | 'current' | 'superseded'
+  report_8d: jsonb                           // {D1: {title, body_markdown, evidence[]}, D2: {...}, ..., D8: {...}}
+  visualizations: jsonb                      // [{type: 'pareto'|'timeline'|'fishbone'|'fmea'|'bom', data_query, caption, evidence[]}]
+  composed_by_model: text                    // 'claude-sonnet-4-6' etc.
+  composed_at: timestamptz
+  confidence: numeric                        // Compose-phase self-reported
+  compose_tokens_in: int
+  compose_tokens_out: int
+}
+INDEX report (incident_id, version DESC);
+UNIQUE(incident_id) WHERE status = 'current';   -- only one current report per incident
+```
+
+**Status transitions:**
+- On Compose-complete → `status='draft'`
+- Engineer review accept → `status='current'`; previous current (if any) → `status='superseded'`
+- On amend-flow re-compose → new row with `version=prev+1, status='draft'`
+
+**API exposure:** `GET /api/incident/:id` returns `reports: Report[]` with current first, superseded following (full history visible). `GET /api/report/:id` returns single report. `POST /api/report/:id/accept` (engineer) transitions draft→current. `GET /api/report/:id/pdf` returns server-rendered PDF of report_8d (stub for 24h — can be implemented as a client-side print-to-PDF via browser).
+
+**Session-turn relation:** The Compose-phase turn in `session_turn` stores the raw LLM output (preview + token counts). The parsed `report_8d` + `visualizations` land in `report`. Session turns are the audit trail; `report` is the consumed artifact.
 
 ---
 
@@ -477,40 +686,49 @@ Target: ~8-10k tokens cached prefix, >80% hit rate after first run per session.
 
 ## 9. Tool Catalog
 
-18 tools across 6 groups. All defined as Zod schemas in `schemas/tool-io.ts`, implementations in `server/tools/<group>/<name>.ts`, registered in `server/tools/index.ts`.
+**23 tools across 8 groups** (19 core LLM tools + 3 contribution-domain tools + 1 write-gated impact tool). All defined as Zod schemas in `schemas/tool-io.ts`, implementations in `server/tools/<group>/<name>.ts`, registered in `server/tools/index.ts`. The 19-tool canonical count refers to tools exposed to the Investigate loop's typed layer; contribution tools run in Classify-parallel; impact-write is closure-monitor-only.
 
 ### 9.1 Groups + tools
 
-**Signal & Incident (read):**
+**Signal & Incident (read, 3):**
 - `get_incident(incident_id)` → full incident with signals, centroid, status, linked products
 - `list_signals_for_incident(incident_id, limit?)` → signals list with text + attachments preview
 - `find_related_incidents(incident_id, window_days?)` → pgvector knn on centroid
 
-**Retrieval (structured SQL, read):**
-- `query_defects(filters: { product_id?, defect_code?, station?, date_from?, date_to?, limit? })` → defect rows
+**Retrieval (structured SQL, read, 5):**
+- `query_defects(filters: { product_id?, defect_code?, section_id?, date_from?, date_to?, limit? })` → defect rows
 - `trace_batch(batch_id | supplier_batch_id)` → suppliers + products + defects along a batch
 - `bom_parts_for_product(product_id)` → BOM explosion
 - `pareto_defect_codes(filters)` → sorted distribution of defect_codes
 - `test_results_marginal(filters)` → marginal test results
 
-**Cross-boundary (composite queries):**
+**Cross-boundary (composite queries, 4):**
 - `field_vs_factory_gap(product_id, window_days?)` → compares customer complaints vs factory defect rate
-- `operator_effect_analysis(user_id | station, window_days?)` → defect/rework rates per operator
+- `operator_effect_analysis(user_id | section_id, window_days?)` → defect/rework rates per operator
 - `rework_timeline_by_section(product_id, window_days?)` → time-series of rework durations per section
 - `weekly_quality_summary(window_weeks?)` → aggregated KPIs per week
 
-**Semantic / Vision / Lessons:**
+**Semantic / Vision / Lessons (3):**
 - `semantic_search_signals(query_text, filters?, top_k=10)` → pgvector knn on signal embeddings
-- `retrieve_lessons(incident_signature_text, top_k=3)` → pgvector knn on `lesson.embedding` WHERE `validated='approved' AND superseded_by IS NULL`; weighted by `cosine × (1 + 0.2 × log(1+usage_count)) × recency_decay(half_life=180d)`
+- `retrieve_lessons(incident_signature_text, top_k=3)` → pgvector knn on `lesson.embedding` WHERE `engineer_validated='approved' AND superseded_by IS NULL`; weighted by `cosine × (1 + 0.2 × log(1+usage_count)) × recency_decay(half_life=180d)`
 - `classify_defect_image(image_url)` → vision classifier output for a signal attachment
 
-**Simulation:**
+**Simulation (1):**
 - `simulate_impact(initiative_template, incident_context)` → rule-based prior + lesson similarity → `{expected_defect_reduction, confidence, horizon_days, methodology_note}`. **Required citation source for `initiative.impact_estimate`.**
 
-**Write-gated (callable only by approve-endpoint / closure-monitor / compose-lesson, NEVER by Investigate loop):**
+**Write-gated (callable only by approve-endpoint / closure-monitor / emit_lesson, NEVER by Investigate loop, 3):**
 - `create_initiative(incident_id, template, predicate, impact_estimate)` — dispatcher calls this on approve
 - `register_closure_predicate(initiative_id, predicate)` — part of create_initiative transaction
 - `emit_lesson(source_session_id, draft)` — closure_monitor calls on incident close
+
+**Contribution (Classify-parallel, 3 functional + 6 stub):**
+- `contrib_central_quality(incident_id)` → similar past incidents + retrievable lessons (summarizes `retrieve_lessons` + `find_related_incidents` into a domain-shaped contribution record)
+- `contrib_plant_quality(incident_id)` → defect history + rework patterns + operator logs (calls `query_defects` + `operator_effect_analysis` + `rework_timeline_by_section`; shapes as one contribution)
+- `contrib_supplier_quality(incident_id)` → batch certificates, supplier scorecards (calls `trace_batch` + aggregates supplier_batch metadata)
+- Stub-contrib domains (6): no runtime tool — static placeholder rows inserted at incident-create time (see §4.3 for the stub list)
+
+**Write-gated impact (closure-monitor only, 1):**
+- `emit_impact_measurement(initiative_id, metric_spec, evidence_refs)` — writes `impact_measurement` row on `initiative.closed`; computes baseline + observed + delta; see §12.7
 
 ### 9.2 Tool I/O schemas
 
@@ -521,7 +739,7 @@ Every tool has:
 export const QueryDefectsInput = z.object({
   product_id: z.string().optional(),
   defect_code: z.string().optional(),
-  station: z.string().optional(),
+  section_id: z.string().optional(),
   date_from: z.string().datetime().optional(),
   date_to: z.string().datetime().optional(),
   limit: z.number().int().min(1).max(500).default(100),
@@ -617,7 +835,7 @@ lesson {
   signature_text: text                             // 120-220 word condensed abstract (for embedding)
   prompt_snippet: text                             // pre-formatted inline snippet for prompt injection
   embedding: vector(1536)
-  triggers: jsonb                                  // {defect_codes:[], product_ids:[], detector_rules:[], station_patterns:[]}
+  triggers: jsonb                                  // {defect_codes:[], product_ids:[], detector_rules:[], section_patterns:[]}
   root_cause: text
   root_cause_evidence: jsonb                       // {tool_call_ids:[], key_queries:[]}
   initiatives_taken: jsonb                         // [{agent_domain, target_system, action_template}]
@@ -673,7 +891,7 @@ Manual only. Engineer UI has "Supersede by [new lesson]" action on a lesson deta
 
 ### 11.5 Demo seed
 
-Three pre-approved lessons seeded in migration `00008_resolve_seed_demo_lessons.sql` with `seed_source='demo'`:
+Three pre-approved lessons seeded in migration `00012_resolve_seed_demo_lessons.sql` with `seed_source='demo'`:
 
 - Story 1 (Supplier batch signature)
 - Story 2 (Calibration drift signature)
@@ -753,16 +971,17 @@ type ClosurePredicate =
 For each initiative evaluated:
 
 1. Evaluator returns `{result, evidence}`
-2. `result='passed'` → `initiative.status='closed'`, `closed_at=now()`, emit `initiative.closed` event
-3. `result='failed'` → `initiative.status='failed'`, emit `initiative.failed` event, engineer notification (semi-auto amend-flow)
-4. `result='pending' AND now() > patience_until` → engineer notification "stale initiative", status unchanged
+2. `result='passed'` → `initiative.status='closed'`, `closed_at=now()`, emit `initiative.closed` event, **write `impact_measurement` row** (per arch §4.4, §12.7)
+3. `result='failed'` → `initiative.status='failed'`, emit `initiative.failed` event; **set `incident.status='reopen'`, `reopen_reason='initiative_failed:<INI-id>'`**; notify engineer with 1-click "Reopen" button (semi-auto per Gap 9 Q-d)
+4. `result='pending' AND now() > patience_until` → emit `initiative.deadline_exceeded`; **set `incident.status='reopen'`, `reopen_reason='deadline_exceeded:<INI-id>'`**; notify engineer
 5. `result='error'` → `initiative_check.result='error'` logged, `consecutive_error_count++`. On 3 consecutive errors → flag `closure_monitor_paused` + engineer alert. Any non-error check resets counter.
 6. If all initiatives of an incident are `closed`:
    - `incident.status='closed'`
-   - Trigger `compose_lesson` (writes lesson with engineer_validated per §11.2)
-7. If any initiative is `failed`:
-   - Incident stays in `resolving`
-   - Semi-auto amend-flow: notification + 1-click "Amend?" button → opens new session with context `{reason: 'previous_initiative_failed', original: INI-xxxxx}`
+   - Trigger `emit_lesson` (writes lesson with engineer_validated per §11.2)
+7. On `incident.status='reopen'`:
+   - UI shows banner "Incident reopened — <reason>" with 1-click "Start new session" button
+   - Engineer click → creates new session with context `{reason: <reopen_reason>, original_initiative: INI-xxxxx}`, `incident.status → reasoning`, `incident.reopened_at=now()` (preserved for history)
+   - Aligns with arch §4.4 ("Deadline exceeded, unsatisfied → status=reopen → re-inject into Reason") while keeping engineer in-the-loop per Gap 9 Q-d
 
 ### 12.5 Concurrency
 
@@ -775,6 +994,33 @@ For each initiative evaluated:
 - Proposed by LLM during Propose phase based on archetype (supplier=14d, drift=7d, design=60d, operator=3d)
 - Engineer confirms / edits in approve dialog before dispatch
 - Stored as absolute `patience_until = dispatched_at + patience_days`
+
+### 12.7 Impact measurement (arch §4.4)
+
+On every `initiative.status → closed`, the closure monitor writes an `impact_measurement` row capturing what was observed.
+
+**Schema:**
+```ts
+impact_measurement {
+  id: text PRIMARY KEY                           // "IMP-xxxxx"
+  initiative_id: text REFERENCES initiative(id)
+  measured_at: timestamptz DEFAULT now()
+  metric: text                                   // e.g., 'defect_rate_change', 'marginal_fail_rate_delta', 'zero_defect_streak_days'
+  baseline_value: numeric | null                 // pre-dispatch observed value
+  observed_value: numeric                        // current value at closure
+  delta_absolute: numeric | null                 // observed - baseline
+  delta_pct: numeric | null                      // (observed-baseline)/baseline * 100
+  unit: text | null                              // '%', 'count/day', 'days', etc.
+  confidence: numeric                            // 0.0-1.0; based on sample size + variance
+  method: text                                   // 'closure_predicate_direct' | 'simulate_impact_retrospective' | 'engineer_estimated'
+  evidence_refs: jsonb                           // {tool_call_ids_from_predicate_checks: [], baseline_query: text}
+}
+INDEX impact_measurement (initiative_id);
+```
+
+**Write path:** `server/closure-monitor/escalator.ts` on `initiative.closed` emits an `emit_impact_measurement` tool call (write-gated, only closure-monitor). Evaluator extracts baseline/observed from the most recent `initiative_check.evidence` payload + optionally runs `simulate_impact` retrospectively to compare predicted vs actual.
+
+**Consumed by:** Leadership analytics endpoint `/api/analytics/impact` aggregates impact_measurement rows for the dashboard.
 
 ---
 
@@ -848,40 +1094,110 @@ Engineer opens approve dialog from Engineer UI. Fields are classified via a per-
 
 Engineer UI renders fields dynamically: form reads `editableFields` per kind and gates inputs accordingly. Non-listed fields render as read-only text. Zod re-validates on submit.
 
-### 13.5 Dispatch flow (transactional, no intermediate state)
+### 13.5 `dispatch_attempt` — full schema
+
+```ts
+dispatch_attempt {
+  id: text PRIMARY KEY                                // "DAT-xxxxx"
+  initiative_id: text REFERENCES initiative(id)
+  attempt_index: int                                  // 1, 2, 3, ... per initiative (append-only; retries increment)
+  target_system: text                                 // 'manex_native'|'email_stub'|'slack_stub'|'supplier_portal_stub'|'plm_stub'
+  kind: text                                          // ActionTemplate.kind
+  payload: jsonb                                      // rendered template (email subject+body, slack text, etc.); for manex_native: the product_action insert shape
+  status: text                                        // 'succeeded'|'failed'|'preview'|'sent'|'cancelled'
+  idempotency_key: text
+  target_ref: text | null                             // e.g. "product_action:PA-00101" (manex_native) | "email:<uuid>" (stubs)
+  error: jsonb | null                                 // {code, message, details} on failure
+  created_at: timestamptz DEFAULT now()
+  sent_at: timestamptz | null
+  sent_by_user_id: text | null
+  cancelled_at: timestamptz | null
+  cancelled_by_user_id: text | null
+}
+CREATE UNIQUE INDEX ON dispatch_attempt (idempotency_key);
+CREATE UNIQUE INDEX ON dispatch_attempt (initiative_id, target_system, kind, attempt_index);
+CREATE INDEX ON dispatch_attempt (initiative_id, created_at DESC);
+```
+
+**Semantics:**
+- Append-only. Every dispatch, retry, state change (stub → sent, sent → cancelled) inserts a new row.
+- Current state of a stub initiative = latest row per initiative ordered by `created_at DESC`.
+- `status='preview'` on stubs when first dispatched; engineer click "Mark as sent" inserts new row with `status='sent'` (same idempotency_key disallowed — use `{idempotency_key}_sent` suffix or separate key hierarchy).
+
+### 13.6 Dispatch flow (transactional, no intermediate state)
 
 ```sql
 BEGIN;
   SELECT ... FROM initiative WHERE id=? AND status='approved' FOR UPDATE;
+  -- guard: if cosign_required AND NOT co_signed → abort with 403 (§13.10)
   -- adapter runs, performs target write or returns error
   -- on success:
   UPDATE initiative SET status='dispatched', target_ref=?, product_action_id=?, dispatched_at=now() WHERE id=?;
-  INSERT INTO dispatch_attempt (initiative_id, attempt_index, target_system, kind, payload, status, idempotency_key, ...) VALUES (...);
+  INSERT INTO dispatch_attempt (initiative_id, attempt_index, target_system, kind, payload, status='succeeded'|'preview', idempotency_key, target_ref, ...);
   -- on failure:
-  -- UPDATE initiative SET status='failed', failure_reason=? WHERE id=?;
-  -- INSERT INTO dispatch_attempt (... status='failed' ...);
+  UPDATE initiative SET status='failed', failure_reason=? WHERE id=?;
+  INSERT INTO dispatch_attempt (... status='failed', error=? ...);
 COMMIT;
 ```
 
 Status transitions strictly: `proposed → approved → dispatched | failed | cancelled`. No `dispatching` intermediate (transaction provides atomicity).
 
-### 13.6 Idempotency
+### 13.7 Idempotency (regenerated after engineer edit)
 
-```sql
-CREATE UNIQUE INDEX ON dispatch_attempt (idempotency_key);
+`dispatch_idempotency_key` is **regenerated at approve-time**, not Propose-time.
+
+- **Original behavior was wrong:** key was hash of Propose-phase template; engineer edits changed template but key stayed same → two materially different dispatches would collide.
+- **Fix:** at `POST /api/initiative/:id/approve`, after merging engineer edits into the template, compute `dispatch_idempotency_key = sha256(canonical_json({ initiative_id, final_template, final_predicate, patience_until }))` and persist to `initiative.dispatch_idempotency_key`. Dispatcher reads from there.
+- **Retry (within one approved version):** same idempotency_key is reused — intentional, prevents double-dispatch of the same approved spec. `UNIQUE(idempotency_key)` on `dispatch_attempt` would block retry, so retries use a suffix: `idempotency_key = base_key + ':attempt_' + attempt_index`.
+- **Re-approve after amend (engineer changed template again):** new key, fresh hash, new attempt sequence.
+
+### 13.8 Retry policy
+
+On first failure: 1 retry with 30s backoff. Next attempt inserts new `dispatch_attempt` row with `attempt_index = previous + 1` and suffixed idempotency_key. After failed retry: initiative goes to `status='failed'`, amend-flow engaged.
+
+### 13.9 Cancellation
+
+- Engineer cancels `approved` initiative: set `status='cancelled'`, never dispatched. No `dispatch_attempt` row (never dispatched).
+- Engineer cancels `dispatched` initiative on stub: `status='cancelled'` + insert `dispatch_attempt` with status='cancelled' (append-only, shows full timeline).
+- Engineer cancels `dispatched` initiative on `manex_native`: `initiative.status='cancelled'` but `product_action` remains (Manex rule: no deletes on product_action). Engineer must cancel in Manex UI separately. `dispatch_attempt` with status='cancelled' inserted for audit.
+
+### 13.10 Leadership co-sign (high-severity gate)
+
+Per arch §8 ("Quality Manager: High-severity co-sign"), initiatives on incidents with `severity ∈ {high, critical}` require Leadership co-sign before dispatch.
+
+**Fields (on `initiative`):**
+```ts
+cosign_required: bool                                 // computed: severity IN (high, critical) AND target_system != 'email_stub' AND kind != 'customer_response'
+co_signed: bool DEFAULT false
+co_signed_by_user_id: text | null                     // must be user.role='leadership'
+co_signed_at: timestamptz | null
 ```
 
-`dispatch_idempotency_key` generated at Propose phase (hash of initiative-id + template-hash + patience_until). Prevents double-dispatch on retry.
+**Endpoint:** `POST /api/initiative/:id/cosign` (Leadership role only)
+```
+body: { approved: bool, comment?: string }
+effect on approved=true: UPDATE initiative SET co_signed=true, co_signed_by_user_id=?, co_signed_at=now()
+effect on approved=false: UPDATE initiative SET status='cancelled', failure_reason='cosign_rejected'
+```
 
-### 13.7 Retry policy
+**Dispatch gate:** `/api/initiative/:id/approve` executes the dispatch ONLY if `NOT cosign_required OR co_signed`. Otherwise returns 409 Conflict with `{code: 'cosign_required', ...}`. Engineer UI shows "awaiting co-sign" state; Leadership inbox shows pending co-signs.
 
-On first failure: 1 retry with 30s backoff. Next attempt inserts new `dispatch_attempt` row with `attempt_index = previous + 1`. After failed retry: initiative goes to `status='failed'`, amend-flow engaged.
+### 13.11 `external_state_check` predicate — stub-adapter coupling
 
-### 13.8 Cancellation
+For stub target systems (`email_stub`, `slack_stub`, `supplier_portal_stub`, `plm_stub`), the `external_state_check` predicate evaluates against `dispatch_attempt` instead of a live external system:
 
-- Engineer cancels `approved` initiative: set `status='cancelled'`, never dispatched.
-- Engineer cancels `dispatched` initiative on stub: `status='cancelled'` + append `dispatch_attempt` row with status='cancelled' (append-only, shows full timeline).
-- Engineer cancels `dispatched` initiative on `manex_native`: `initiative.status='cancelled'` but `product_action` remains (Manex rule: no deletes on product_action). Engineer must cancel in Manex UI separately.
+```ts
+{ kind: 'external_state_check',
+  target_system: 'email_stub',
+  target_ref: '<initiative_id>',                      // looks up latest dispatch_attempt for this initiative
+  expected_state: 'sent' }                            // matches dispatch_attempt.status
+```
+
+Evaluator logic: `SELECT status FROM dispatch_attempt WHERE initiative_id=? AND target_system=? ORDER BY created_at DESC LIMIT 1`. If latest.status matches expected_state → `passed`. If latest is `preview` and expected is `sent` → `pending` (engineer hasn't clicked "Mark as sent" yet). If latest is `cancelled` or `failed` → `failed`.
+
+For `manex_native`, `external_state_check` can check `product_action.status` directly (read-only query on Manex table).
+
+This couples the predicate to observable state without requiring real external integration.
 
 ---
 
@@ -897,14 +1213,17 @@ On first failure: 1 retry with 30s backoff. Next attempt inserts new `dispatch_a
 |---|---|---|---|
 | `POST /api/signal/ingest` | ✓ | ✓ | ✗ |
 | `GET /api/signals/mine` | ✓ | ✓ | ✗ |
-| `GET /api/incident/*` | ✗ | ✓ | ✗ |
+| `GET /api/incident/*` | ✗ | ✓ | ✓ (read-only view, hides investigation turns) |
 | `POST /api/incident/:id/investigate` | ✗ | ✓ | ✗ |
+| `POST /api/incident/:id/contribution*` | ✗ | ✓ | ✗ |
 | `GET /api/session/*` | ✗ | ✓ | ✗ |
-| `POST /api/initiative/:id/*` | ✗ | ✓ | ✗ |
+| `POST /api/initiative/:id/approve\|cancel\|amend` | ✗ | ✓ | ✗ |
+| `POST /api/initiative/:id/cosign` | ✗ | ✗ | ✓ |
 | `POST /api/closure/*` | ✗ | ✓ | ✗ |
 | `POST /api/lesson/:id/validate` | ✗ | ✓ | ✗ |
 | `POST /api/detector/scan` | ✗ | ✓ | ✗ |
 | `GET /api/analytics/*` | ✗ | ✓ | ✓ |
+| `GET /api/initiatives/pending_cosign` | ✗ | ✓ | ✓ |
 
 All endpoints use uniform `ErrorResponse` shape on errors. All paginated endpoints support `?page=&page_size=&since=`.
 
@@ -996,14 +1315,14 @@ PaginationMeta, ErrorResponse
 | 8 | Concurrent session on same incident | Unique partial index violation | Return 409 Conflict | N/A |
 | 9 | Dispatch failure | Adapter returns not-ok | 1 retry with 30s backoff; then `initiative.status='failed'` + amend | 1 |
 | 10 | Closure eval error | Predicate evaluator throws | `initiative_check.result='error'`; consecutive counter | 3 consecutive before escalate |
-| 11 | Embedding API error | OpenAI SDK throws | Retry 2×; fallback: deterministic-only correlator | 2 + fallback |
+| 11 | Embedding API error | OpenAI SDK throws | Retry 2×; fallback: deterministic-only correlator + signal persisted with `embedding=null`, `cluster_state='pending_cluster'`; **embedding-recovery sweep (§3.5) re-embeds + re-correlates on API recovery** | 2 + fallback + deferred re-embed |
 | 12 | DB deadlock / write conflict | Postgres 40001/40P01 | Retry 3× with 100ms jitter; then 503 | 3 |
 | 13 | SSE disconnect / resume gaps | Client reconnect with `Last-Event-ID` | Server replays from `session_event` where `seq > last_event_id` | N/A |
 | 14 | Orchestrator crash mid-turn | Watchdog: `status='running' AND max(session_event.ts) < now()-5min` | Auto-mark failed; `reason='orchestrator_crash'` | N/A |
 | 15 | Ingest / dispatch idempotency | Idempotency key collision | Return existing resource (no duplicate) | N/A |
 | 16 | Cron race / double-evaluation | `FOR UPDATE SKIP LOCKED` + `UNIQUE(initiative_id, checked_at)` | Idempotent no-op if duplicate | N/A |
 | 17 | Whisper / Vision / Storage failures | SDK throws or returns empty | Whisper fail → user-text fallback; Vision fail → `vision_out=null`; Storage fail → client 3 retries then reject | 3 (storage) / 1 (ML) |
-| 18 | pgvector unavailable | Embedding query fails | Correlator falls to deterministic-only; UI "degraded mode" badge | N/A |
+| 18 | pgvector unavailable | Embedding knn query throws | Correlator falls to deterministic-only; UI "degraded mode" badge; on recovery, pending-cluster sweep re-runs semantic phase | N/A |
 | 19 | Partial write failures | Transaction coupling enforces atomicity | Rollback; retry whole transaction | 1 |
 
 ### 15.2 Session status transitions
@@ -1170,21 +1489,37 @@ server/                                     # server-only
     guards.ts
     rbac-matrix.ts
   worker/
-    index.ts                                # durable worker entry
+    index.ts                                # durable worker entry; registers all cron handlers
     handlers/
-      investigate.ts
-      detector-scan.ts
-      closure-sweep.ts
-      compose-lesson.ts
+      investigate.ts                        # runs orchestrator for a session
+      detector-scan.ts                      # SPC detector cron (§2.3)
+      closure-sweep.ts                      # 60s closure-monitor cron (§12)
+      emit-lesson.ts                        # on incident close (§11.2)
+      backfill-seed.ts                      # one-shot wrapper (§2.5 Mode 1)
+      backfill-incremental.ts               # watermark-based cron (§2.5 Mode 2)
+      embedding-recovery.ts                 # re-embed + re-correlate sweep (§3.5)
+      pending-cluster-sweep.ts              # promote / expire pending signals (§5.1)
+      amend.ts                              # opens new session on reopen
+  contributions/
+    tools/
+      central-quality.ts                    # contrib_central_quality
+      plant-quality.ts                      # contrib_plant_quality
+      supplier-quality.ts                   # contrib_supplier_quality
+    stubs.ts                                # 6 stub placeholder inserters
+    registry.ts                             # 9-domain registry + per-domain availability flag
 
 schemas/                                    # Zod schemas (shared client+server)
   signal.ts
   incident.ts
+  contribution.ts                           # (§4.3)
   session.ts
+  report.ts                                 # (§7.5)
   initiative.ts
+  dispatch.ts                               # ActionTemplate discriminated union + DispatchAttempt
+  impact.ts                                 # impact_measurement (§12.7)
   lesson.ts
   closure.ts
-  action-templates.ts
+  backfill.ts                               # BackfillWatermark + source-row-to-signal mappers
   tool-io.ts
   api-responses.ts
 
@@ -1196,6 +1531,9 @@ components/                                 # Lila/Harsh ownership; Joscha place
     LessonCard.tsx
     InitiativeCard.tsx
     ClosureCheckCard.tsx
+    ContributionCard.tsx                    # (§4.3, greyed if status='unavailable')
+    ReportCard.tsx                          # (§7.5, 8D panel)
+    ImpactMeasurementCard.tsx               # (§12.7, for leadership dashboard)
   evidence/
     EvidenceCitation.tsx
   session/
@@ -1215,12 +1553,16 @@ supabase/
   migrations/
     00001_create_schema.sql                 # Manex, untouched
     00002_create_views.sql                  # Manex, untouched
-    00003_resolve_signal_incident.sql
-    00004_resolve_session_events.sql
-    00005_resolve_initiative_closure.sql
-    00006_resolve_lesson.sql
-    00007_resolve_pgvector_indexes.sql
-    00008_resolve_seed_demo_lessons.sql
+    00003_resolve_signal_incident.sql         # signal + incident + incident_signal (join) + audit indexes
+    00004_resolve_contribution.sql             # contribution table (§4.3)
+    00005_resolve_session_events.sql           # session + session_turn + session_event (§6)
+    00006_resolve_report.sql                   # report table (§7.5)
+    00007_resolve_initiative_closure.sql       # initiative + initiative_check + dispatch_attempt + impact_measurement (§12, §13)
+    00008_resolve_lesson.sql                   # lesson + lesson_usage (§11)
+    00009_resolve_backfill.sql                 # backfill_watermark (§2.5)
+    00010_resolve_pipeline_error_log.sql       # pipeline_error_log (§15.4)
+    00011_resolve_pgvector_indexes.sql         # all vector indexes (ivfflat on signal.embedding, incident.centroid_embedding, lesson.embedding)
+    00012_resolve_seed_demo_lessons.sql        # 3 pre-approved demo lessons (§11.5)
   seed.sql                                  # Manex, untouched
 
 scripts/
@@ -1257,15 +1599,27 @@ APP_ENV=dev
 LOG_LEVEL=info
 ANTHROPIC_CACHE_TTL=300
 INVESTIGATE_MAX_TURNS=8
+
+# Correlator
 CORRELATOR_DET_PROD_DEF_DAYS=14
-CORRELATOR_DET_STA_DEF_DAYS=3
+CORRELATOR_DET_SEC_DEF_DAYS=3
 CORRELATOR_DET_RULE_DAYS=7
 CORRELATOR_COSINE_STRUCTURED=0.82
 CORRELATOR_COSINE_FREETEXT=0.90
 CORRELATOR_SEMANTIC_WINDOW_INTERNAL_DAYS=30
 CORRELATOR_SEMANTIC_WINDOW_EXTERNAL_DAYS=60
+CORRELATOR_CLUSTER_WINDOW_DAYS=7
+CORRELATOR_PENDING_SWEEP_INTERVAL_SEC=300
+
+# Crons
 CLOSURE_CRON_INTERVAL_SEC=60
 DETECTOR_CRON_INTERVAL_SEC=60
+BACKFILL_CRON_INTERVAL_SEC=120
+BACKFILL_CRON_ENABLED=true                          # set to false during live demo
+EMBEDDING_RECOVERY_INTERVAL_SEC=60
+EMBEDDING_RECOVERY_ENABLED=true
+
+# Auth
 DEMO_USER_HEADER=X-Demo-User
 ```
 
@@ -1279,6 +1633,7 @@ DEMO_USER_HEADER=X-Demo-User
   "db:reset": "supabase db reset",
   "db:migrate": "supabase db push",
   "db:seed:demo": "tsx scripts/seed-demo.ts",
+  "backfill:seed": "tsx scripts/backfill-signals.ts",
   "worker:dev": "tsx watch server/worker/index.ts",
   "prompts:build": "tsx scripts/prompts-build.ts",
   "prompts:check": "tsx scripts/prompts-build.ts --check",
@@ -1295,9 +1650,10 @@ DEMO_USER_HEADER=X-Demo-User
 Bootstrap flow for any team-member:
 1. `pnpm install`
 2. `pnpm db:up` (one-time per session)
-3. `pnpm db:reset` (loads migrations 00001-00008 + seed.sql)
-4. `pnpm db:seed:demo` (adds Resolve demo data)
-5. `pnpm dev` (Next.js + worker)
+3. `pnpm db:reset` (loads migrations 00001-00012 + seed.sql)
+4. `pnpm db:seed:demo` (adds 3 pre-approved demo lessons)
+5. `pnpm backfill:seed` (ingests Manex defect/field_claim/marginal-test rows as signals, correlator clusters them into 4 demo incidents)
+6. `pnpm dev` (Next.js + worker; detector + embedding-recovery + pending-cluster-sweep crons active; backfill cron toggled by env)
 
 ### 16.5 Testing
 
@@ -1320,6 +1676,11 @@ These are deferred to the implementation-plan phase, not resolved in this spec:
 6. **Cost ceiling per session** — hard cutoff ($X) or soft warning only?
 7. **Supabase Storage setup** — real bucket vs. local filesystem for 24h demo attachments.
 8. **Prompts-generated commit cadence** — every commit, or only on .md change (pre-commit hook lint)?
+9. **Backfill chunk size + ordering** — ingest defect rows first (factory events) vs. field_claim first (external voices)? Affects which stories surface first in UI.
+10. **Contribution refresh cost** — `POST /api/incident/:id/contribution/refresh` re-runs 3 functional domain tools. Rate-limit to once per 10min per incident or allow unlimited (engineer-triggered only)?
+11. **Impact-measurement baseline window** — `impact_measurement.baseline_value` is computed pre-dispatch. What fixed window (7d / 14d / 30d)? Depends on metric type.
+12. **Pending-cluster promotion rule** — when a 2nd pending signal arrives, does the promoted incident inherit the earlier or later signal's `severity`/`archetype`? Proposal: `max(severity)`, `archetype='unknown'` until Classify runs.
+13. **Demo fixtures for 2 non-primary stories (2, 4)** — ship as seeded signals only, or seed full pipeline through closure (so Leadership dashboard has historical impact_measurement rows)?
 
 ---
 
