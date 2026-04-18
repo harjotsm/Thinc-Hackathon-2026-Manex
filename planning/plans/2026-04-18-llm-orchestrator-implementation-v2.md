@@ -4,7 +4,7 @@
 >
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Bring the existing `web/` scaffold up to full spec compliance (planning/specs/2026-04-18-llm-data-pipeline-design.md v2) so Story 1 (Supplier-batch SB-00007) and Story 3 (Design-drift R33) demo end-to-end with live SSE, full evidence-cite enforcement, lessons network effect, and Dashboard-prototype-aligned UI.
+**Goal:** Bring Story 1 (Supplier-batch SB-00007) and Story 3 (Design-drift R33) end-to-end to spec-aligned demo readiness on top of the existing `web/` scaffold (Harjot's develop work). Deliverables in scope for this plan: live SSE streaming, full evidence-cite enforcement, lessons network effect for those two stories, and Dashboard-prototype-aligned UI for 3 key screens (inbox + canvas + floor capture). Spec-aligned foundation (session layer, full schemas, tool registry, validator) is laid so Harsh / Harjot / Lila can fill their ownership areas to complete spec compliance across all stories + features. **Not in scope:** full 19-tool functional coverage (4 stubs remain), complete closure-predicate evaluator (RPC skeleton exists, full logic is Harjot's), all 8+ remaining UI screens (Lila's).
 
 **Architecture:** Extend Harjot's 4-phase orchestrator + 5-tool scaffold in `web/src/server/` to (a) full 19-tool typed registry with Zod I/O, (b) session/turn/event append-only logging with token-streaming SSE, (c) 3-layer evidence-cite validator, (d) full schema (session/report/initiative_check/dispatch_attempt/lesson_usage tables + missing signal/incident columns), (e) pgvector-backed semantic search, (f) contribution pipeline (3 functional + 6 stub), (g) lessons retrieve+compose, (h) port 3 key Dashboard screens to Next.js.
 
@@ -232,17 +232,17 @@ tests/fixtures/incidents/story-3.json
 
 | M | Content | Hours |
 |---|---|---|
-| M0 | Bootstrap: env + health-check against existing web/ | 0.5 |
+| M0 | Bootstrap: env + dev deps + health-check against existing web/ | 0.75 |
 | M1 | Breaking schema migration (00006_resolve_schema_completion.sql) | 1.5 |
 | M2 | Zod schema completion (web/src/server/schemas/) | 1 |
 | M3 | Tool registry + 19-tool migration | 2 |
-| M4 | Session persistence + evidence-validator 3-layer + cache breakpoints | 2.5 |
+| M4 | Session persistence + `/api/incidents` list + evidence-validator 3-layer + cache breakpoints | 2.75 |
 | M5 | Contribution pipeline + lessons retrieve/compose + backfill + workers | 3 |
 | M6 | SSE token streaming + Dashboard screen ports (3 screens) + design tokens | 4 |
 | M7 | Golden tests (Story 1 + 3) + demo reset + PR to develop | 2 |
-| **Total** | | **16.5** |
+| **Total** | | **17** |
 
-Buffer for integration bugs: 3.5h. 20h total.
+Buffer for integration bugs: 3h. 20h total.
 
 ---
 
@@ -254,12 +254,70 @@ Buffer for integration bugs: 3.5h. 20h total.
 
 **Files:** `web/package.json`, `.env.local`
 
-- [ ] **Step 1: Install web/ deps**
+⚠ **Important note re Next.js 16.2.4**: `web/AGENTS.md` declares "This is NOT the Next.js you know. This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` before writing any code. Heed deprecation notices." Before writing ANY Next.js-specific code in M4-M6, do `cat web/node_modules/next/dist/docs/<topic>.md` for: app-router conventions, route handlers, server components vs client components, streaming, edge-vs-node runtime. Do not rely on training-data assumptions about Next 14 or 15.
+
+- [ ] **Step 1: Install web/ deps + add dev tools to root**
 
 ```bash
 cd /Users/joschahaertel/Projects/Hackathons/Deconstructors/De.Constructors/web
 pnpm install
 cd ..
+```
+
+Root package.json currently has only `pg`, `@supabase/supabase-js`, `zod`, `@types/node`. Add the tooling needed by this plan (tsx for scripts, vitest for tests, dotenv for env loading, concurrently for parallel dev server + worker). Edit root `package.json`:
+
+```json
+{
+  "name": "resolve-root",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@9.0.0",
+  "scripts": {
+    "health": "tsx scripts/health-check.ts",
+    "db:migrate:remote": "tsx scripts/apply-remote-migrations.ts",
+    "db:seed:demo": "tsx scripts/seed-demo.ts",
+    "backfill:seed": "tsx scripts/backfill-signals.ts",
+    "demo:reset": "tsx scripts/demo-reset.ts",
+    "test": "vitest",
+    "test:integration": "vitest run tests/integration",
+    "test:golden": "vitest run tests/golden"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.103.3",
+    "pg": "^8.20.0",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@types/node": "^25.6.0",
+    "@types/pg": "^8.11.0",
+    "dotenv": "^16.4.5",
+    "tsx": "^4.19.0",
+    "vitest": "^2.1.0"
+  }
+}
+```
+
+Then install:
+```bash
+pnpm install
+```
+
+Also extend web/package.json scripts (add test + typecheck):
+```json
+"scripts": {
+  "dev": "next dev",
+  "build": "next build",
+  "start": "next start",
+  "lint": "eslint",
+  "typecheck": "tsc --noEmit",
+  "test": "vitest",
+  "test:integration": "vitest run src/**/*.integration.test.ts"
+}
+```
+
+And add devDeps to web/:
+```bash
+cd web && pnpm add -D vitest @vitest/ui @testing-library/react && cd ..
 ```
 
 - [ ] **Step 2: Create `.env.local` at repo root if missing**
@@ -326,6 +384,7 @@ git commit -m "chore(m0): health-check script + env template against live Manex"
 BEGIN;
 
 CREATE EXTENSION IF NOT EXISTS vector;
+CREATE EXTENSION IF NOT EXISTS pgcrypto;    -- gen_random_uuid() for PG < 14 (built-in for 14+; IF NOT EXISTS is cheap insurance)
 
 -- 0. Drop dependent views that reference signal/incident so we can alter them
 -- (none in Resolve yet; Manex views are untouched)
@@ -378,7 +437,8 @@ ALTER TABLE signal
   ADD COLUMN IF NOT EXISTS match_type match_type_t,
   ADD COLUMN IF NOT EXISTS match_score NUMERIC,
   ADD COLUMN IF NOT EXISTS attach_reason TEXT,
-  ADD COLUMN IF NOT EXISTS matched_incident_id TEXT,
+  ADD COLUMN IF NOT EXISTS incident_id TEXT REFERENCES incident(incident_id),   -- primary attach target (correlator writes here; incident_signal join table in 00003 is retained for backwards compat but not load-bearing)
+  ADD COLUMN IF NOT EXISTS matched_incident_id TEXT,                             -- audit snapshot of what incident_id was set to at attach time (immutable once set)
   ADD COLUMN IF NOT EXISTS reported_part_number TEXT,
   ADD COLUMN IF NOT EXISTS defect_code TEXT,
   ADD COLUMN IF NOT EXISTS test_key TEXT,
@@ -496,9 +556,14 @@ CREATE TABLE session_turn (
   tokens_in INT DEFAULT 0,
   tokens_out INT DEFAULT 0,
   duration_ms INT DEFAULT 0,
-  created_at TIMESTAMPTZ DEFAULT now(),
-  UNIQUE(session_id, turn_index)
+  created_at TIMESTAMPTZ DEFAULT now()
+  -- NO UNIQUE(session_id, turn_index): a single "turn" (one Sonnet exchange) produces 1 assistant row + N tool rows sharing the same turn_index.
+  -- Append-only by primary key id. Ordering on read: ORDER BY turn_index, created_at.
 );
+CREATE INDEX session_turn_by_session ON session_turn (session_id, turn_index, created_at);
+-- Guard against logical duplicates: only one assistant message per (session, turn).
+CREATE UNIQUE INDEX session_turn_one_assistant_per_turn ON session_turn (session_id, turn_index) WHERE role = 'assistant';
+-- Tool rows within a turn disambiguated by tool_call.tool_call_id (extracted via JSON path) — duplicates prevented by the orchestrator's idempotent write, not by a DB constraint (JSON path uniqueness constraints are fragile across PG versions).
 
 CREATE TABLE session_event (
   session_id TEXT NOT NULL REFERENCES session(id),
@@ -1008,6 +1073,79 @@ Per spec §14.3. Checks for existing running session (unique partial index), cre
 - [ ] **Step 2: Deprecate `/api/agent/run` or make it a sync wrapper**
 
 For backwards compat with existing engineer page while we port it (Task 6.2), keep the endpoint but have it internally call the new flow.
+
+### Task 4.1b: `/api/incidents` list endpoint (needed by M6 inbox)
+
+**Files:** `web/src/app/api/incidents/route.ts` (new)
+
+The Dashboard inbox port (M6 Task 6.3) consumes `fetch('/api/incidents')`. Harjot's scaffold has only `/api/incident/[incidentId]` (singular detail) and `/api/intake/query` (signals list); the incidents-list route is missing. Add it here so M6 + goldens (M7) have something to call.
+
+- [ ] **Step 1: Write route**
+
+```ts
+// web/src/app/api/incidents/route.ts
+import { NextRequest } from 'next/server';
+import { createServerClient } from '@/lib/supabase-server';   // or whatever Harjot named the server-side client helper
+import { z } from 'zod';
+
+const QuerySchema = z.object({
+  status: z.string().optional(),          // comma-sep: 'triage,reasoning'
+  severity: z.string().optional(),
+  archetype: z.string().optional(),
+  product_id: z.string().optional(),
+  window_days: z.coerce.number().int().min(1).max(365).optional(),
+  q: z.string().optional(),               // free text on title/summary
+  page: z.coerce.number().int().min(1).default(1),
+  page_size: z.coerce.number().int().min(1).max(100).default(20),
+  since: z.string().datetime().optional(),   // last_activity_at watermark for reconnect
+});
+
+export async function GET(req: NextRequest) {
+  const url = new URL(req.url);
+  const parsed = QuerySchema.safeParse(Object.fromEntries(url.searchParams));
+  if (!parsed.success) {
+    return Response.json({ code: 'invalid_query', message: parsed.error.message, retryable: false }, { status: 400 });
+  }
+  const { status, severity, archetype, product_id, window_days, q, page, page_size, since } = parsed.data;
+
+  const supabase = createServerClient();
+  let query = supabase
+    .from('incident')
+    .select('incident_id, archetype, severity, status, title, summary, primary_product_id, linked_product_ids, signal_count, last_activity_at, is_provisional, opened_ts, closed_ts', { count: 'exact' })
+    .order('last_activity_at', { ascending: false })
+    .range((page - 1) * page_size, page * page_size - 1);
+
+  if (status)      query = query.in('status', status.split(','));
+  if (severity)    query = query.in('severity', severity.split(','));
+  if (archetype)   query = query.in('archetype', archetype.split(','));
+  if (product_id)  query = query.eq('primary_product_id', product_id);
+  if (since)       query = query.gt('last_activity_at', since);
+  if (window_days) query = query.gte('last_activity_at', new Date(Date.now() - window_days * 864e5).toISOString());
+  if (q)           query = query.or(`title.ilike.%${q}%,summary.ilike.%${q}%`);
+
+  const { data, count, error } = await query;
+  if (error) return Response.json({ code: 'db_error', message: error.message, retryable: true }, { status: 500 });
+
+  return Response.json({
+    data: data ?? [],
+    pagination: { page, page_size, total: count ?? 0, has_next: (count ?? 0) > page * page_size },
+  });
+}
+```
+
+- [ ] **Step 2: Smoke test**
+
+```bash
+curl "http://localhost:3000/api/incidents?status=triage,reasoning&page_size=5"
+```
+Expected: JSON with `data: []` (empty until backfill runs) + `pagination: {page:1, page_size:5, total:0, has_next:false}`.
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add web/src/app/api/incidents/route.ts
+git commit -m "feat(api): GET /api/incidents list endpoint with status/severity/archetype/window filters + pagination"
+```
 
 ### Task 4.2: Orchestrator — session-aware
 
