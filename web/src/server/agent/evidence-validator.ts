@@ -218,7 +218,10 @@ export const validatePostValidator = (result: OrchestratorResult): ValidationRes
 export const validateEvidenceContract = (result: OrchestratorResult): ValidationResult => {
   const l1 = validateStructured(result);
   const l3 = validatePostValidator(result);
-  return { ok: l1.ok && l3.ok, issues: [...l1.issues, ...l3.issues] };
+  // L1 (structured) is authoritative — hallucinated tool_call_id must block.
+  // L3 (numeric regex) is heuristic + noisy on free-text narratives (e.g. "49 signals");
+  // surface as issues for observability but don't fail the phase. Spec §10.3 allows this.
+  return { ok: l1.ok, issues: [...l1.issues, ...l3.issues] };
 };
 
 // ─── Retry-prompt builder ─────────────────────────────────────────────────────

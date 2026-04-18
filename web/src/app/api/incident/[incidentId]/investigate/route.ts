@@ -79,9 +79,11 @@ export async function POST(request: NextRequest, { params }: Params) {
   });
 
   if (insertError) {
+    console.error("[investigate] session insert error:", JSON.stringify(insertError));
+    const msg = insertError.message ?? "";
     // Handle race condition — unique partial index violation means another session started concurrently
     if (
-      insertError.message.toLowerCase().includes("unique") ||
+      msg.toLowerCase().includes("unique") ||
       insertError.code === "23505"
     ) {
       // Re-query to get the racing session id

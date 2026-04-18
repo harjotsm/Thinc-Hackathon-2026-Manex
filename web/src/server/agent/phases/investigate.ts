@@ -13,6 +13,10 @@ import type { ToolCallResult } from "@/server/agent/types";
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const MAX_TURNS = 8;
+// Phase-scoped turn_index offset — avoids collision with the assistant unique constraint
+// session_turn_one_assistant_per_turn: UNIQUE (session_id, turn_index) WHERE role='assistant'.
+// Classify uses 0..4; Investigate starts at 10.
+const PHASE_TURN_OFFSET = 10;
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -142,7 +146,7 @@ export const runInvestigate = async (
 
     await logTurn({
       session_id,
-      turn_index: turn,
+      turn_index: PHASE_TURN_OFFSET + turn,
       phase: "investigate",
       role: "assistant",
       model: resp.model,
@@ -177,7 +181,7 @@ export const runInvestigate = async (
 
         await logTurn({
           session_id,
-          turn_index: turn,
+          turn_index: PHASE_TURN_OFFSET + turn,
           phase: "investigate",
           role: "tool",
           tool_call: {
@@ -218,7 +222,7 @@ export const runInvestigate = async (
 
         await logTurn({
           session_id,
-          turn_index: turn,
+          turn_index: PHASE_TURN_OFFSET + turn,
           phase: "investigate",
           role: "tool",
           tool_call: {

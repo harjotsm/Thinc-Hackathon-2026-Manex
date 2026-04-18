@@ -192,7 +192,7 @@ export const runCompose = async (
 
   await logTurn({
     session_id,
-    turn_index: 0,
+    turn_index: 20,
     phase: "compose",
     role: "assistant",
     model: resp.model,
@@ -252,7 +252,7 @@ export const runCompose = async (
 
     await logTurn({
       session_id,
-      turn_index: 1,
+      turn_index: 21,
       phase: "compose",
       role: "assistant",
       model: retryResp.model,

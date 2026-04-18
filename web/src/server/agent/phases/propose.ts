@@ -142,7 +142,7 @@ export const runPropose = async (
 
   await logTurn({
     session_id,
-    turn_index: 0,
+    turn_index: 30,
     phase: "propose",
     role: "assistant",
     model: resp.model,
@@ -200,7 +200,7 @@ export const runPropose = async (
 
     await logTurn({
       session_id,
-      turn_index: 1,
+      turn_index: 31,
       phase: "propose",
       role: "assistant",
       model: retryResp.model,
