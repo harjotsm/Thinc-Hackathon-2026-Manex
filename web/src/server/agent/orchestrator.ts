@@ -5,7 +5,7 @@ import { logEvent, updateSessionStatus } from "@/server/agent/session-logger";
 import { publishSessionEvent } from "@/lib/event-bus";
 import { runClassify } from "@/server/agent/phases/classify";
 import { runInvestigate } from "@/server/agent/phases/investigate";
-import { runCompose, EvidenceCiteUnfixableError } from "@/server/agent/phases/compose";
+import { runCompose, EvidenceCiteUnfixableError, type ComposeOutput } from "@/server/agent/phases/compose";
 import { runPropose } from "@/server/agent/phases/propose";
 import type { OrchestratorResult } from "@/server/agent/types";
 import type { IncidentSeed } from "@/server/agent/phases/classify";
@@ -87,7 +87,8 @@ export const runOrchestratorWithSession = async (
 
     // Phase 3 — Compose
     await updateSessionStatus(p.session_id, { phase: "compose" });
-    const draft_8d = await runCompose(p.session_id, incident, classified, investigated);
+    const composeOutput: ComposeOutput = await runCompose(p.session_id, incident, classified, investigated);
+    const { draft_8d, report_id } = composeOutput;
 
     // Phase 4 — Propose
     await updateSessionStatus(p.session_id, { phase: "propose" });
@@ -122,6 +123,22 @@ export const runOrchestratorWithSession = async (
       ],
     };
 
+    // Patch report with initiatives + tool_calls so the report endpoint can serve everything
+    if (report_id) {
+      const supabase = getSupabaseServerClient();
+      await supabase
+        .from("report")
+        .update({
+          report_8d: {
+            ...(draft_8d as unknown as Record<string, unknown>),
+            _initiatives: initiatives as unknown as unknown[],
+            _tool_calls: investigated.tool_calls as unknown as unknown[],
+            _archetype: classified.archetype,
+          } as unknown as Record<string, unknown>,
+        })
+        .eq("id", report_id);
+    }
+
     await updateSessionStatus(p.session_id, {
       status: "succeeded",
       phase: "complete",
@@ -131,13 +148,14 @@ export const runOrchestratorWithSession = async (
     await logEvent(p.session_id, "session_complete", {
       archetype: classified.archetype,
       initiative_count: initiatives.length,
+      report_id,
     });
 
     // Publish live so SSE consumers can close the stream immediately
     publishSessionEvent(p.session_id, {
       event_seq: 0,
       event_type: "session_complete",
-      payload: { archetype: classified.archetype, initiative_count: initiatives.length },
+      payload: { archetype: classified.archetype, initiative_count: initiatives.length, report_id },
       ts: new Date().toISOString(),
     });
 
