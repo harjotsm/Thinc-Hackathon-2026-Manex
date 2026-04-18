@@ -5,6 +5,7 @@
 **Goal:** Build Resolve's LLM orchestrator (Classify → Investigate → Compose → Propose) with evidence-cited tool use, SSE live streaming, and closed-loop dispatch, such that Story 1 (Supplier-batch SB-00007) and Story 3 (Design-drift R33) demo end-to-end against the real Manex backend.
 
 **Architecture:** Next.js 15 App Router + Anthropic SDK (Sonnet 4.6 + Haiku 4.5) with prompt caching, typed Zod tool layer, pgvector for semantic retrieval, Supabase-JS against the remote Manex Postgres. Durable worker runs orchestrator in-process. Append-only event log feeds SSE. See [planning/specs/2026-04-18-llm-data-pipeline-design.md](../specs/2026-04-18-llm-data-pipeline-design.md) for the canonical design.
+**Companion Visualization:** [planning/visualizations/llm-orchestrator-implementation.html](../visualizations/llm-orchestrator-implementation.html)
 
 **Tech Stack:** Next.js 15, TypeScript strict, pnpm, Tailwind + shadcn/ui (UI stubs only — Lila owns the real UI), Vercel AI SDK + `@anthropic-ai/sdk`, OpenAI SDK (whisper + embeddings only), `@supabase/supabase-js`, pgvector, Zod, Vitest.
 

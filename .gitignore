@@ -8,3 +8,6 @@ data-generation/.venv/
 data-generation/__pycache__/
 data-generation/*.pyc
 .DS_Store
+
+# macOS
+.DS_Store
