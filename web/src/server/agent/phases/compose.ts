@@ -1,6 +1,7 @@
 import "server-only";
 import { z } from "zod";
 import { getAnthropicClient } from "@/lib/anthropic";
+import { getSupabaseServerClient } from "@/lib/supabase-server";
 import {
   validateEvidenceContract,
   buildRetryPrompt,
@@ -48,6 +49,52 @@ export const parseDraft8DOutput = (raw: string): Draft8D => {
   return Draft8DSchema.parse(parsed);
 };
 
+// ─── Contribution loader ──────────────────────────────────────────────────────
+
+type ContributionRow = {
+  domain: string;
+  content: string | null;
+  structured_payload: unknown;
+  source: string;
+  status: string;
+};
+
+/** Load contribution rows for this incident (fresh DB read — tools may have just written). */
+const loadContributions = async (incident_id: string): Promise<ContributionRow[]> => {
+  const supabase = getSupabaseServerClient();
+  const { data, error } = await supabase
+    .from("contribution")
+    .select("domain,content,structured_payload,source,status")
+    .eq("incident_id", incident_id);
+
+  if (error) {
+    // Non-fatal — log and return empty; Compose can still work without contributions
+    console.warn(`[compose] loadContributions failed for ${incident_id}: ${error.message}`);
+    return [];
+  }
+
+  return (data ?? []) as ContributionRow[];
+};
+
+/** Format contribution rows as a markdown block for the user message. */
+const formatContributions = (rows: ContributionRow[]): string => {
+  if (rows.length === 0) {
+    return "## Stakeholder Contributions\n\n(none available)";
+  }
+
+  const lines = rows.map((r) => {
+    const summary =
+      r.content
+        ? r.content.slice(0, 300).replace(/\n/g, " ")
+        : r.structured_payload
+          ? JSON.stringify(r.structured_payload).slice(0, 200)
+          : "(empty)";
+    return `- **${r.domain}** (${r.source}/${r.status}): ${summary}`;
+  });
+
+  return ["## Stakeholder Contributions", "", ...lines].join("\n");
+};
+
 // Error tag for evidence-cite failures
 export class EvidenceCiteUnfixableError extends Error {
   readonly isEvidenceCiteUnfixable = true;
@@ -82,6 +129,10 @@ export const runCompose = async (
     summary: tc.summary,
   }));
 
+  // Load contributions (fresh read — contribution tools ran during Classify)
+  const contributions = await loadContributions(incident.incident_id);
+  const contributionBlock = formatContributions(contributions);
+
   const userContent = [
     `Incident ID: ${incident.incident_id}`,
     `Title: ${incident.title ?? "(none)"}`,
@@ -94,6 +145,8 @@ export const runCompose = async (
     ``,
     `Tool call results (use these tool_call_ids as evidence citations):`,
     JSON.stringify(toolCallSummary, null, 2),
+    ``,
+    contributionBlock,
     ``,
     `Compose the 8D draft. Return JSON only.`,
   ].join("\n");
