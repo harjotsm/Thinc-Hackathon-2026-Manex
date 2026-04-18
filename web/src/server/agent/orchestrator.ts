@@ -1,11 +1,8 @@
 import { getSupabaseServerClient } from "@/lib/supabase-server";
 import { archetypePlaybooks } from "@/server/prompts/playbooks";
 import { classifyArchetype } from "@/server/models/router";
-import { queryDefects } from "@/server/tools/query-defects";
-import { queryClaims } from "@/server/tools/query-claims";
-import { traceBatch } from "@/server/tools/trace-batch";
-import { weeklyQualitySummary } from "@/server/tools/weekly-quality-summary";
-import { semanticSearchComplaints } from "@/server/tools/semantic-search-complaints";
+import { invokeTool } from "@/server/tools/registry";
+import "@/server/tools/_register"; // side-effect registrations
 import { validateEvidenceContract } from "@/server/agent/evidence-validator";
 import { buildProductionInitiative } from "@/server/domain-agents/production";
 import { buildSupplierInitiative } from "@/server/domain-agents/supplier";
@@ -21,26 +18,36 @@ type IncidentSeed = {
 };
 
 const makeToolArgs = (incident: IncidentSeed) => ({
+  incident_id: incident.incident_id,
   product_id: incident.primary_product_id ?? undefined,
   part_number: incident.primary_part ?? undefined,
   query: `${incident.title ?? ""} ${incident.summary ?? ""} ${incident.primary_part ?? ""}`.trim(),
 });
 
-const runTool = async (tool: string, args: ReturnType<typeof makeToolArgs>): Promise<ToolCallResult> => {
-  switch (tool) {
+// buildToolInput maps the orchestrator's flat args shape to each tool's Zod input shape
+const buildToolInput = (toolName: string, args: ReturnType<typeof makeToolArgs>): unknown => {
+  switch (toolName) {
     case "query_defects":
-      return queryDefects({ product_id: args.product_id, part_number: args.part_number });
     case "query_claims":
-      return queryClaims({ product_id: args.product_id, part_number: args.part_number });
+      return { product_id: args.product_id, part_number: args.part_number };
     case "trace_batch":
-      return traceBatch({ product_id: args.product_id });
+      return { product_id: args.product_id };
     case "weekly_quality_summary":
-      return weeklyQualitySummary({});
-    case "semantic_search_complaints":
-      return semanticSearchComplaints({ query: args.query });
+      return {};
+    case "semantic_search_complaints": // legacy playbook name — map to new
+    case "semantic_search_signals":
+      return { query_text: args.query };
     default:
-      throw new Error(`Unknown tool in playbook: ${tool}`);
+      return args;
   }
+};
+
+const runTool = async (
+  toolName: string,
+  args: ReturnType<typeof makeToolArgs>,
+): Promise<ToolCallResult> => {
+  const input = buildToolInput(toolName, args);
+  return invokeTool(toolName, input, { incident_id: args.incident_id });
 };
 
 const getPrimaryDefectCode = (toolCalls: ToolCallResult[]) => {
