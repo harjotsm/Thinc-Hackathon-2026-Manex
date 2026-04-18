@@ -8,6 +8,7 @@
     "db:migrate:remote": "tsx scripts/apply-remote-migrations.ts",
     "db:seed:demo": "tsx scripts/seed-demo.ts",
     "backfill:seed": "tsx scripts/backfill-signals.ts",
+    "lessons:embed": "tsx scripts/embed-demo-lessons.ts",
     "demo:reset": "tsx scripts/demo-reset.ts",
     "test": "vitest",
     "test:integration": "vitest run tests/integration",
