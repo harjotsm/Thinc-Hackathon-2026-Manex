@@ -1,6 +1,8 @@
 import "server-only";
 import { z } from "zod";
 import { getAnthropicClient } from "@/lib/anthropic";
+import { invokeTool } from "@/server/tools/registry";
+import "@/server/tools/_register"; // side-effect registrations
 import { logTurn, logPhaseStart, logPhaseComplete } from "@/server/agent/session-logger";
 import { publishSessionEvent } from "@/lib/event-bus";
 import { buildSysClassify } from "./prompts";
@@ -22,7 +24,19 @@ const ClassifyOutputSchema = z.object({
   confidence: z.number().min(0).max(1),
 });
 
-export type ClassifyOutput = z.infer<typeof ClassifyOutputSchema>;
+// Extended output includes lessons_retrieved (optional; downstream may ignore)
+export type ClassifyOutput = z.infer<typeof ClassifyOutputSchema> & {
+  lessons_retrieved?: LessonPrior[];
+};
+
+export type LessonPrior = {
+  lesson_id: string;
+  title?: string;
+  prompt_snippet?: string | null;
+  signature_text: string;
+  archetype?: string | null;
+  cosine?: number | null;
+};
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -30,7 +44,7 @@ export type ClassifyOutput = z.infer<typeof ClassifyOutputSchema>;
 const stripFences = (text: string): string =>
   text.replace(/^```(?:json)?\s*/i, "").replace(/\s*```\s*$/, "").trim();
 
-export const parseClassifyOutput = (raw: string): ClassifyOutput => {
+export const parseClassifyOutput = (raw: string): z.infer<typeof ClassifyOutputSchema> => {
   const cleaned = stripFences(raw);
   // Find first { and last } to be robust against trailing noise
   const start = cleaned.indexOf("{");
@@ -102,17 +116,119 @@ export const runClassify = async (
     duration_ms: Date.now() - t0,
   });
 
+  // ─── Retrieve prior lessons (5b.2) ──────────────────────────────────────────
+  // Lower min_cosine than default (0.75) because demo lesson signatures may not
+  // perfectly match the Haiku-generated signature_text.
+  let lessonsRetrieved: LessonPrior[] = [];
+  const lessonTurnIndex = 1;
+
+  try {
+    const lessonResult = await invokeTool(
+      "retrieve_lessons",
+      { query_text: parsed.signature_text, top_k: 3, min_cosine: 0.55 },
+      { session_id, incident_id: incident.incident_id },
+    );
+    lessonsRetrieved = Array.isArray(lessonResult.data)
+      ? (lessonResult.data as LessonPrior[])
+      : [];
+
+    await logTurn({
+      session_id,
+      turn_index: lessonTurnIndex,
+      phase: "classify",
+      role: "tool",
+      tool_call: {
+        tool_call_id: lessonResult.tool_call_id,
+        name: "retrieve_lessons",
+        input: { query_text: parsed.signature_text, top_k: 3, min_cosine: 0.55 },
+        output_summary: lessonResult.summary,
+      },
+      duration_ms: Date.now() - t0,
+    });
+  } catch (err) {
+    // Non-fatal — lessons are a nice-to-have for the investigate phase
+    console.warn(`[classify ${session_id}] retrieve_lessons failed:`, (err as Error).message);
+  }
+
+  // ─── Parallel contribution tool calls (5b.4) ────────────────────────────────
+  // Fire all 3 in parallel; each upserts its own contribution row.
+  const contribTools = [
+    "contrib_central_quality",
+    "contrib_plant_quality",
+    "contrib_supplier_quality",
+  ] as const;
+
+  const contribResults = await Promise.allSettled(
+    contribTools.map((name) =>
+      invokeTool(
+        name,
+        { incident_id: incident.incident_id },
+        { session_id, incident_id: incident.incident_id },
+      ),
+    ),
+  );
+
+  // Log each contribution tool result as a turn
+  for (let i = 0; i < contribTools.length; i++) {
+    const toolName = contribTools[i];
+    const outcome = contribResults[i];
+    const turnIdx = lessonTurnIndex + 1 + i; // turns 2, 3, 4
+
+    if (outcome.status === "fulfilled") {
+      await logTurn({
+        session_id,
+        turn_index: turnIdx,
+        phase: "classify",
+        role: "tool",
+        tool_call: {
+          tool_call_id: outcome.value.tool_call_id,
+          name: toolName,
+          input: { incident_id: incident.incident_id },
+          output_summary: outcome.value.summary,
+        },
+        duration_ms: Date.now() - t0,
+      }).catch((logErr) => {
+        console.warn(`[classify ${session_id}] logTurn for ${toolName} failed:`, logErr);
+      });
+    } else {
+      // Log failure turn
+      console.warn(
+        `[classify ${session_id}] ${toolName} rejected:`,
+        outcome.reason,
+      );
+      await logTurn({
+        session_id,
+        turn_index: turnIdx,
+        phase: "classify",
+        role: "tool",
+        tool_call: {
+          name: toolName,
+          input: { incident_id: incident.incident_id },
+          error: (outcome.reason as Error)?.message ?? String(outcome.reason),
+        },
+        duration_ms: Date.now() - t0,
+      }).catch((logErr) => {
+        console.warn(`[classify ${session_id}] logTurn (failure) for ${toolName} failed:`, logErr);
+      });
+    }
+  }
+
   await logPhaseComplete(session_id, "classify", {
     archetype: parsed.archetype,
     signature_text: parsed.signature_text,
+    lessons_retrieved: lessonsRetrieved.length,
   });
 
   publishSessionEvent(session_id, {
     event_seq: nextSeq(),
     event_type: "phase_complete",
-    payload: { phase: "classify", archetype: parsed.archetype },
+    payload: {
+      phase: "classify",
+      archetype: parsed.archetype,
+      lessons_retrieved: lessonsRetrieved.length,
+    },
     ts: new Date().toISOString(),
   });
 
-  return parsed;
+  return { ...parsed, lessons_retrieved: lessonsRetrieved };
 };
