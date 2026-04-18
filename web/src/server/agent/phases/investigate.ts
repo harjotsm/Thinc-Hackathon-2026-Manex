@@ -7,7 +7,7 @@ import "@/server/tools/_register"; // side-effect registrations
 import { logTurn, logPhaseStart, logPhaseComplete } from "@/server/agent/session-logger";
 import { publishSessionEvent } from "@/lib/event-bus";
 import { buildSysInvestigate } from "./prompts";
-import type { ClassifyOutput, IncidentSeed } from "./classify";
+import type { ClassifyOutput, IncidentSeed, LessonPrior } from "./classify";
 import type { ToolCallResult } from "@/server/agent/types";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -73,7 +73,9 @@ export const runInvestigate = async (
   const toolList = buildAnthropicTools();
   const allToolCalls: ToolCallResult[] = [];
 
-  const systemMsg = buildSysInvestigate();
+  // Build system prompt with optional lesson priors (5b.3)
+  const lessons: LessonPrior[] = classified.lessons_retrieved ?? [];
+  const systemMsg = buildSysInvestigate(lessons);
   const initialUserContent = [
     `Incident ID: ${incident.incident_id}`,
     `Title: ${incident.title ?? "(none)"}`,

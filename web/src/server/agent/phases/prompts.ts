@@ -1,4 +1,5 @@
 import type Anthropic from "@anthropic-ai/sdk";
+import type { LessonPrior } from "./classify";
 
 // ─── Base grounding (shared across all phases, cached) ────────────────────────
 // ~500-600 tokens. Cache breakpoint set here saves ~$0.003/request after warmup.
@@ -140,10 +141,39 @@ export const buildSysClassify = (): Anthropic.Messages.TextBlockParam[] => [
   { type: "text", text: CLASSIFY_INSTRUCTIONS },
 ];
 
-export const buildSysInvestigate = (): Anthropic.Messages.TextBlockParam[] => [
-  { type: "text", text: BASE_GROUNDING, cache_control: { type: "ephemeral" } },
-  { type: "text", text: INVESTIGATE_INSTRUCTIONS },
-];
+export const buildSysInvestigate = (
+  lessons: LessonPrior[] = [],
+): Anthropic.Messages.TextBlockParam[] => {
+  const blocks: Anthropic.Messages.TextBlockParam[] = [
+    { type: "text", text: BASE_GROUNDING, cache_control: { type: "ephemeral" } },
+    { type: "text", text: INVESTIGATE_INSTRUCTIONS },
+  ];
+
+  // 3rd cache breakpoint: lesson priors (only if present)
+  if (lessons.length > 0) {
+    const lessonBlock = [
+      `## Prior Lessons (approved)`,
+      ``,
+      ...lessons.map(
+        (l, i) =>
+          [
+            `### Lesson ${i + 1} (cosine ${l.cosine != null ? l.cosine.toFixed(2) : "n/a"})`,
+            l.prompt_snippet ?? "",
+            ``,
+            `Root cause pattern: ${l.signature_text}`,
+          ].join("\n"),
+      ),
+    ].join("\n\n");
+
+    blocks.push({
+      type: "text",
+      text: lessonBlock,
+      cache_control: { type: "ephemeral" },
+    });
+  }
+
+  return blocks;
+};
 
 export const buildSysCompose = (): Anthropic.Messages.TextBlockParam[] => [
   { type: "text", text: BASE_GROUNDING, cache_control: { type: "ephemeral" } },
