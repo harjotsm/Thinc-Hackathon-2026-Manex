@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
+import { after } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
 import { makeId } from "@/server/utils/id";
+import { runOrchestratorWithSession } from "@/server/agent/orchestrator";
 
 type Params = { params: Promise<{ incidentId: string }> };
 
@@ -110,7 +112,26 @@ export async function POST(request: NextRequest, { params }: Params) {
     );
   }
 
-  // 5. Return 202 Accepted — worker invocation wired in M4b
+  // 5. Fire the orchestrator after the response is sent.
+  //    Using Next.js `after()` from next/server — runs after response is flushed,
+  //    guaranteed by the framework even on Vercel serverless. Internally this
+  //    calls runOrchestratorWithSession which handles its own error logging.
+  const userId = createdByUserId ?? undefined;
+  after(async () => {
+    try {
+      await runOrchestratorWithSession({
+        session_id: sessionId,
+        incident_id: incidentId,
+        user_id: userId,
+      });
+    } catch (err) {
+      // runOrchestratorWithSession already called updateSessionStatus(failed) +
+      // logEvent(session_failed) internally, so we just surface the error here.
+      console.error(`[investigate ${sessionId}] orchestrator failed:`, err);
+    }
+  });
+
+  // 6. Return 202 Accepted immediately
   return NextResponse.json(
     {
       session_id: sessionId,
