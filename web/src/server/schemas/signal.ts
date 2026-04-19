@@ -51,7 +51,7 @@ export const attachmentSchema = z.object({
   url: z.string(),
   vision_out: z.string().optional().nullable(),
   transcript: z.string().optional().nullable(),
-  status: z.string().optional(),
+  status: z.enum(["pending", "transcribing", "transcribed", "failed"]).optional(),
 });
 
 // ─── Insert schema (correlator / intake writes to DB) ─────────────────────────
