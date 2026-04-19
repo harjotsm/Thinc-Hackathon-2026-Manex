@@ -32,17 +32,22 @@ function confidenceClass(confidence: number) {
 }
 
 export function PrototypeLandingScreen() {
-  const [variant, setVariant] = useState<"split" | "feed" | "compact">(() => {
-    if (typeof window === "undefined") return "split";
-    const saved = window.localStorage.getItem("landing.var");
-    if (saved === "split" || saved === "feed" || saved === "compact") return saved;
-    return "split";
-  });
+  const [variant, setVariant] = useState<"split" | "feed" | "compact">("split");
+  const [landingReady, setLandingReady] = useState(false);
   const firstName = PROTOTYPE_DATA.user.name.split(". ").at(1) ?? PROTOTYPE_DATA.user.name;
 
   useEffect(() => {
+    const saved = window.localStorage.getItem("landing.var");
+    if (saved === "split" || saved === "feed" || saved === "compact") {
+      setVariant(saved);
+    }
+    setLandingReady(true);
+  }, []);
+
+  useEffect(() => {
+    if (!landingReady) return;
     window.localStorage.setItem("landing.var", variant);
-  }, [variant]);
+  }, [landingReady, variant]);
 
   return (
     <main style={{ padding: "20px 24px" }}>
@@ -260,34 +265,36 @@ export function PrototypeLandingScreen() {
 }
 
 export function PrototypeInboxScreen() {
-  const [variant, setVariant] = useState<"table" | "cards">(() => {
-    if (typeof window === "undefined") return "table";
-    const saved = window.localStorage.getItem("inbox.var");
-    return saved === "cards" ? "cards" : "table";
-  });
+  const [variant, setVariant] = useState<"table" | "cards">("table");
   const [selected, setSelected] = useState<string[]>([]);
   const [filter, setFilter] = useState("all");
   const [hover, setHover] = useState<string | null>(null);
-  const [leftOpen, setLeftOpen] = useState(() => {
-    if (typeof window === "undefined") return true;
-    return window.localStorage.getItem("inbox.left") !== "0";
-  });
-  const [rightOpen, setRightOpen] = useState(() => {
-    if (typeof window === "undefined") return true;
-    return window.localStorage.getItem("inbox.right") !== "0";
-  });
-  const [drillFilter, setDrillFilter] = useState(() => {
-    if (typeof window === "undefined") return "";
-    const saved = window.localStorage.getItem("inbox.drillFilter") ?? "";
-    if (saved) window.localStorage.removeItem("inbox.drillFilter");
-    return saved;
-  });
+  const [leftOpen, setLeftOpen] = useState(true);
+  const [rightOpen, setRightOpen] = useState(true);
+  const [drillFilter, setDrillFilter] = useState("");
+  const [inboxReady, setInboxReady] = useState(false);
 
   useEffect(() => {
+    const savedVariant = window.localStorage.getItem("inbox.var");
+    if (savedVariant === "cards" || savedVariant === "table") {
+      setVariant(savedVariant);
+    }
+    setLeftOpen(window.localStorage.getItem("inbox.left") !== "0");
+    setRightOpen(window.localStorage.getItem("inbox.right") !== "0");
+    const savedDrillFilter = window.localStorage.getItem("inbox.drillFilter") ?? "";
+    if (savedDrillFilter) {
+      setDrillFilter(savedDrillFilter);
+      window.localStorage.removeItem("inbox.drillFilter");
+    }
+    setInboxReady(true);
+  }, []);
+
+  useEffect(() => {
+    if (!inboxReady) return;
     window.localStorage.setItem("inbox.var", variant);
     window.localStorage.setItem("inbox.left", leftOpen ? "1" : "0");
     window.localStorage.setItem("inbox.right", rightOpen ? "1" : "0");
-  }, [variant, leftOpen, rightOpen]);
+  }, [inboxReady, variant, leftOpen, rightOpen]);
 
   const rows = useMemo(() => {
     const base = drillFilter
