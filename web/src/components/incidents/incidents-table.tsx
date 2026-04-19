@@ -2,6 +2,12 @@ import Link from "next/link";
 import { ChevronRight } from "lucide-react";
 import type { IncidentListItem } from "@/server/incidents/loaders";
 import { cn } from "@/lib/utils";
+import {
+  archetypeLabel,
+  displayIncidentId,
+  isUnknownArchetype,
+  prettifyIncidentTitle,
+} from "@/lib/display";
 import { Badge } from "@/components/ui/badge";
 import {
   Table,
@@ -17,7 +23,7 @@ const ARCHETYPE_BADGE: Record<string, string> = {
   drift:    "bg-amber-100 text-amber-800 border-amber-200",
   design:   "bg-pink-100 text-pink-800 border-pink-200",
   operator: "bg-violet-100 text-violet-800 border-violet-200",
-  unknown:  "bg-zinc-100 text-zinc-700 border-zinc-200",
+  unknown:  "bg-muted text-muted-foreground border-border/60",
 };
 
 const SEVERITY_DOT: Record<string, string> = {
@@ -50,20 +56,23 @@ const confidenceClass = (conf: number): string => {
 type Props = { incidents: IncidentListItem[] };
 
 /**
- * Sortable data Table for the /incidents page. Visually distinct from the
- * Inbox themes surface (which uses richer cluster cards) — here we lean
- * dense, scannable, and table-y.
+ * Sortable data Table for the /incidents page. Rows with a product are
+ * surfaced first; unknown-product rows sink to a secondary section so the
+ * primary content doesn't read as "half-empty".
  */
 export const IncidentsTable = ({ incidents }: Props) => {
+  const withProduct = incidents.filter((i) => !!i.primary_product_id);
+  const withoutProduct = incidents.filter((i) => !i.primary_product_id);
+
   return (
     <div className="px-6 py-5">
       <div
         data-testid="incidents-table-wrapper"
-        className="overflow-hidden rounded-lg border border-border bg-card"
+        className="overflow-hidden rounded-lg bg-card ring-1 ring-border/50 shadow-[0_1px_2px_0_rgb(0_0_0/0.03)]"
       >
         <Table className="text-sm">
           <TableHeader>
-            <TableRow className="bg-muted/40 hover:bg-muted/40">
+            <TableRow className="bg-muted/40 hover:bg-muted/40 border-b-border/50">
               <TableHead className="w-8 pl-4 text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
                 Sev
               </TableHead>
@@ -89,85 +98,113 @@ export const IncidentsTable = ({ incidents }: Props) => {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {incidents.map((incident) => {
-              const archetype =
-                incident.report_archetype ?? incident.archetype ?? "unknown";
-              const archetypeBadge =
-                ARCHETYPE_BADGE[archetype] ?? ARCHETYPE_BADGE.unknown;
-              const conf =
-                incident.confidence !== null
-                  ? Math.round(incident.confidence * 100)
-                  : null;
-
-              return (
+            {renderIncidentRows(withProduct)}
+            {withoutProduct.length > 0 ? (
+              <>
                 <TableRow
-                  key={incident.incident_id}
-                  data-testid="incidents-table-row"
-                  className="relative cursor-pointer group"
+                  className="bg-muted/20 hover:bg-muted/20 border-y-border/50"
+                  aria-hidden
                 >
-                  <TableCell className="pl-4">
-                    <span
-                      aria-label={`Severity: ${incident.severity ?? "unknown"}`}
-                      className="inline-block size-2 rounded-full"
-                      style={{ background: dotColor(incident.severity) }}
-                    />
-                  </TableCell>
-                  <TableCell>
-                    <Badge
-                      className={cn(
-                        "uppercase tracking-wider text-[10px] font-semibold rounded-md px-1.5",
-                        archetypeBadge,
-                      )}
-                    >
-                      {archetype}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>
-                    <div className="text-xs font-mono text-muted-foreground leading-tight">
-                      {incident.incident_id}
-                    </div>
-                    <Link
-                      href={`/incident/${incident.incident_id}`}
-                      className="block text-sm font-semibold text-foreground leading-snug truncate max-w-[460px] outline-none focus-visible:ring-2 focus-visible:ring-ring/50 rounded-sm before:content-[''] before:absolute before:inset-0"
-                    >
-                      {incident.title ?? "Untitled incident"}
-                    </Link>
-                  </TableCell>
-                  <TableCell className="font-mono text-xs text-muted-foreground">
-                    {incident.primary_product_id ?? "—"}
-                  </TableCell>
-                  <TableCell className="text-right tabular-nums text-sm">
-                    {incident.signal_count}
-                  </TableCell>
-                  <TableCell className="text-xs text-muted-foreground">
-                    {timeAgo(incident.last_activity_at)}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    {conf !== null ? (
-                      <span
-                        className={cn(
-                          "text-xs font-semibold tabular-nums",
-                          confidenceClass(conf),
-                        )}
-                      >
-                        {conf}%
-                      </span>
-                    ) : (
-                      <span className="text-xs text-muted-foreground">—</span>
-                    )}
-                  </TableCell>
-                  <TableCell className="pr-4">
-                    <ChevronRight
-                      className="size-4 text-muted-foreground/60 group-hover:text-foreground transition-colors"
-                      aria-hidden
-                    />
+                  <TableCell
+                    colSpan={8}
+                    className="px-4 py-1.5 text-[10px] uppercase tracking-wider text-muted-foreground font-semibold"
+                  >
+                    No product assigned · {withoutProduct.length}
                   </TableCell>
                 </TableRow>
-              );
-            })}
+                {renderIncidentRows(withoutProduct)}
+              </>
+            ) : null}
           </TableBody>
         </Table>
       </div>
     </div>
   );
 };
+
+const renderIncidentRows = (incidents: IncidentListItem[]) =>
+  incidents.map((incident) => {
+    const archetype =
+      incident.report_archetype ?? incident.archetype ?? "unknown";
+    const archetypeBadge =
+      ARCHETYPE_BADGE[archetype] ?? ARCHETYPE_BADGE.unknown;
+    const conf =
+      incident.confidence !== null
+        ? Math.round(incident.confidence * 100)
+        : null;
+    const displayedTitle = incident.title
+      ? prettifyIncidentTitle(incident.title, incident.incident_id)
+      : "Untitled incident";
+
+    return (
+      <TableRow
+        key={incident.incident_id}
+        data-testid="incidents-table-row"
+        className="relative cursor-pointer group border-b-border/40"
+      >
+        <TableCell className="pl-4">
+          <span
+            aria-label={`Severity: ${incident.severity ?? "unknown"}`}
+            className="inline-block size-2 rounded-full"
+            style={{ background: dotColor(incident.severity) }}
+          />
+        </TableCell>
+        <TableCell>
+          <Badge
+            className={cn(
+              "uppercase tracking-wider text-[10px] font-semibold rounded-md px-1.5",
+              archetypeBadge,
+              isUnknownArchetype(archetype) && "font-medium",
+            )}
+          >
+            {archetypeLabel(archetype)}
+          </Badge>
+        </TableCell>
+        <TableCell>
+          <div
+            className="text-xs font-mono text-muted-foreground leading-tight"
+            title={incident.incident_id}
+          >
+            {displayIncidentId(incident.incident_id)}
+          </div>
+          <Link
+            href={`/incident/${incident.incident_id}`}
+            className="block text-sm font-semibold text-foreground leading-snug truncate max-w-[460px] outline-none focus-visible:ring-2 focus-visible:ring-ring/50 rounded-sm before:content-[''] before:absolute before:inset-0"
+          >
+            {displayedTitle}
+          </Link>
+        </TableCell>
+        <TableCell className="font-mono text-xs text-muted-foreground">
+          {incident.primary_product_id ?? (
+            <span className="text-muted-foreground/50">—</span>
+          )}
+        </TableCell>
+        <TableCell className="text-right tabular-nums text-sm">
+          {incident.signal_count}
+        </TableCell>
+        <TableCell className="text-xs text-muted-foreground">
+          {timeAgo(incident.last_activity_at)}
+        </TableCell>
+        <TableCell className="text-right">
+          {conf !== null ? (
+            <span
+              className={cn(
+                "text-xs font-semibold tabular-nums",
+                confidenceClass(conf),
+              )}
+            >
+              {conf}%
+            </span>
+          ) : (
+            <span className="text-xs text-muted-foreground/60">—</span>
+          )}
+        </TableCell>
+        <TableCell className="pr-4">
+          <ChevronRight
+            className="size-4 text-muted-foreground/60 group-hover:text-foreground transition-colors"
+            aria-hidden
+          />
+        </TableCell>
+      </TableRow>
+    );
+  });

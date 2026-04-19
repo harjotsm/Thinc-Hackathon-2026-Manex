@@ -3,7 +3,8 @@
 import { useState } from "react";
 import type { HypothesisView } from "@/server/incident/loaders";
 
-type Variant = "radial" | "tree" | "stack";
+export type GraphVariant = "radial" | "tree" | "stack";
+type Variant = GraphVariant;
 
 type Props = {
   hypotheses: HypothesisView[];
@@ -131,7 +132,7 @@ function HypNode({
 
 // ─── Variant renderers ────────────────────────────────────────────────────────
 
-function GraphRadial({
+export function GraphRadial({
   hypotheses,
   activeId,
   onSelect,
@@ -260,7 +261,7 @@ function GraphRadial({
   );
 }
 
-function GraphTree({
+export function GraphTree({
   hypotheses,
   activeId,
   onSelect,
@@ -358,7 +359,7 @@ function GraphTree({
   );
 }
 
-function GraphStack({
+export function GraphStack({
   hypotheses,
   activeId,
   onSelect,

@@ -1,10 +1,16 @@
 import Link from "next/link";
-import { ArrowLeft, Check, Circle } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import type { IncidentRow, ReportArchetype } from "@/server/incident/loaders";
 import { cn } from "@/lib/utils";
+import {
+  displayIncidentId,
+  isUnknownArchetype,
+  prettifyIncidentTitle,
+} from "@/lib/display";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { RunAiButton } from "./run-ai-button";
+import { DispatchAllButton } from "./dispatch-all-button";
 
 type Phase = {
   id: "detect" | "find" | "explain" | "lead" | "suggest" | "track";
@@ -30,7 +36,6 @@ const ARCHETYPE_BADGE: Record<string, string> = {
   drift:    "bg-amber-100 text-amber-800 border-amber-200",
   design:   "bg-pink-100 text-pink-800 border-pink-200",
   operator: "bg-violet-100 text-violet-800 border-violet-200",
-  unknown:  "bg-zinc-100 text-zinc-700 border-zinc-200",
 };
 
 const SEVERITY_BADGE: Record<string, string> = {
@@ -67,7 +72,13 @@ export function CanvasHeader({
 }: Props) {
   const sevKey = (incident.severity ?? "medium").toLowerCase();
   const sev = SEVERITY_BADGE[sevKey] ?? SEVERITY_BADGE.medium;
-  const arch = ARCHETYPE_BADGE[archetype ?? "unknown"];
+  const hideArchetype = isUnknownArchetype(archetype);
+  const arch = hideArchetype
+    ? undefined
+    : ARCHETYPE_BADGE[(archetype ?? "").toLowerCase()];
+
+  const displayTitle = prettifyIncidentTitle(incident.title, incident.incident_id);
+  const displayId = displayIncidentId(incident.incident_id);
 
   const phases: Phase[] = [
     { id: "detect", label: "Detect", state: "done" },
@@ -105,7 +116,7 @@ export function CanvasHeader({
             >
               {sevKey}
             </Badge>
-            {archetype ? (
+            {!hideArchetype && arch ? (
               <Badge
                 className={cn(
                   "uppercase tracking-wider text-[10px] font-semibold rounded-md px-1.5",
@@ -116,11 +127,16 @@ export function CanvasHeader({
               </Badge>
             ) : null}
             <h1 className="text-base font-semibold text-foreground tracking-tight">
-              {incident.title ?? incident.incident_id}
+              {displayTitle}
             </h1>
           </div>
-          <div className="mt-1 text-xs text-muted-foreground font-mono">
-            {incident.incident_id}
+          <div className="mt-1 text-xs text-muted-foreground">
+            <span
+              className="font-mono"
+              title={incident.incident_id}
+            >
+              {displayId}
+            </span>
             <span className="mx-1.5 text-muted-foreground/40">·</span>
             {signalCount} signals
             <span className="mx-1.5 text-muted-foreground/40">·</span>
@@ -132,18 +148,15 @@ export function CanvasHeader({
 
         <div className="flex items-center gap-2 shrink-0">
           <RunAiButton incidentId={incident.incident_id} />
-          <Button
-            variant="default"
-            size="sm"
-            nativeButton={false}
-            render={<Link href={`/incident/${incident.incident_id}/resolve`} />}
-          >
-            Dispatch all
-          </Button>
+          <DispatchAllButton
+            incidentId={incident.incident_id}
+            initiativeCount={initiativeCount}
+          />
         </div>
       </div>
 
-      {/* Phase pills — Tabs-styled connector for the 4-phase pipeline */}
+      {/* Phase stepper — connector dashes between pills. Unicode markers kept
+          in textContent for the tests that assert ✓ / ● / ○ per pill. */}
       <div
         data-testid="phase-pills"
         className="mt-4 flex items-center flex-wrap gap-y-1"
@@ -151,43 +164,25 @@ export function CanvasHeader({
         {phases.map((phase, i) => {
           const isDone = phase.state === "done";
           const isCurrent = phase.state === "current";
+          const marker = isDone ? "✓" : isCurrent ? "●" : "○";
           return (
             <div key={phase.id} className="flex items-center">
               <span
                 data-testid={`phase-pill-${phase.id}`}
                 className={cn(
                   "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-colors",
-                  isDone &&
-                    "bg-primary/10 text-primary",
-                  isCurrent &&
-                    "bg-primary text-primary-foreground shadow-sm",
-                  !isDone &&
-                    !isCurrent &&
-                    "bg-muted text-muted-foreground/70",
+                  isDone && "bg-primary/10 text-primary",
+                  isCurrent && "bg-primary text-primary-foreground shadow-sm",
+                  !isDone && !isCurrent && "bg-muted text-muted-foreground/70",
                 )}
               >
-                {isDone ? (
-                  <>
-                    <Check className="size-3" aria-hidden />
-                    <span>✓ {phase.label}</span>
-                  </>
-                ) : isCurrent ? (
-                  <>
-                    <span className="size-2 rounded-full bg-primary-foreground" />
-                    <span>● {phase.label}</span>
-                  </>
-                ) : (
-                  <>
-                    <Circle className="size-3 opacity-40" aria-hidden />
-                    <span>○ {phase.label}</span>
-                  </>
-                )}
+                <span aria-hidden className="font-mono text-[10px] leading-none">
+                  {marker}
+                </span>
+                <span>{phase.label}</span>
               </span>
               {i < phases.length - 1 ? (
-                <span
-                  aria-hidden
-                  className="mx-1 h-px w-3 bg-border"
-                />
+                <span aria-hidden className="mx-1 h-px w-3 bg-border" />
               ) : null}
             </div>
           );

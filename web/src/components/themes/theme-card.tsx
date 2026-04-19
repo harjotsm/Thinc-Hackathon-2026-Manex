@@ -2,19 +2,24 @@ import Link from "next/link";
 import { ChevronRight } from "lucide-react";
 import type { Theme } from "@/server/schemas/theme";
 import { cn } from "@/lib/utils";
+import {
+  archetypeLabel,
+  displayIncidentId,
+  isUnknownArchetype,
+} from "@/lib/display";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Spark } from "./spark";
 
 // Archetype → tailwind classes for the badge. Restrained palette: every tint
 // is a soft fill + readable foreground. Used via cn() so we don't fight base
-// shadcn variants.
+// shadcn variants. The "unknown" bucket renders as a muted "triage" pill.
 const ARCHETYPE_BADGE: Record<string, string> = {
   supplier: "bg-orange-100 text-orange-800 border-orange-200",
   drift:    "bg-amber-100 text-amber-800 border-amber-200",
   design:   "bg-pink-100 text-pink-800 border-pink-200",
   operator: "bg-violet-100 text-violet-800 border-violet-200",
-  unknown:  "bg-zinc-100 text-zinc-700 border-zinc-200",
+  unknown:  "bg-muted text-muted-foreground border-border/60",
 };
 
 // Sparkline tint per archetype (hex — Spark expects a CSS color string).
@@ -37,22 +42,13 @@ const SEVERITY_DOT: Record<string, string> = {
 const dotColor = (sev: string | null | undefined): string =>
   (sev && SEVERITY_DOT[sev]) ?? "#cbd5e1";
 
-// Truncate a long incident_id for chip display: "INC-9F62…A954" style.
-const shortIncidentId = (id: string): string => {
-  if (id.length <= 14) return id;
-  // Keep the prefix recognisable + last 4 chars for disambiguation.
-  return `${id.slice(0, 8)}…${id.slice(-4)}`;
-};
-
 type Props = { theme: Theme; variant?: "compact" | "expanded" };
 
 export const ThemeCard = ({ theme, variant = "compact" }: Props) => {
   const archetype = (theme.archetype ?? "unknown") as string;
   const archetypeBadge = ARCHETYPE_BADGE[archetype] ?? ARCHETYPE_BADGE.unknown;
   const sparkColor = ARCHETYPE_SPARK[archetype] ?? ARCHETYPE_SPARK.unknown;
-  const conf = Math.round(theme.confidence_avg * 100);
   const drilldownHref = `/incidents?theme=${theme.signature}`;
-  const showConfidence = conf >= 1;
 
   // Visible incident chips (cap at 3 to keep the row scannable).
   const visibleIncidents = theme.incidents.slice(0, 3);
@@ -90,22 +86,14 @@ export const ThemeCard = ({ theme, variant = "compact" }: Props) => {
                 className={cn(
                   "uppercase tracking-wider text-[10px] font-semibold rounded-md px-1.5",
                   archetypeBadge,
+                  isUnknownArchetype(archetype) && "font-medium",
                 )}
               >
-                {archetype}
+                {archetypeLabel(archetype)}
               </Badge>
               <h3 className="text-sm font-semibold text-foreground leading-snug truncate flex-1 min-w-0">
                 {theme.title}
               </h3>
-              {showConfidence ? (
-                <Badge
-                  variant="secondary"
-                  data-testid="theme-confidence"
-                  className="text-[10px] font-semibold tabular-nums shrink-0"
-                >
-                  {conf}%
-                </Badge>
-              ) : null}
             </div>
 
             <div className="mt-1 text-xs text-muted-foreground flex items-center gap-1.5 flex-wrap">
@@ -142,7 +130,7 @@ export const ThemeCard = ({ theme, variant = "compact" }: Props) => {
                         expanded mode; otherwise show truncated id chips. */}
                     {variant === "expanded"
                       ? `${i.incident_id} · ${i.signal_count} sig`
-                      : shortIncidentId(i.incident_id)}
+                      : displayIncidentId(i.incident_id)}
                   </Badge>
                 ))}
                 {overflow > 0 ? (

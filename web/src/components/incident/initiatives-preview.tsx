@@ -168,7 +168,9 @@ export function InitiativesPreview({ initiatives, incidentId, productId }: Props
           <Sparkles className="size-3" aria-hidden />
           Suggested initiatives ({initiatives.length})
         </span>
-        <span className="text-xs text-muted-foreground">approve to dispatch</span>
+        <span className="text-xs text-muted-foreground">
+          review selections · uncheck to skip
+        </span>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">

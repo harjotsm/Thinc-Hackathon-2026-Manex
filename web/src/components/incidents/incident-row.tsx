@@ -2,6 +2,12 @@ import Link from "next/link";
 import { ChevronRight } from "lucide-react";
 import type { IncidentListItem } from "@/server/incidents/loaders";
 import { cn } from "@/lib/utils";
+import {
+  archetypeLabel,
+  displayIncidentId,
+  isUnknownArchetype,
+  prettifyIncidentTitle,
+} from "@/lib/display";
 import { Badge } from "@/components/ui/badge";
 
 // ─── Color palettes ─────────────────────────────────────────────────────────
@@ -11,7 +17,8 @@ const ARCHETYPE_BADGE: Record<string, string> = {
   drift:    "bg-amber-100 text-amber-800 border-amber-200",
   design:   "bg-pink-100 text-pink-800 border-pink-200",
   operator: "bg-violet-100 text-violet-800 border-violet-200",
-  unknown:  "bg-zinc-100 text-zinc-700 border-zinc-200",
+  // Neutral tone for untriaged incidents — rendered as "triage", not "unknown"
+  unknown:  "bg-muted text-muted-foreground border-border",
 };
 
 // Severity dot color — kept as inline style so the test assertion
@@ -74,17 +81,22 @@ export const IncidentRow = ({ incident }: Props) => {
           className={cn(
             "uppercase tracking-wider text-[10px] font-semibold rounded-md px-1.5 shrink-0 w-[72px] justify-center",
             archetypeBadge,
+            isUnknownArchetype(archetype) && "font-medium",
           )}
         >
-          {archetype}
+          {archetypeLabel(archetype)}
         </Badge>
 
         <div className="flex-1 min-w-0">
           <div className="text-sm font-semibold text-foreground truncate">
-            {incident.title ?? "Untitled incident"}
+            {incident.title
+              ? prettifyIncidentTitle(incident.title, incident.incident_id)
+              : "Untitled incident"}
           </div>
           <div className="mt-0.5 text-xs text-muted-foreground">
-            <span className="font-mono">{incident.incident_id}</span>
+            <span className="font-mono" title={incident.incident_id}>
+              {displayIncidentId(incident.incident_id)}
+            </span>
             {incident.primary_product_id ? (
               <>
                 {" · "}

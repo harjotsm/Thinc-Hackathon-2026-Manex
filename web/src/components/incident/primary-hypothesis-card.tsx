@@ -1,13 +1,23 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { ChevronDown, ChevronUp, Sparkles, X } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronUp,
+  Database,
+  FileText,
+  Radio,
+  Sparkles,
+  Terminal,
+  X,
+} from "lucide-react";
 import type { HypothesisView } from "@/server/incident/loaders";
 import type { SignalRow } from "@/server/incident/loaders";
 import { cn } from "@/lib/utils";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { shortId } from "@/lib/display";
 
 type Props = {
   hypothesis: HypothesisView;
@@ -21,6 +31,60 @@ type ConfidenceTier = {
   textClass: string;
   trackClass: string;
   label: string;
+};
+
+type EvidenceKind = {
+  icon: typeof Radio;
+  label: string;
+  description: string;
+  bgClass: string;
+  iconClass: string;
+};
+
+const classifyEvidence = (id: string, isSignal: boolean): EvidenceKind => {
+  if (isSignal) {
+    return {
+      icon: Radio,
+      label: "signal",
+      description: "(no payload)",
+      bgClass: "bg-primary/10",
+      iconClass: "text-primary",
+    };
+  }
+  if (id.startsWith("TC-")) {
+    return {
+      icon: Terminal,
+      label: "tool call",
+      description: "Orchestrator trace · open tool call to inspect",
+      bgClass: "bg-violet-100",
+      iconClass: "text-violet-700",
+    };
+  }
+  if (id.startsWith("SIG-")) {
+    return {
+      icon: Radio,
+      label: "signal",
+      description: "Signal not in local cache",
+      bgClass: "bg-primary/10",
+      iconClass: "text-primary",
+    };
+  }
+  if (id.startsWith("DB-")) {
+    return {
+      icon: Database,
+      label: "database row",
+      description: "Referenced record",
+      bgClass: "bg-emerald-100",
+      iconClass: "text-emerald-700",
+    };
+  }
+  return {
+    icon: FileText,
+    label: "reference",
+    description: "External reference",
+    bgClass: "bg-muted",
+    iconClass: "text-muted-foreground",
+  };
 };
 
 const confidenceTier = (conf: number): ConfidenceTier => {
@@ -214,6 +278,8 @@ export function PrimaryHypothesisCard({
               {hypothesis.supportingEvidence.slice(0, 8).map((evId, i) => {
                 const sig = signalById.get(evId);
                 const isSignal = !!sig;
+                const kind = classifyEvidence(evId, isSignal);
+                const KindIcon = kind.icon;
                 return (
                   <li key={evId}>
                     <button
@@ -221,7 +287,7 @@ export function PrimaryHypothesisCard({
                       disabled={!isSignal}
                       onClick={() => isSignal && setDrawerSignal(evId)}
                       className={cn(
-                        "w-full text-left px-2.5 py-2 rounded-md border border-border bg-muted/30 flex items-center gap-2.5 text-xs text-foreground/80",
+                        "w-full text-left px-2.5 py-2 rounded-md border border-border/70 bg-muted/30 flex items-center gap-2.5 text-xs text-foreground/80",
                         isSignal && "hover:bg-muted/60 hover:border-primary/30 cursor-pointer transition-colors",
                         !isSignal && "cursor-default",
                       )}
@@ -229,26 +295,31 @@ export function PrimaryHypothesisCard({
                       <span className="font-mono font-semibold text-primary text-[10px] w-5 text-right shrink-0">
                         {i + 1}.
                       </span>
+                      <span
+                        className={cn(
+                          "inline-flex items-center justify-center size-5 rounded shrink-0",
+                          kind.bgClass,
+                        )}
+                        aria-hidden
+                        title={kind.label}
+                      >
+                        <KindIcon className={cn("size-3", kind.iconClass)} />
+                      </span>
                       <Badge
                         variant="outline"
                         className="font-mono text-[10px] font-medium px-1.5 py-0 h-5 shrink-0"
+                        title={evId}
                       >
-                        {evId}
+                        {shortId(evId)}
                       </Badge>
-                      {sig ? (
-                        <>
-                          <span className="text-muted-foreground/40">·</span>
-                          <span className="text-muted-foreground text-[11px] shrink-0">
-                            {sig.source_system ?? sig.signal_type ?? "—"}
-                          </span>
-                          <span className="text-muted-foreground/40">·</span>
-                          <span className="flex-1 truncate">
-                            {sig.text_payload ?? "(no payload)"}
-                          </span>
-                        </>
-                      ) : (
-                        <span className="text-muted-foreground/60">(reference)</span>
-                      )}
+                      <span className="text-muted-foreground/40">·</span>
+                      <span className="text-muted-foreground text-[11px] shrink-0 capitalize">
+                        {sig?.source_system ?? sig?.signal_type ?? kind.label}
+                      </span>
+                      <span className="text-muted-foreground/40">·</span>
+                      <span className="flex-1 truncate">
+                        {sig?.text_payload ?? kind.description}
+                      </span>
                     </button>
                   </li>
                 );

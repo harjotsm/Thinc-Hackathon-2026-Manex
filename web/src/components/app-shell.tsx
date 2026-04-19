@@ -11,7 +11,6 @@ import {
 } from "react";
 import {
   AlertTriangle,
-  BarChart3,
   BookOpen,
   Factory,
   Inbox,
@@ -128,18 +127,8 @@ const navItems: NavItem[] = [
     section: "workspace",
     icon: <BookOpen size={ICON_SIZE} />,
   },
-  {
-    href: "/leadership",
-    label: "Leadership",
-    section: "views",
-    icon: <BarChart3 size={ICON_SIZE} />,
-  },
-  {
-    href: "/floor",
-    label: "Floor",
-    section: "views",
-    icon: <Factory size={ICON_SIZE} />,
-  },
+  // Leadership / Floor live in the top-right lens switcher only — duplicating
+  // them in the sidebar makes the lens concept feel redundant.
   {
     href: "/connectors",
     label: "Connectors",
@@ -352,19 +341,14 @@ export function AppShell({ children }: { children: ReactNode }) {
             className="shrink-0 object-contain"
           />
           {!collapsed && (
-            <>
-              <div className="flex-1 min-w-0">
-                <div className="text-[15px] font-semibold tracking-tight leading-tight">
-                  Resolve
-                </div>
-                <div className="text-[9px] uppercase tracking-widest text-muted-foreground font-semibold leading-tight">
-                  by Manex
-                </div>
+            <div className="flex-1 min-w-0">
+              <div className="text-[15px] font-semibold tracking-tight leading-tight">
+                Resolve
               </div>
-              <span className="text-[10px] uppercase tracking-widest text-muted-foreground font-medium">
-                v0.1
-              </span>
-            </>
+              <div className="text-[9px] uppercase tracking-widest text-muted-foreground font-semibold leading-tight">
+                by Manex
+              </div>
+            </div>
           )}
         </Link>
 
@@ -380,21 +364,20 @@ export function AppShell({ children }: { children: ReactNode }) {
         </button>
 
         <nav className="flex flex-col gap-0.5 w-full">
-          {(["workspace", "views", "setup"] as const).map((section) => (
+          {(["workspace", "setup"] as const).map((section) => {
+            const sectionItems = resolvedNavItems.filter(
+              (item) => item.section === section,
+            );
+            if (sectionItems.length === 0) return null;
+            return (
             <div key={section} className={cn("flex flex-col gap-0.5", collapsed && "items-center")}>
               {!collapsed && (
                 <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold px-2.5 pt-3.5 pb-1">
-                  {section === "workspace"
-                    ? "Workspace"
-                    : section === "views"
-                      ? "Views"
-                      : "Setup"}
+                  {section === "workspace" ? "Workspace" : "Setup"}
                 </div>
               )}
               {collapsed && <div className="h-px w-6 bg-border my-2" />}
-              {resolvedNavItems
-                .filter((item) => item.section === section)
-                .map((item) => {
+              {sectionItems.map((item) => {
                   const active = isActive(pathname, item.href);
                   return (
                     <Link
@@ -438,7 +421,8 @@ export function AppShell({ children }: { children: ReactNode }) {
                   );
                 })}
             </div>
-          ))}
+            );
+          })}
         </nav>
 
         <div className="mt-auto pt-3 border-t border-border w-full">
@@ -496,14 +480,20 @@ export function AppShell({ children }: { children: ReactNode }) {
             aria-label="Current lens"
             className="inline-flex items-center gap-0.5 p-0.5 bg-muted/60 border border-border rounded-md"
           >
-            {(["Engineer", "Floor", "Leadership"] as const).map((lens) => {
-              const active = meta.lens === lens;
+            {(
+              [
+                { name: "Engineer", href: "/inbox" },
+                { name: "Floor", href: "/floor" },
+                { name: "Leadership", href: "/leadership" },
+              ] as const
+            ).map(({ name, href }) => {
+              const active = meta.lens === name;
               const Icon =
-                lens === "Engineer" ? Wrench : lens === "Floor" ? Factory : Layers;
+                name === "Engineer" ? Wrench : name === "Floor" ? Factory : Layers;
               return (
-                <button
-                  key={lens}
-                  type="button"
+                <Link
+                  key={name}
+                  href={href}
                   role="tab"
                   aria-selected={active}
                   className={cn(
@@ -514,8 +504,8 @@ export function AppShell({ children }: { children: ReactNode }) {
                   )}
                 >
                   <Icon size={12} />
-                  <span className="hidden xl:inline">{lens}</span>
-                </button>
+                  <span className="hidden xl:inline">{name}</span>
+                </Link>
               );
             })}
           </div>

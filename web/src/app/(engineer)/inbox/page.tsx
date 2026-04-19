@@ -42,7 +42,7 @@ export default async function InboxPage({
             Inbox
           </h1>
           <p className="text-xs text-muted-foreground">
-            {data.themes.length} theme{data.themes.length === 1 ? "" : "s"} ·
+            {data.themes.length} cluster{data.themes.length === 1 ? "" : "s"} ·
             window {data.window_days}d · last sync{" "}
             {new Date(data.generated_at).toLocaleTimeString("de-DE", {
               hour: "2-digit",
