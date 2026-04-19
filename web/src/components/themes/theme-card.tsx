@@ -157,15 +157,17 @@ export const ThemeCard = ({ theme, variant = "compact" }: Props) => {
             ) : null}
           </div>
 
-          {/* Right: 7-day sparkline */}
-          <div className="hidden sm:block w-[100px] shrink-0 pt-1">
-            <Spark
-              data={theme.signal_buckets_7d}
-              color={sparkColor}
-              fill
-              height={22}
-            />
-          </div>
+          {/* Right: 7-day sparkline — hidden when all-zero (flat line gives no signal) */}
+          {theme.signal_buckets_7d.some((v) => v > 0) ? (
+            <div className="hidden sm:block w-[140px] shrink-0 pt-1">
+              <Spark
+                data={theme.signal_buckets_7d}
+                color={sparkColor}
+                fill
+                height={32}
+              />
+            </div>
+          ) : null}
 
           {/* Drilldown affordance */}
           <ChevronRight

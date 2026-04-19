@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { X } from "lucide-react";
 import { getInitiatives } from "@/server/initiatives/loaders";
-import { InitiativesKanban } from "@/components/initiatives/initiatives-kanban";
+import { InitiativesKanban, RefreshButton } from "@/components/initiatives/initiatives-kanban";
 
 export const revalidate = 30;
 
@@ -21,7 +21,7 @@ export default async function InitiativesPage({
   return (
     <div className="min-h-screen">
       <header className="bg-card border-b border-border">
-        <div className="px-6 py-4 flex items-baseline gap-3">
+        <div className="px-6 py-4 flex items-center gap-3">
           <h1 className="text-lg font-semibold tracking-tight text-foreground">
             Initiatives
           </h1>
@@ -38,6 +38,8 @@ export default async function InitiativesPage({
               Clear filter
             </Link>
           )}
+          <div className="flex-1" />
+          <RefreshButton />
         </div>
       </header>
       <InitiativesKanban initiatives={initiatives} />

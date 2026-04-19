@@ -44,7 +44,7 @@ export default async function InboxPage({
           <p className="text-xs text-muted-foreground">
             {data.themes.length} theme{data.themes.length === 1 ? "" : "s"} ·
             window {data.window_days}d · last sync{" "}
-            {new Date(data.generated_at).toLocaleTimeString([], {
+            {new Date(data.generated_at).toLocaleTimeString("de-DE", {
               hour: "2-digit",
               minute: "2-digit",
             })}

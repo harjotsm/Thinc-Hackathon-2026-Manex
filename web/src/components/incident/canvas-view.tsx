@@ -133,13 +133,21 @@ export function CanvasView({
         <div className="pt-4 border-t border-border flex items-center gap-3 flex-wrap">
           <span className="text-[11px] text-muted-foreground">
             {composedAt
-              ? `AI report v${composedAt ? "current" : "?"} · composed ${new Date(composedAt).toLocaleString()}`
+              ? `AI report · composed ${new Date(composedAt).toLocaleString("de-DE", {
+                  year: "numeric",
+                  month: "2-digit",
+                  day: "2-digit",
+                  hour: "2-digit",
+                  minute: "2-digit",
+                  second: "2-digit",
+                })}`
               : "AI report not yet composed"}
           </span>
           <div className="flex-1" />
           <Button
             variant="ghost"
             size="sm"
+            nativeButton={false}
             render={<Link href={`/incident/${incident.incident_id}/8d`} />}
           >
             <FileText className="size-3.5" />

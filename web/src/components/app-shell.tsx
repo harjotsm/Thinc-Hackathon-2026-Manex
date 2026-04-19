@@ -484,8 +484,8 @@ export function AppShell({ children }: { children: ReactNode }) {
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground pointer-events-none" />
             <Input
               type="search"
-              placeholder="Search incidents, lessons, signals…"
-              className="h-8 w-72 pl-8 pr-12 bg-muted/40 border-border text-xs"
+              placeholder="Search…"
+              className="h-8 w-48 xl:w-72 pl-8 pr-12 bg-muted/40 border-border text-xs"
             />
             <kbd className="absolute right-2 top-1/2 -translate-y-1/2 rounded border border-border bg-card px-1.5 py-0.5 text-[10px] font-mono font-medium text-muted-foreground">
               ⌘K

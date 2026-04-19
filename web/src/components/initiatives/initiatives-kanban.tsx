@@ -103,7 +103,7 @@ function ownerInitials(id: string | null | undefined): string {
 
 // ─── Refresh island (client) ──────────────────────────────────────────────────
 
-function RefreshButton() {
+export function RefreshButton() {
   const router = useRouter();
   return (
     <Button
@@ -219,15 +219,12 @@ export function InitiativesKanban({ initiatives }: Props) {
 
   return (
     <div data-testid="initiatives-kanban">
-      <div className="flex items-center justify-end px-6 pt-3 pb-1">
-        <RefreshButton />
-      </div>
-
       <div className="px-4 pb-6 overflow-x-auto">
         <div
           className="grid gap-3"
           style={{
-            gridTemplateColumns: `repeat(${COLUMNS.length}, minmax(230px, 1fr))`,
+            gridTemplateColumns: `repeat(${COLUMNS.length}, minmax(200px, 1fr))`,
+            minWidth: `${COLUMNS.length * 210}px`,
           }}
         >
           {COLUMNS.map((col) => {

@@ -64,7 +64,9 @@ export const IncidentsTable = ({ incidents }: Props) => {
         <Table className="text-sm">
           <TableHeader>
             <TableRow className="bg-muted/40 hover:bg-muted/40">
-              <TableHead className="w-8 pl-4" />
+              <TableHead className="w-8 pl-4 text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
+                Sev
+              </TableHead>
               <TableHead className="w-[88px] text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
                 Archetype
               </TableHead>

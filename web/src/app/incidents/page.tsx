@@ -34,7 +34,7 @@ export default async function IncidentsPage({
   });
 
   const themeParam = typeof sp.theme === "string" ? sp.theme : null;
-  const lastSync = new Date().toLocaleTimeString([], {
+  const lastSync = new Date().toLocaleTimeString("de-DE", {
     hour: "2-digit",
     minute: "2-digit",
   });

@@ -15,7 +15,7 @@ export const Spark = ({ data, color = "var(--accent, #1e40af)", fill = false, he
       {fill ? (
         <polygon fill={color} opacity="0.18" points={`0,100 ${pts} 100,100`} />
       ) : null}
-      <polyline fill="none" stroke={color} strokeWidth={2} points={pts} />
+      <polyline fill="none" stroke={color} strokeWidth={2.5} points={pts} />
     </svg>
   );
 };

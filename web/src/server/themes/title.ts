@@ -15,10 +15,16 @@ export const clearTitleCache = () => cache.clear();
 const cacheKey = (i: ThemeTitleInput) =>
   `${i.archetype}|${i.dominantEntity ?? "—"}|${i.signalTexts.slice(0, 3).join("⋄").slice(0, 240)}`;
 
-const template = (archetype: string, dominantEntity: string | null): string => {
-  const archLabel = archetype.charAt(0).toUpperCase() + archetype.slice(1);
-  return dominantEntity ? `${archLabel} · ${dominantEntity}` : "Untriaged";
-};
+const archLabel = (archetype: string): string =>
+  archetype.charAt(0).toUpperCase() + archetype.slice(1);
+
+const template = (archetype: string, dominantEntity: string | null): string =>
+  dominantEntity
+    ? `${archLabel(archetype)} · ${dominantEntity}`
+    : archLabel(archetype);
+
+const fallbackTitle = (archetype: string): string =>
+  archetype !== "unknown" ? archLabel(archetype) : "Untriaged";
 
 const LLM_TIMEOUT_MS = 2000;
 
@@ -66,7 +72,7 @@ export const themeTitle = async (input: ThemeTitleInput): Promise<ThemeTitleResu
   const llm = await llmTitle(input.signalTexts, input.dominantEntity);
   const result: ThemeTitleResult = llm
     ? { title: llm, source: "llm" }
-    : { title: "Untriaged", source: "fallback" };
+    : { title: fallbackTitle(input.archetype), source: "fallback" };
   cache.set(key, result);
   return result;
 };

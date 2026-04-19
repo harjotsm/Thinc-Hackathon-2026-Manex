@@ -281,6 +281,7 @@ export function InitiativesPreview({ initiatives, incidentId, productId }: Props
           <Button
             variant="ghost"
             size="sm"
+            nativeButton={false}
             render={
               <Link href={`/initiatives?incident=${encodeURIComponent(incidentId)}`} />
             }
@@ -292,6 +293,7 @@ export function InitiativesPreview({ initiatives, incidentId, productId }: Props
           <Button
             variant="ghost"
             size="sm"
+            nativeButton={false}
             render={
               <Link href={`/initiatives?incident=${encodeURIComponent(incidentId)}`} />
             }

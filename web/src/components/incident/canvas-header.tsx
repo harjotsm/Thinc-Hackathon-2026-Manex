@@ -87,6 +87,7 @@ export function CanvasHeader({
         <Button
           variant="ghost"
           size="sm"
+          nativeButton={false}
           render={<Link href="/inbox" />}
           className="shrink-0 mt-0.5"
         >
@@ -134,6 +135,7 @@ export function CanvasHeader({
           <Button
             variant="default"
             size="sm"
+            nativeButton={false}
             render={<Link href={`/incident/${incident.incident_id}/resolve`} />}
           >
             Dispatch all
