@@ -176,10 +176,31 @@ export function GraphRadial({
         preserveAspectRatio="none"
         viewBox="0 0 100 100"
       >
-        <line x1="38" y1="30" x2="50" y2="50" stroke="rgba(99,159,196,0.35)" strokeWidth="0.25" />
-        <line x1="38" y1="70" x2="50" y2="50" stroke="rgba(99,159,196,0.35)" strokeWidth="0.25" />
-        <line x1="62" y1="30" x2="50" y2="50" stroke="rgba(99,159,196,0.35)" strokeWidth="0.25" />
-        <line x1="62" y1="70" x2="50" y2="50" stroke="rgba(99,159,196,0.35)" strokeWidth="0.25" />
+        {/* One stroke per hypothesis, anchored at the same vertical position
+            the CSS grid places the card at — keeps line count == hypothesis
+            count and lets the line actually point at its node. */}
+        {left.map((h, i) => (
+          <line
+            key={`l-${h.id}`}
+            x1={28}
+            y1={((i + 0.5) / rows) * 100}
+            x2={50}
+            y2={50}
+            stroke="rgba(99,159,196,0.35)"
+            strokeWidth="0.25"
+          />
+        ))}
+        {right.map((h, i) => (
+          <line
+            key={`r-${h.id}`}
+            x1={72}
+            y1={((i + 0.5) / rows) * 100}
+            x2={50}
+            y2={50}
+            stroke="rgba(99,159,196,0.35)"
+            strokeWidth="0.25"
+          />
+        ))}
       </svg>
 
       {left.map((h, i) => (
