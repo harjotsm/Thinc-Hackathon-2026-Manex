@@ -8,6 +8,22 @@ export type TranscriptionResult = {
   model: string;
 };
 
+const mimeTypeFromFilename = (filenameHint: string): string | null => {
+  const extension = filenameHint.split(".").pop()?.toLowerCase();
+  switch (extension) {
+    case "mp4":
+      return "audio/mp4";
+    case "ogg":
+      return "audio/ogg";
+    case "wav":
+      return "audio/wav";
+    case "webm":
+      return "audio/webm";
+    default:
+      return null;
+  }
+};
+
 export const transcribeAudio = async (
   audio: Buffer | Blob,
   filenameHint: string,
@@ -21,9 +37,13 @@ export const transcribeAudio = async (
   // OpenAI SDK accepts a Web File-like object with a name and type.
   let file: File;
   if (audio instanceof Buffer) {
-    file = new File([new Uint8Array(audio)], filenameHint, { type: "audio/webm" });
+    file = new File([new Uint8Array(audio)], filenameHint, {
+      type: mimeTypeFromFilename(filenameHint) ?? "application/octet-stream",
+    });
   } else if (audio instanceof Blob && !(audio as unknown as { name?: string }).name) {
-    file = new File([audio], filenameHint, { type: (audio as Blob).type || "audio/webm" });
+    file = new File([audio], filenameHint, {
+      type: (audio as Blob).type || mimeTypeFromFilename(filenameHint) || "application/octet-stream",
+    });
   } else {
     file = audio as unknown as File;
   }

@@ -4,17 +4,19 @@ import { render, screen, cleanup, fireEvent, waitFor, act } from "@testing-libra
 import { VoiceRecorder } from "../voice-recorder";
 
 // --- MediaRecorder stub ---
+let mockRecorderMimeType = "audio/webm";
+
 class MockMediaRecorder {
   state = "inactive";
   ondataavailable: ((e: { data: Blob }) => void) | null = null;
   onstop: (() => void) | null = null;
-  mimeType = "audio/webm";
+  mimeType = mockRecorderMimeType;
   constructor(public stream: MediaStream, public opts?: MediaRecorderOptions) {}
   start(_timeslice?: number) { this.state = "recording"; }
   stop() {
     this.state = "inactive";
     setTimeout(() => {
-      this.ondataavailable?.({ data: new Blob(["fake"], { type: "audio/webm" }) });
+      this.ondataavailable?.({ data: new Blob(["fake"], { type: this.mimeType }) });
       this.onstop?.();
     }, 0);
   }
@@ -35,6 +37,7 @@ afterEach(() => {
 });
 
 beforeEach(() => {
+  mockRecorderMimeType = "audio/webm";
   // Reset the getUserMedia mock to default success before each test
   (navigator.mediaDevices.getUserMedia as ReturnType<typeof vi.fn>).mockResolvedValue({
     getTracks: () => [{ stop: vi.fn() }],
@@ -86,6 +89,38 @@ describe("VoiceRecorder", () => {
     expect(body.get("actor_user_id")).toBe("user_042");
     expect(body.get("language")).toBe("de");
     expect(body.get("audio")).toBeTruthy();
+  });
+
+  it.each([
+    { mimeType: "audio/mp4", expectedExtension: "mp4" },
+    { mimeType: "audio/ogg", expectedExtension: "ogg" },
+    { mimeType: "audio/wav", expectedExtension: "wav" },
+    { mimeType: "audio/webm", expectedExtension: "webm" },
+    { mimeType: "audio/x-custom", expectedExtension: "bin" },
+  ])("uses .$expectedExtension filename extension for $mimeType uploads", async ({ mimeType, expectedExtension }) => {
+    mockRecorderMimeType = mimeType;
+    vi.spyOn(Date, "now").mockReturnValue(1_700_000_000_000);
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        signal: { signal_id: "SIG-001" },
+        transcript: { text: "ok" },
+        correlator: { incidentIds: [] },
+      }),
+    } as Response);
+
+    render(<VoiceRecorder />);
+
+    await act(async () => { fireEvent.click(screen.getByText(/Voice note/)); });
+    await waitFor(() => expect(screen.queryByText(/Stop/)).toBeTruthy());
+    await act(async () => { fireEvent.click(screen.getByText(/Stop/)); });
+    await waitFor(() => expect(fetchSpy).toHaveBeenCalled());
+
+    const [, opts] = fetchSpy.mock.calls[0] as [string, RequestInit];
+    const body = opts.body as FormData;
+    const uploadedAudio = body.get("audio");
+    expect(uploadedAudio).toBeTruthy();
+    expect((uploadedAudio as File).name).toBe(`voice-1700000000000.${expectedExtension}`);
   });
 
   it("200 response transitions to success state and shows transcript snippet", async () => {

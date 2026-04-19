@@ -12,6 +12,15 @@ type Props = {
   onError?: (msg: string) => void;
 };
 
+const getAudioExtensionFromMime = (mimeType: string): string => {
+  const normalized = mimeType.toLowerCase();
+  if (normalized.includes("mp4")) return "mp4";
+  if (normalized.includes("ogg")) return "ogg";
+  if (normalized.includes("wav")) return "wav";
+  if (normalized.includes("webm")) return "webm";
+  return "bin";
+};
+
 export const VoiceRecorder = ({
   sourceSystem = "voice_floor",
   actorUserId,
@@ -79,7 +88,8 @@ export const VoiceRecorder = ({
     }
     setState("uploading");
     const fd = new FormData();
-    fd.append("audio", blob, `voice-${Date.now()}.webm`);
+    const extension = getAudioExtensionFromMime(blob.type || rec.mimeType || "");
+    fd.append("audio", blob, `voice-${Date.now()}.${extension}`);
     fd.append("source_system", sourceSystem);
     if (actorUserId) fd.append("actor_user_id", actorUserId);
     if (language) fd.append("language", language);

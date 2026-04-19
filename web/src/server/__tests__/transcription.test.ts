@@ -57,6 +57,33 @@ describe("transcribeAudio", () => {
     expect(result.model).toBe("whisper-1");
   });
 
+  it("forwards Blob MIME type to OpenAI file payload", async () => {
+    mockCreate.mockResolvedValue({ text: "ok", language: "en", duration: 1.0 });
+
+    const { transcribeAudio } = await import("../transcription");
+    const blob = new Blob(["fake-audio"], { type: "audio/ogg" });
+    await transcribeAudio(blob, "clip.ogg");
+
+    expect(mockCreate).toHaveBeenCalledOnce();
+    const callArg = mockCreate.mock.calls[0][0];
+    const sentFile = callArg.file as File;
+    expect(sentFile.name).toBe("clip.ogg");
+    expect(sentFile.type).toBe("audio/ogg");
+  });
+
+  it("derives MIME type from filename when Blob type is missing", async () => {
+    mockCreate.mockResolvedValue({ text: "ok", language: "en", duration: 1.0 });
+
+    const { transcribeAudio } = await import("../transcription");
+    const blob = new Blob(["fake-audio"]);
+    await transcribeAudio(blob, "clip.wav");
+
+    expect(mockCreate).toHaveBeenCalledOnce();
+    const callArg = mockCreate.mock.calls[0][0];
+    const sentFile = callArg.file as File;
+    expect(sentFile.type).toBe("audio/wav");
+  });
+
   it("passes language parameter through to OpenAI when provided", async () => {
     mockCreate.mockResolvedValue({ text: "Prüfung abgeschlossen.", language: "de", duration: 1.0 });
 
