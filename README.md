@@ -23,7 +23,7 @@ Built by **Team De.Constructors** · Thinc! × Manex AI Hackathon · April 2026
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-pgvector-336791?style=flat-square&logo=postgresql&logoColor=white)](https://github.com/pgvector/pgvector)
 [![shadcn/ui](https://img.shields.io/badge/shadcn/ui-latest-000?style=flat-square)](https://ui.shadcn.com)
 
-### 🚀 [**Live Demo →**](https://de-constructors-j5hm7scrk-joschas-projects-62a3c34d.vercel.app)
+### 🚀 [**Live Demo →**](https://de-constructors-r5j8len5k-joschas-projects-62a3c34d.vercel.app)
 
 [**Architecture**](#-architecture) · [**The moat**](#-the-moat) · [**Quick start**](#-quick-start) · [**Team**](#-team)
 
