@@ -1,0 +1,1399 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Resolve — Pitch</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300;9..144,400;9..144,500;9..144,600&family=DM+Sans:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  /* =========================================================
+     RESOLVE — pitch deck
+     Template DNA (from source PPTX):
+       navy     #160042   primary ink / dark panels
+       electric #1032CF   CTA / accent
+       sky      #639FC4   secondary accent
+       muted-1  #8A85A3   lavender mute
+       muted-2  #5A5478   darker mute
+       paper    #F5F8FB   light slide bg
+       tint     #E1EEF4   pale sky wash
+       off      #E8E6EF   very pale lavender
+     Type: DM Sans (sans) · Fraunces (display serif) · JetBrains Mono (stamp)
+     Voice-capture pivot layered onto Resolve product frame.
+  ============================================================ */
+  :root{
+    --navy:#160042;
+    --navy-2:#2A1F5A;
+    --electric:#1032CF;
+    --electric-2:#1F42DF;
+    --sky:#639FC4;
+    --sky-2:#7CB4D9;
+    --tint:#E1EEF4;
+    --paper:#F5F8FB;
+    --off:#E8E6EF;
+    --mute:#8A85A3;
+    --mute-2:#5A5478;
+    --line:#D9D6E3;
+    --line-2:#B9B3C8;
+    --ink:#160042;
+    --white:#FFFFFF;
+
+    --serif:"Fraunces","Source Serif 4",Georgia,serif;
+    --sans:"DM Sans",-apple-system,"Helvetica Neue",Arial,sans-serif;
+    --mono:"JetBrains Mono","Courier New",ui-monospace,monospace;
+  }
+  html,body{margin:0;background:#000;color:var(--ink);font-family:var(--sans);-webkit-font-smoothing:antialiased}
+
+  deck-stage > section{
+    width:1920px;height:1080px;
+    background:var(--paper);
+    color:var(--ink);
+    position:relative;overflow:hidden;
+    font-family:var(--sans);font-size:22px;letter-spacing:-0.005em;
+  }
+
+  /* ---------- shared atoms ---------- */
+  .stamp{
+    position:absolute;top:52px;left:72px;
+    display:flex;align-items:center;gap:16px;
+    font-family:var(--mono);font-size:12px;color:var(--mute);
+    letter-spacing:0.22em;text-transform:uppercase;
+  }
+  .stamp .mark{
+    width:22px;height:22px;transform:rotate(45deg);
+    background:var(--electric);position:relative;
+  }
+  .stamp .mark::after{
+    content:"";position:absolute;inset:5px;background:var(--paper);
+  }
+  .stamp .mark::before{
+    content:"";position:absolute;inset:8px;background:var(--electric);
+  }
+  .stamp .sep{width:1px;height:12px;background:var(--line-2)}
+  .stamp b{color:var(--ink);font-weight:500;letter-spacing:0.22em}
+  .stamp .mx-logo{height:20px;width:auto;display:block;margin-right:4px}
+  .stamp em{font-family:var(--serif);font-style:italic;font-weight:400;color:var(--electric);font-size:14px;letter-spacing:0;text-transform:none;margin-left:2px}
+  .stamp .hack-chip{
+    font-family:var(--mono);font-size:10px;letter-spacing:0.22em;color:var(--mute);
+    border:1px solid var(--line-2);padding:3px 9px 3px 9px;border-radius:999px;
+    display:inline-flex;align-items:center;gap:2px;line-height:1;
+  }
+  .stamp .hack-chip b{color:var(--electric);font-weight:600;letter-spacing:0.18em;font-size:10px}
+  .s-ask .stamp .hack-chip{border-color:rgba(255,255,255,0.22);color:rgba(255,255,255,0.7)}
+  .s-ask .stamp .hack-chip b{color:var(--sky-2)}
+
+  .pager{
+    position:absolute;bottom:40px;right:72px;
+    font-family:var(--mono);font-size:11px;color:var(--mute);
+    letter-spacing:0.24em;
+  }
+  .footline{
+    position:absolute;bottom:40px;left:72px;
+    font-family:var(--mono);font-size:11px;color:var(--mute);
+    letter-spacing:0.22em;text-transform:uppercase;
+  }
+  .chapter{
+    position:absolute;top:52px;right:72px;
+    font-family:var(--mono);font-size:12px;color:var(--mute);
+    letter-spacing:0.22em;text-transform:uppercase;
+  }
+  .chapter b{color:var(--electric);font-weight:500;margin-right:10px;font-family:var(--serif);font-style:italic;font-weight:400;font-size:16px;letter-spacing:0}
+  .chapter-num{font-family:var(--serif);font-style:italic;font-weight:400;font-size:16px;color:var(--electric);letter-spacing:0;margin-right:10px}
+
+  h1,h2,h3,h4{margin:0;font-weight:400;color:var(--ink)}
+
+  .kicker{
+    font-family:var(--mono);font-size:12px;letter-spacing:0.24em;
+    text-transform:uppercase;color:var(--electric);
+  }
+  .display{
+    font-family:var(--serif);font-weight:300;
+    font-size:148px;line-height:0.95;letter-spacing:-0.025em;color:var(--navy);
+  }
+  .display em{font-style:italic;color:var(--electric);font-weight:400}
+  .title-xl{
+    font-family:var(--serif);font-weight:300;font-size:96px;line-height:0.98;
+    letter-spacing:-0.02em;color:var(--navy);
+  }
+  .title-xl em{font-style:italic;color:var(--electric);font-weight:400}
+  .title-md{
+    font-family:var(--serif);font-weight:300;font-size:64px;line-height:1.02;
+    letter-spacing:-0.015em;color:var(--navy);
+  }
+  .title-md em{font-style:italic;color:var(--electric);font-weight:400}
+  .lede{font-size:26px;line-height:1.4;color:var(--mute-2);font-weight:400;max-width:1000px;letter-spacing:-0.003em}
+  .lede b{color:var(--ink);font-weight:600}
+  .note{font-size:18px;line-height:1.5;color:var(--mute);max-width:720px}
+
+  /* diamond mark divider — recurring template motif */
+  .divmark{
+    display:inline-block;width:10px;height:10px;transform:rotate(45deg);
+    background:var(--electric);margin:0 10px;vertical-align:middle;
+  }
+
+  /* arrow — used inline on some rows, matches template arrow */
+  .arrow-in{
+    display:inline-flex;align-items:center;gap:6px;font-family:var(--mono);
+    font-size:11px;color:var(--electric);letter-spacing:0.2em;text-transform:uppercase;
+  }
+  .arrow-in::after{content:"→";font-family:var(--sans);color:var(--electric);font-size:16px}
+
+  /* ======================================================
+     01 — COVER
+  ========================================================= */
+  .s-cover{background:var(--paper)}
+  .s-cover::before{
+    content:"";position:absolute;inset:0;
+    background:
+      radial-gradient(1000px 700px at 88% 12%, var(--tint), transparent 55%),
+      radial-gradient(800px 600px at 0% 100%, var(--off), transparent 60%);
+    pointer-events:none;
+  }
+  .s-cover .hero{
+    position:absolute;left:72px;right:72px;top:340px;
+  }
+  .s-cover h1{
+    font-family:var(--serif);font-weight:300;font-size:140px;line-height:0.9;
+    letter-spacing:-0.035em;color:var(--navy);max-width:1700px;
+  }
+  .s-cover h1 em{font-style:italic;color:var(--electric);font-weight:400}
+  /* ==== Product lockup: Manex.ai × Resolve ==== */
+  .s-cover .product-lockup{
+    position:absolute;top:138px;left:72px;right:72px;
+    display:flex;align-items:center;gap:34px;
+    padding-bottom:26px;border-bottom:1px solid var(--line);
+  }
+  .s-cover .product-lockup .partner{
+    height:74px;width:auto;display:block;
+  }
+  .s-cover .product-lockup .x{
+    font-family:var(--serif);font-style:italic;font-weight:300;
+    font-size:54px;color:var(--mute);letter-spacing:-0.02em;
+    padding:0 4px;line-height:1;
+  }
+  .s-cover .product-lockup .product{
+    display:flex;align-items:center;gap:18px;
+  }
+  .s-cover .product-lockup .product-mark{
+    width:40px;height:40px;background:var(--electric);display:inline-block;
+    transform:rotate(45deg);position:relative;
+  }
+  .s-cover .product-lockup .product-mark::after{
+    content:"";position:absolute;inset:8px;background:var(--paper);
+  }
+  .s-cover .product-lockup .product-name{
+    font-family:var(--serif);font-weight:500;font-size:68px;color:var(--navy);letter-spacing:-0.03em;line-height:1;
+  }
+  .s-cover .product-lockup .product-dot{color:var(--electric)}
+  .s-cover .product-lockup .lockup-tagline{
+    margin-left:auto;font-family:var(--mono);font-size:12px;
+    color:var(--mute);letter-spacing:0.22em;text-transform:uppercase;
+    max-width:320px;text-align:right;line-height:1.5;
+  }
+  .s-cover .oneline{
+    margin-top:40px;font-family:var(--serif);font-style:italic;font-weight:300;
+    font-size:40px;color:var(--navy);letter-spacing:-0.01em;max-width:900px;
+  }
+  .s-cover .oneline .dot{width:10px;height:10px;background:var(--electric);display:inline-block;transform:rotate(45deg);margin:0 14px 4px;vertical-align:middle}
+  .s-cover .meta{
+    position:absolute;left:72px;right:72px;bottom:120px;
+    display:flex;justify-content:space-between;align-items:flex-end;gap:80px;
+  }
+  .s-cover .meta .tagline{
+    font-family:var(--mono);font-size:12px;color:var(--mute);letter-spacing:0.24em;
+    text-transform:uppercase;line-height:2;border-left:1px solid var(--line-2);padding-left:22px;
+  }
+  .s-cover .meta .tagline b{color:var(--ink);font-weight:500}
+  .s-cover .meta .lockup{
+    display:flex;flex-direction:column;gap:14px;align-items:flex-end;min-width:340px;
+    font-family:var(--sans);
+  }
+  .s-cover .meta .lockup-top{display:flex;flex-direction:column;gap:4px;align-items:flex-end}
+  .s-cover .meta .lockup-team{
+    font-family:var(--serif);font-weight:300;font-size:52px;color:var(--navy);letter-spacing:-0.02em;line-height:0.95;
+  }
+  .s-cover .meta .lockup-team .dot{color:var(--electric)}
+  .s-cover .meta .lockup-role{
+    font-family:var(--mono);font-size:11px;color:var(--mute);letter-spacing:0.24em;text-transform:uppercase;
+  }
+  .s-cover .meta .lockup-divider{width:120px;height:1px;background:var(--line-2)}
+  .s-cover .meta .lockup-bottom{display:flex;flex-direction:column;gap:4px;align-items:flex-end}
+  .s-cover .meta .lockup-host{
+    font-family:var(--serif);font-style:italic;font-weight:300;font-size:22px;color:var(--navy);letter-spacing:-0.005em;
+  }
+  .s-cover .meta .lockup-host b{color:var(--electric);font-weight:400;font-style:normal;font-family:var(--sans);font-size:18px;letter-spacing:-0.01em;margin-left:4px;vertical-align:2px}
+  .s-cover .meta .lockup-event{
+    font-family:var(--mono);font-size:10px;color:var(--mute);letter-spacing:0.28em;text-transform:uppercase;
+  }
+
+  /* ======================================================
+     02 — PROBLEM
+  ========================================================= */
+  .s-prob{background:var(--paper)}
+  .s-prob .wrap{
+    position:absolute;inset:180px 72px 90px 72px;
+    display:grid;grid-template-rows:auto 1fr;gap:36px;
+  }
+  .s-prob .title-block{max-width:1560px}
+  .s-prob h2{
+    font-family:var(--serif);font-weight:300;font-size:88px;line-height:0.98;
+    letter-spacing:-0.02em;color:var(--navy);text-wrap:balance;
+  }
+  .s-prob h2 em{font-style:italic;color:var(--electric);font-weight:400}
+  .s-prob .sub{
+    margin-top:20px;font-size:20px;line-height:1.45;color:var(--mute-2);
+    max-width:1200px;font-weight:400;
+  }
+  .s-prob .sub b{color:var(--ink);font-weight:600}
+
+  .stat-row{
+    display:grid;grid-template-columns:1.15fr 1fr 1fr;gap:28px;
+  }
+  .stat-col{display:flex;flex-direction:column;gap:20px}
+  .stat{
+    background:var(--white);border:1px solid var(--line);border-radius:2px;
+    padding:26px 30px;position:relative;display:flex;flex-direction:column;gap:12px;min-height:180px;
+  }
+  .stat-col .stat{flex:1;min-height:0}
+  .stat.stat-sm{padding:20px 24px;gap:6px;min-height:0}
+  .stat.stat-sm .n{font-size:52px}
+  .stat.stat-sm .n .unit{font-size:28px}
+  .stat.stat-sm .lbl{font-size:14px;line-height:1.35;max-width:340px;margin-top:auto}
+  .stat.stat-sm .tiny{margin-top:6px}
+  .stat .idx{
+    font-family:var(--mono);font-size:11px;color:var(--electric);letter-spacing:0.24em;
+  }
+  .stat .n{
+    font-family:var(--serif);font-weight:300;font-size:72px;line-height:0.95;
+    letter-spacing:-0.02em;color:var(--navy);
+  }
+  .stat .n .unit{font-size:52px;color:var(--electric);font-weight:400;font-style:italic;margin-left:8px;letter-spacing:-0.01em}
+  .stat .lbl{font-size:19px;line-height:1.35;color:var(--mute-2);margin-top:auto;max-width:380px}
+  .stat .lbl b{color:var(--ink);font-weight:600}
+  .stat .tiny{font-family:var(--mono);font-size:10px;color:var(--mute);letter-spacing:0.2em;text-transform:uppercase;margin-top:10px}
+
+  /* illustrative transcript panel on problem */
+  .tr-panel{
+    background:var(--navy);color:var(--white);border-radius:2px;
+    padding:30px 34px;font-family:var(--mono);font-size:15px;line-height:1.7;
+    position:relative;min-height:220px;
+  }
+  .tr-panel .tag{
+    position:absolute;top:-11px;left:26px;background:var(--navy);color:var(--sky);
+    font-size:10px;letter-spacing:0.22em;text-transform:uppercase;padding:0 10px;
+  }
+  .tr-panel .row{display:flex;gap:16px;margin-bottom:10px}
+  .tr-panel .t{color:var(--sky);min-width:60px;font-size:12px;padding-top:2px}
+  .tr-panel .spk{color:var(--sky-2);min-width:84px;font-weight:500}
+  .tr-panel .say{color:var(--white);flex:1}
+  .tr-panel .say .hl{color:var(--tint);background:rgba(99,159,196,0.18);padding:1px 5px;border-radius:2px}
+  .tr-panel .cap{margin-top:14px;font-family:var(--sans);font-size:14px;color:var(--sky-2);letter-spacing:0.05em}
+
+  /* ======================================================
+     03 — SOLUTION (THE LOOP — hero)
+  ========================================================= */
+  .s-sol{background:var(--paper)}
+  .s-sol::before{
+    content:"";position:absolute;inset:0;
+    background:radial-gradient(900px 700px at 100% 0%, var(--tint), transparent 55%);
+    pointer-events:none;
+  }
+  .s-sol .head{
+    position:absolute;top:200px;left:72px;right:72px;
+    display:grid;grid-template-columns:1fr 480px;gap:60px;align-items:flex-end;
+  }
+  .s-sol h2{
+    font-family:var(--serif);font-weight:300;font-size:96px;line-height:0.98;
+    letter-spacing:-0.02em;color:var(--navy);
+  }
+  .s-sol h2 em{font-style:italic;color:var(--electric);font-weight:400}
+  .s-sol .head-note{
+    font-size:19px;line-height:1.5;color:var(--mute-2);border-left:1px solid var(--line-2);padding-left:22px;
+  }
+  .s-sol .head-note b{color:var(--navy);font-weight:600}
+
+  .loop{
+    position:absolute;left:72px;right:72px;top:480px;bottom:140px;
+    display:grid;grid-template-columns:repeat(4,1fr);gap:22px;
+  }
+  .step{
+    background:var(--white);border:1px solid var(--line);border-radius:2px;
+    padding:28px 26px;display:flex;flex-direction:column;gap:14px;position:relative;
+    min-height:0;
+  }
+  .step .hd{display:flex;align-items:center;gap:12px;font-family:var(--mono);font-size:11px;color:var(--electric);letter-spacing:0.22em;text-transform:uppercase}
+  .step .hd .dm{width:8px;height:8px;background:var(--electric);transform:rotate(45deg)}
+  .step h3{
+    font-family:var(--serif);font-weight:400;font-size:42px;line-height:1;
+    letter-spacing:-0.01em;color:var(--navy);
+  }
+  .step h3 em{font-style:italic;color:var(--electric);font-weight:400}
+  .step .desc{font-size:15px;line-height:1.45;color:var(--mute-2);font-weight:400}
+  .step .desc b{color:var(--ink);font-weight:600}
+  .step .viz{
+    margin-top:auto;background:var(--paper);border:1px solid var(--line);border-radius:2px;
+    padding:14px;flex:1;min-height:200px;position:relative;overflow:hidden;
+  }
+
+  /* step arrows (template motif) */
+  .step::after{
+    content:"";position:absolute;top:50%;right:-18px;width:14px;height:2px;
+    background:var(--line-2);transform:translateY(-50%);
+  }
+  .step:last-child::after{display:none}
+  .step::before{
+    content:"";position:absolute;top:calc(50% - 5px);right:-22px;
+    width:0;height:0;border-left:6px solid var(--electric);
+    border-top:5px solid transparent;border-bottom:5px solid transparent;
+  }
+  .step:last-child::before{display:none}
+
+  /* --- viz: listen (big voice moment) --- */
+  .v-listen{display:flex;flex-direction:column;gap:14px;height:100%;justify-content:center;padding:4px}
+  .v-listen .mic{
+    display:flex;align-items:center;gap:10px;
+    font-family:var(--mono);font-size:10px;color:var(--electric);letter-spacing:0.2em;text-transform:uppercase;
+  }
+  .v-listen .mic .rec{width:8px;height:8px;border-radius:50%;background:var(--electric);box-shadow:0 0 0 4px rgba(16,50,207,0.15)}
+  .v-listen .wave{display:flex;gap:2px;align-items:flex-end;height:40px}
+  .v-listen .wave span{flex:1;background:var(--sky);border-radius:1px;opacity:0.45}
+  .v-listen .wave span.on{background:var(--electric);opacity:1}
+  .v-listen .line{
+    font-family:var(--serif);font-style:italic;font-size:19px;line-height:1.25;color:var(--navy);font-weight:400;
+  }
+  .v-listen .attrib{font-family:var(--mono);font-size:10px;color:var(--mute);letter-spacing:0.18em;text-transform:uppercase}
+  .v-listen .attrib b{color:var(--electric);font-weight:600}
+
+  /* --- viz: reason (before / after diff) --- */
+  .v-reason{display:flex;flex-direction:column;gap:10px;height:100%;justify-content:center;font-family:var(--mono);font-size:11px;padding:4px}
+  .v-reason .side{display:flex;flex-direction:column;gap:5px;padding:10px 12px;border-radius:2px}
+  .v-reason .before{background:var(--off);border:1px solid var(--line)}
+  .v-reason .before .k{color:var(--mute);font-size:9.5px;letter-spacing:0.2em;text-transform:uppercase;margin-bottom:3px}
+  .v-reason .before .tix{display:flex;flex-direction:column;gap:3px;color:var(--mute-2);font-size:11px;line-height:1.3}
+  .v-reason .before .tix span{display:flex;justify-content:space-between}
+  .v-reason .before .tix b{color:var(--ink);font-weight:600;font-size:10px;letter-spacing:0.1em}
+  .v-reason .arrow{text-align:center;color:var(--electric);font-family:var(--serif);font-style:italic;font-size:14px}
+  .v-reason .after{background:var(--navy);color:var(--white)}
+  .v-reason .after .k{color:var(--sky-2);font-size:9.5px;letter-spacing:0.2em;text-transform:uppercase;margin-bottom:4px}
+  .v-reason .after .inc-ttl{font-family:var(--sans);font-size:13px;color:var(--white);font-weight:600;line-height:1.25}
+  .v-reason .after .inc-meta{color:rgba(255,255,255,0.6);font-size:10px;margin-top:4px;letter-spacing:0.08em}
+  .v-reason .after .inc-meta b{color:var(--sky-2);font-weight:600}
+
+  /* --- viz: resolve (4 agents, calmer) --- */
+  .v-resolve{height:100%;display:flex;flex-direction:column;gap:6px;font-family:var(--mono);font-size:10px;padding:4px}
+  .v-resolve .canv-tag{display:flex;justify-content:space-between;font-size:9px;color:var(--mute);letter-spacing:0.2em;text-transform:uppercase;margin-bottom:2px}
+  .v-resolve .canv-tag b{color:var(--electric);font-weight:600}
+  .v-resolve .ag{
+    display:grid;grid-template-columns:92px 1fr 44px;gap:10px;align-items:center;
+    padding:7px 10px;border:1px solid var(--line);background:var(--white);border-radius:2px;
+  }
+  .v-resolve .ag .n{color:var(--navy);font-weight:600;letter-spacing:0.1em;font-size:10px}
+  .v-resolve .ag .bar{height:4px;background:var(--off);border-radius:2px;overflow:hidden}
+  .v-resolve .ag .bar i{display:block;height:100%;background:var(--sky);transition:width .3s}
+  .v-resolve .ag .st{font-size:9px;color:var(--mute);letter-spacing:0.12em;text-align:right}
+  .v-resolve .ag.done .bar i{background:var(--electric)}
+  .v-resolve .ag.done .st{color:var(--electric);font-weight:600}
+  .v-resolve .ag.done .n{color:var(--electric)}
+  .v-resolve .approval{
+    margin-top:auto;padding:8px 10px;background:var(--tint);border-radius:2px;
+    font-size:10.5px;color:var(--navy);line-height:1.4;border-left:2px solid var(--electric);
+  }
+  .v-resolve .approval b{color:var(--electric);font-weight:600}
+
+  /* --- viz: remember (lesson card, bolder) --- */
+  .v-remember{height:100%;display:flex;flex-direction:column;gap:8px;font-family:var(--mono);font-size:10px;color:var(--navy);padding:4px}
+  .v-remember .init{
+    background:var(--white);border:1px solid var(--line);border-radius:2px;padding:10px 12px;
+  }
+  .v-remember .init .ttl{font-family:var(--sans);font-size:13px;color:var(--navy);font-weight:600;line-height:1.25}
+  .v-remember .init .meta{display:flex;gap:10px;margin-top:6px;color:var(--mute);font-size:9.5px;letter-spacing:0.12em}
+  .v-remember .init .meta .ok{color:var(--electric);font-weight:600}
+  .v-remember .init .bar{height:4px;background:var(--off);border-radius:2px;margin-top:8px;overflow:hidden}
+  .v-remember .init .bar i{display:block;height:100%;width:62%;background:var(--electric)}
+  .v-remember .lesson{
+    background:var(--navy);color:var(--tint);border-radius:2px;padding:12px 14px;font-size:11px;line-height:1.7;flex:1;
+    display:flex;flex-direction:column;justify-content:center;
+  }
+  .v-remember .lesson .ttl-hd{
+    font-family:var(--mono);font-size:9.5px;color:var(--sky-2);letter-spacing:0.22em;text-transform:uppercase;margin-bottom:6px;
+  }
+  .v-remember .lesson .row{display:flex;gap:8px}
+  .v-remember .lesson .k{color:var(--sky-2);min-width:82px}
+  .v-remember .lesson .v{color:var(--white)}
+
+  .loop-foot{
+    position:absolute;left:72px;right:72px;bottom:90px;
+    display:flex;align-items:center;gap:16px;
+    font-family:var(--mono);font-size:12px;color:var(--mute);letter-spacing:0.18em;text-transform:uppercase;
+  }
+  .loop-foot b{color:var(--navy);font-weight:600}
+  .loop-foot em{font-family:var(--serif);font-style:italic;color:var(--electric);font-weight:400;letter-spacing:0;text-transform:none;font-size:18px}
+
+  /* ======================================================
+     03 — PERSONAS (loop-break ladder)
+  ========================================================= */
+  .s-per{background:var(--paper)}
+  .s-per::before{
+    content:"";position:absolute;inset:0;
+    background:radial-gradient(900px 600px at 10% 100%, var(--off), transparent 55%);
+    pointer-events:none;
+  }
+  .s-per .wrap{
+    position:absolute;inset:200px 72px 110px 72px;
+    display:grid;grid-template-rows:auto 1fr;gap:54px;
+  }
+  .s-per h2{
+    font-family:var(--serif);font-weight:300;font-size:96px;line-height:0.98;
+    letter-spacing:-0.02em;color:var(--navy);max-width:1520px;
+  }
+  .s-per h2 em{font-style:italic;color:var(--electric);font-weight:400}
+  .s-per .sub{
+    margin-top:24px;font-size:22px;line-height:1.45;color:var(--mute-2);max-width:1160px;font-weight:400;
+  }
+  .s-per .sub b{color:var(--ink);font-weight:600}
+
+  .per-ladder{
+    position:relative;display:grid;grid-template-columns:repeat(4,1fr) 40px repeat(0,0);
+    grid-template-columns:1fr 56px 1fr 56px 1fr 56px 1fr;
+    gap:0;align-items:stretch;
+  }
+  .per{
+    background:var(--white);border:1px solid var(--line);border-radius:2px;
+    padding:30px 28px;display:flex;flex-direction:column;gap:16px;position:relative;
+  }
+  .per .role{
+    font-family:var(--mono);font-size:11px;color:var(--electric);letter-spacing:0.22em;text-transform:uppercase;
+  }
+  .per .av{
+    width:52px;height:52px;border-radius:50%;background:var(--tint);color:var(--navy);
+    display:flex;align-items:center;justify-content:center;font-family:var(--serif);
+    font-style:italic;font-weight:400;font-size:22px;letter-spacing:-0.01em;
+    border:1px solid var(--sky-2);
+  }
+  .per h3{
+    font-family:var(--serif);font-weight:400;font-size:32px;line-height:1.05;color:var(--navy);letter-spacing:-0.01em;
+  }
+  .per h3 em{font-style:italic;color:var(--electric);font-weight:400}
+  .per .quote{
+    font-family:var(--serif);font-style:italic;font-weight:400;font-size:17px;line-height:1.35;
+    color:var(--mute-2);border-left:2px solid var(--electric);padding-left:12px;
+  }
+  .per .pain{font-size:14px;line-height:1.45;color:var(--mute-2)}
+  .per .pain b{color:var(--ink);font-weight:600}
+
+  /* break arrow between personas */
+  .pbrk{
+    display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;
+    font-family:var(--mono);font-size:10px;color:var(--mute);letter-spacing:0.18em;text-transform:uppercase;
+  }
+  .pbrk .ico{
+    width:28px;height:28px;border-radius:50%;background:var(--paper);border:1px solid var(--line-2);
+    display:flex;align-items:center;justify-content:center;color:var(--electric);font-family:var(--sans);font-weight:600;font-size:14px;
+    position:relative;
+  }
+  .pbrk .ico::before{content:"→";line-height:1}
+  .pbrk .lbl{writing-mode:horizontal-tb;font-size:9.5px;letter-spacing:0.16em;color:var(--mute-2);text-align:center;max-width:50px;line-height:1.3}
+
+  .per-foot{
+    margin-top:0;
+    display:flex;align-items:center;gap:14px;padding-top:22px;
+    border-top:1px solid var(--line);font-family:var(--mono);font-size:12px;
+    color:var(--mute);letter-spacing:0.18em;text-transform:uppercase;
+  }
+  .per-foot b{color:var(--navy);font-weight:600}
+  .per-foot em{font-family:var(--serif);font-style:italic;color:var(--electric);font-weight:400;letter-spacing:0;text-transform:none;font-size:18px}
+
+  /* ======================================================
+     05 — BUSINESS CASE (per-plant math, Manex-module framing)
+     (formerly .s-mkt; renamed)
+  ========================================================= */
+  .s-bc{background:var(--paper)}
+  .s-bc::before{
+    content:"";position:absolute;inset:0;
+    background:radial-gradient(900px 700px at 0% 0%, var(--tint), transparent 55%);
+    pointer-events:none;
+  }
+  .s-bc .wrap{
+    position:absolute;inset:200px 72px 110px 72px;
+    display:grid;grid-template-columns:1fr 640px;gap:80px;align-items:flex-start;
+  }
+  .s-bc h2{
+    font-family:var(--serif);font-weight:300;font-size:96px;line-height:0.98;
+    letter-spacing:-0.02em;color:var(--navy);
+  }
+  .s-bc h2 em{font-style:italic;color:var(--electric);font-weight:400}
+  .s-bc .sub{
+    margin-top:26px;font-size:22px;line-height:1.45;color:var(--mute-2);font-weight:400;max-width:880px;
+  }
+  .s-bc .sub b{color:var(--ink);font-weight:600}
+
+  .s-bc .val-stack{display:flex;flex-direction:column;gap:0;margin-top:40px}
+  .s-bc .val-row{
+    display:grid;grid-template-columns:160px 1fr auto;gap:24px;align-items:baseline;
+    padding:22px 0;border-top:1px solid var(--line);
+  }
+  .s-bc .val-row:last-child{border-bottom:1px solid var(--line)}
+  .s-bc .val-row .k{font-family:var(--mono);font-size:11px;color:var(--electric);letter-spacing:0.22em;text-transform:uppercase}
+  .s-bc .val-row .t{font-size:17px;line-height:1.45;color:var(--mute-2)}
+  .s-bc .val-row .t b{color:var(--ink);font-weight:600}
+  .s-bc .val-row .n{font-family:var(--serif);font-weight:400;font-size:40px;color:var(--navy);letter-spacing:-0.01em;white-space:nowrap}
+  .s-bc .val-row .n em{font-style:italic;color:var(--electric);font-size:22px;font-weight:400;margin-left:4px}
+
+  .s-bc .assump{
+    margin-top:22px;padding:16px 18px;background:var(--off);border-left:3px solid var(--electric);
+    font-family:var(--mono);font-size:11.5px;color:var(--mute-2);line-height:1.6;letter-spacing:0.04em;
+  }
+  .s-bc .assump b{color:var(--navy);font-weight:600;letter-spacing:0.18em;text-transform:uppercase;font-size:10px;display:block;margin-bottom:6px}
+
+  .bc-side{
+    background:var(--navy);color:var(--white);padding:42px 44px;border-radius:2px;
+    display:flex;flex-direction:column;gap:22px;position:relative;
+  }
+  .bc-side .tag{font-family:var(--mono);font-size:11px;color:var(--sky-2);letter-spacing:0.22em;text-transform:uppercase}
+  .bc-side h3{
+    font-family:var(--serif);font-weight:400;font-size:48px;line-height:1.05;color:var(--white);letter-spacing:-0.01em;
+  }
+  .bc-side h3 em{font-style:italic;color:var(--sky-2);font-weight:400}
+  .bc-side p{font-size:17px;line-height:1.5;color:rgba(255,255,255,0.75);margin:0}
+  .bc-side p b{color:var(--white);font-weight:600}
+  .bc-side .uplift{
+    margin-top:auto;padding-top:24px;border-top:1px solid rgba(255,255,255,0.14);
+    display:flex;align-items:baseline;justify-content:space-between;gap:20px;
+  }
+  .bc-side .uplift .num{font-family:var(--serif);font-weight:400;font-size:86px;color:var(--sky-2);line-height:1;letter-spacing:-0.02em}
+  .bc-side .uplift .num em{font-style:italic;color:var(--white);font-size:44px;margin-left:4px}
+  .bc-side .uplift .lbl{font-family:var(--mono);font-size:11px;color:rgba(255,255,255,0.7);letter-spacing:0.22em;text-transform:uppercase;text-align:right;line-height:1.7;max-width:220px}
+  .bc-side .uplift .lbl b{color:var(--white);font-weight:600}
+
+  /* ======================================================
+     06 — TAM / SAM / SOM (dedicated onion slide)
+  ========================================================= */
+  .s-tam{background:var(--paper)}
+  .s-tam::before{
+    content:"";position:absolute;inset:0;
+    background:radial-gradient(900px 700px at 100% 0%, var(--tint), transparent 55%);
+    pointer-events:none;
+  }
+  .s-tam .wrap{
+    position:absolute;inset:160px 72px 85px 72px;
+    display:grid;grid-template-columns:640px 1fr;gap:56px;align-items:stretch;
+  }
+  .s-tam .tam-left{display:flex;flex-direction:column;min-height:0}
+  .s-tam h2{
+    font-family:var(--serif);font-weight:300;font-size:66px;line-height:0.98;
+    letter-spacing:-0.02em;color:var(--navy);max-width:600px;
+  }
+  .s-tam h2 em{font-style:italic;color:var(--electric);font-weight:400}
+  .s-tam .sub{
+    margin-top:16px;font-size:17px;line-height:1.5;color:var(--mute-2);max-width:600px;font-weight:400;
+  }
+  .s-tam .sub b{color:var(--ink);font-weight:600}
+
+  /* === B2B customer strip === */
+  .s-tam .cust-strip{
+    margin-top:22px;padding:14px 0 12px;border-top:1px solid var(--line);border-bottom:1px solid var(--line);
+  }
+  .s-tam .cust-label{
+    font-family:var(--mono);font-size:10px;color:var(--electric);letter-spacing:0.22em;text-transform:uppercase;margin-bottom:8px;
+    display:flex;align-items:center;gap:8px;
+  }
+  .s-tam .cust-label span{color:var(--line-2)}
+  .s-tam .cust-row{
+    display:flex;flex-wrap:wrap;gap:6px 8px;align-items:center;
+  }
+  .s-tam .cust{
+    font-family:var(--serif);font-weight:400;font-size:16px;color:var(--navy);
+    border:1px solid var(--line-2);border-radius:999px;padding:3px 12px 4px;letter-spacing:-0.005em;line-height:1.2;background:var(--white);
+  }
+  .s-tam .cust-foot{
+    margin-top:8px;font-family:var(--mono);font-size:9.5px;color:var(--mute);letter-spacing:0.14em;text-transform:uppercase;
+  }
+
+  /* === Legend === */
+  .s-tam .legend{
+    margin-top:22px;display:flex;flex-direction:column;gap:0;
+  }
+  .s-tam .leg-row{
+    display:grid;grid-template-columns:14px 1fr auto;gap:14px;align-items:center;
+    padding:10px 0;border-top:1px solid var(--line);
+  }
+  .s-tam .leg-row:last-child{border-bottom:1px solid var(--line)}
+  .s-tam .leg-row .dot{width:12px;height:12px;border-radius:50%;display:inline-block}
+  .s-tam .leg-row .dot.tam{background:var(--tint);border:1px solid var(--sky-2)}
+  .s-tam .leg-row .dot.sam{background:var(--sky);border:1px solid var(--sky-2)}
+  .s-tam .leg-row .dot.som{background:var(--electric);border:1px solid var(--electric-2)}
+  .s-tam .leg-row .lbl{font-family:var(--mono);font-size:10px;color:var(--navy);letter-spacing:0.2em;text-transform:uppercase;line-height:1.5}
+  .s-tam .leg-row .lbl b{color:var(--electric);font-weight:600}
+  .s-tam .leg-row .n{font-family:var(--serif);font-weight:400;font-size:22px;color:var(--navy);letter-spacing:-0.01em;white-space:nowrap}
+  .s-tam .leg-row .n em{font-style:italic;color:var(--electric);font-size:12px;font-weight:400;margin-left:4px;letter-spacing:0.04em}
+
+  /* === Assumptions block === */
+  .s-tam .assump-block{
+    margin-top:20px;background:var(--white);border:1px solid var(--line);border-radius:2px;padding:18px 22px;
+  }
+  .s-tam .assump-tag{
+    font-family:var(--mono);font-size:10px;color:var(--electric);letter-spacing:0.22em;text-transform:uppercase;margin-bottom:12px;
+  }
+  .s-tam .assump-grid{
+    display:grid;grid-template-columns:repeat(4,1fr);gap:18px;
+  }
+  .s-tam .assump-item{display:flex;flex-direction:column;gap:4px;border-left:2px solid var(--electric);padding-left:12px}
+  .s-tam .assump-k{font-family:var(--mono);font-size:9.5px;color:var(--mute);letter-spacing:0.18em;text-transform:uppercase}
+  .s-tam .assump-v{
+    font-family:var(--serif);font-weight:400;font-size:28px;line-height:1;color:var(--navy);letter-spacing:-0.01em;
+  }
+  .s-tam .assump-v span{font-size:16px;color:var(--electric);font-style:italic;margin-left:2px}
+  .s-tam .assump-d{font-size:11px;line-height:1.35;color:var(--mute-2);font-weight:400}
+  .s-tam .assump-foot{
+    margin-top:14px;padding-top:12px;border-top:1px solid var(--line);
+    font-family:var(--sans);font-size:11px;line-height:1.5;color:var(--mute-2);
+  }
+  .s-tam .assump-foot b{color:var(--navy);font-weight:600}
+
+  /* big onion pinned to bottom edge */
+  .tam-stage{
+    position:relative;width:100%;height:100%;min-height:680px;
+  }
+  .tam-stage .label-top{
+    position:absolute;top:0;left:0;right:0;display:flex;justify-content:space-between;align-items:flex-start;
+    font-family:var(--mono);font-size:11px;color:var(--mute);letter-spacing:0.22em;text-transform:uppercase;
+  }
+  .tam-stage .label-top b{color:var(--navy);font-weight:600}
+  .tam-onion{
+    position:absolute;left:0;right:0;bottom:0;height:calc(100% - 10px);
+  }
+  .tam-onion .ring{
+    position:absolute;left:50%;bottom:0;border-radius:50%;
+    transform:translateX(-50%);
+    display:flex;flex-direction:column;align-items:center;justify-content:flex-start;
+    padding-top:42px;
+  }
+  .tam-onion .r-tam{
+    width:720px;height:720px;background:var(--tint);border:1px solid var(--sky-2);padding-top:42px;
+  }
+  .tam-onion .r-sam{
+    width:480px;height:480px;background:var(--sky);border:1px solid var(--sky-2);padding-top:38px;
+  }
+  .tam-onion .r-som{
+    width:260px;height:260px;background:var(--electric);border:1px solid var(--electric-2);padding-top:56px;
+  }
+  .tam-onion .lbl{display:flex;flex-direction:column;align-items:center;gap:4px;text-align:center;line-height:1.05}
+  .tam-onion .r-tam .lbl{color:var(--navy)}
+  .tam-onion .r-sam .lbl{color:var(--navy)}
+  .tam-onion .r-som .lbl{color:var(--white)}
+  .tam-onion .tag{font-family:var(--mono);font-size:10.5px;letter-spacing:0.22em;text-transform:uppercase;opacity:0.85}
+  .tam-onion .big{
+    font-family:var(--serif);font-weight:400;font-size:36px;line-height:1;letter-spacing:-0.015em;margin-top:2px;
+  }
+  .tam-onion .r-tam .big{font-size:34px}
+  .tam-onion .r-sam .big{font-size:32px}
+  .tam-onion .r-som .big{font-size:22px;margin-top:0;line-height:1.1}
+  .tam-onion .big em{font-style:italic;font-weight:400;color:var(--electric)}
+  .tam-onion .r-som .big em{color:var(--white)}
+  .tam-onion .mid{
+    font-family:var(--serif);font-weight:300;font-size:40px;line-height:1;letter-spacing:-0.02em;color:var(--electric);margin-top:6px;
+  }
+  .tam-onion .r-tam .mid{font-size:38px}
+  .tam-onion .r-sam .mid{font-size:36px;color:var(--navy)}
+  .tam-onion .r-som .mid{font-size:20px;color:var(--white);margin-top:8px}
+  .tam-onion .mid .sm{font-family:var(--mono);font-size:10px;color:var(--mute);letter-spacing:0.2em;text-transform:uppercase;font-style:normal;font-weight:500;margin-left:2px}
+  .tam-onion .r-sam .mid .sm{color:var(--navy);opacity:0.75}
+  .tam-onion .r-som .mid .sm{color:var(--white);opacity:0.75}
+  .tam-onion .dsc{font-family:var(--sans);font-size:12px;opacity:0.85;line-height:1.35;max-width:240px;font-weight:500;margin-top:4px}
+
+  /* ======================================================
+     07 — WHY WE WIN + ASK
+     (unchanged ask styling; class .s-ask)
+  ========================================================= */
+  .s-ask{background:var(--navy);color:var(--white)}
+  .s-ask::before{
+    content:"";position:absolute;inset:0;
+    background:radial-gradient(1200px 700px at 85% 15%, rgba(99,159,196,0.18), transparent 55%);
+    pointer-events:none;
+  }
+  .s-ask .stamp{color:rgba(255,255,255,0.55)}
+  .s-ask .stamp .mark::after{background:var(--navy)}
+  .s-ask .stamp b{color:var(--white)}
+  .s-ask .stamp em{color:var(--sky-2)}
+  .s-ask .stamp .mx-logo{filter:brightness(0) invert(1) opacity(0.95)}
+  .s-ask .stamp .sep{background:rgba(255,255,255,0.2)}
+  .s-ask .chapter{color:rgba(255,255,255,0.55)}
+  .s-ask .chapter-num{color:var(--sky-2)}
+  .s-ask .footline{color:rgba(255,255,255,0.45)}
+  .s-ask .pager{color:rgba(255,255,255,0.45)}
+
+  .s-ask .wrap{
+    position:absolute;inset:170px 72px 80px 72px;
+    display:grid;grid-template-rows:auto auto 1fr;gap:22px;
+  }
+  .s-ask h2{
+    font-family:var(--serif);font-weight:300;font-size:78px;line-height:0.98;
+    letter-spacing:-0.02em;color:var(--white);max-width:1560px;
+  }
+  .s-ask h2 em{font-style:italic;color:var(--sky-2);font-weight:400}
+  .s-ask .sub{
+    font-size:20px;line-height:1.45;color:rgba(255,255,255,0.72);max-width:1200px;font-weight:400;margin-top:10px;
+  }
+  .s-ask .sub b{color:var(--white);font-weight:600}
+
+  .moat-row{display:grid;grid-template-columns:repeat(3,1fr);gap:28px}
+  .moat{
+    background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.12);
+    border-radius:2px;padding:30px 32px;display:flex;flex-direction:column;gap:14px;
+  }
+  .moat .idx{
+    font-family:var(--mono);font-size:11px;color:var(--sky-2);letter-spacing:0.24em;
+  }
+  .moat h3{
+    font-family:var(--serif);font-weight:400;font-size:36px;line-height:1.05;color:var(--white);
+    letter-spacing:-0.01em;
+  }
+  .moat h3 em{font-style:italic;color:var(--sky-2);font-weight:400}
+  .moat p{font-size:17px;line-height:1.5;color:rgba(255,255,255,0.72);margin:0;font-weight:400}
+  .moat p b{color:var(--white);font-weight:600}
+
+  .ask-block{
+    margin-top:14px;display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:36px;
+    border-top:1px solid rgba(255,255,255,0.16);padding-top:40px;align-items:flex-start;
+  }
+  .ask-item{display:flex;flex-direction:column;gap:10px}
+  .ask-item .n{
+    font-family:var(--serif);font-style:italic;font-weight:400;font-size:28px;color:var(--sky-2);letter-spacing:-0.01em;
+  }
+  .ask-item .h{font-family:var(--serif);font-weight:400;font-size:26px;color:var(--white);line-height:1.15;letter-spacing:-0.005em}
+  .ask-item .d{font-size:15px;line-height:1.45;color:rgba(255,255,255,0.7);font-weight:400}
+  .ask-sig{
+    align-self:stretch;display:flex;flex-direction:column;justify-content:space-between;gap:12px;
+    border-left:1px solid rgba(255,255,255,0.16);padding-left:30px;min-width:280px;
+  }
+  .ask-sig .lbl{font-family:var(--mono);font-size:11px;color:var(--sky-2);letter-spacing:0.22em;text-transform:uppercase}
+  .ask-sig .sign{font-family:var(--serif);font-style:italic;font-weight:300;font-size:24px;color:var(--white);line-height:1.15;letter-spacing:-0.01em}
+  .ask-sig .sign .accent{color:var(--sky-2)}
+  .ask-sig .mail{font-family:var(--mono);font-size:13px;color:var(--sky-2);letter-spacing:0.12em}
+
+</style>
+</head>
+<body>
+
+<script type="application/json" id="speaker-notes">
+[
+"Picture four in the morning on a plant floor. A boiler trips. The senior technician mutters the fix into his radio — check the sensor, not the pump. Three weeks later the same failure trips at a sister site and nobody remembers. That muttered sentence is the most valuable data your factory produces — and today it vanishes the moment the shift ends. We built Resolve, a module inside Manex, to catch it — and turn every voice into an initiative.",
+
+"The loop breaks after the signal. Manex already captures MES, QMS, CRM, LIMS, PLM, EDI — the data exists. What doesn't exist: the spoken fix at 4 a.m., the engineer's approval trail, the verified countermeasure writing itself back as a lesson. Seventy percent of 8D time is spent documenting, not resolving. Six-plus silos per plant, and none of them hold the voice.",
+
+"Four personas, three broken handoffs. The foreman knows the fix — he just said it out loud, and it never typed itself into the system. The junior QE inherits a messy chain of partial facts and re-investigates a root cause the plant already solved last quarter. The senior QE writes a beautiful 8D, but nobody tracks if the countermeasure actually held. The auditor sees the same defect re-appear across plants and can't tell who owns it. Resolve is one layer that catches all four handoffs.",
+
+"Resolve closes the loop in four moves, in under two minutes. Listen — every voice, every alarm, every ticket becomes a typed signal. Reason — signals correlate into a single incident, automatically. Resolve — four agents classify, investigate, compose, propose; the engineer approves. Remember — the closed initiative writes a typed lesson that surfaces the next time a similar alarm fires, on any site. Voice in. Fewer incidents out. The next loop is faster than the last.",
+
+"Now the business case. Resolve is not a standalone product — it's a new module inside the Manex platform, priced on the savings it unlocks per plant. A tier-one plant has five to fifteen QEs spending roughly fifteen hours a week on 8D and FMEA. Resolve cuts that by sixty percent — one hundred eighty to five hundred forty thousand euros per plant per year just in returned engineering time. A ten-percent drop in recurring defects on a one-to-three-percent quality loss base adds two hundred thousand to two million more. Our module fee — eighty to one hundred twenty thousand per plant per year — is under twenty percent capture. Six-month ROI. Fifteen to twenty-five percent ARPU uplift on every Manex customer.",
+
+"Sizing through a Manex-anchored lens. TAM is the Manex install base — every plant already running your signal capture, ready to light up Resolve as a module on day one. SAM is the quality-heavy slice — DACH automotive and EMS, IATF and ISO exposure, 8D culture, budgeted. SOM in year one to two is three to five pilot plants — land on one, expand per account. We don't have to win a new market; the buyer is already inside your SKU.",
+
+"Why we win. Three compounding moats. One — the data flywheel: every closed loop writes a typed lesson that strengthens retrieval across every customer, privacy-preserving. Two — integration depth: opinionated connectors to MES, QMS, CRM, PLM — no competitor has them all. Three — audit-grade trust: typed tool layer, evidence contract, session replay — meets IATF and ISO out of the box. Copilots cannot. Our ask — one design partner plant for a six-week pilot, sandbox integration access inside Manex, and a product-roadmap seat when this module ships. Every voice becomes an initiative. Every initiative becomes a lesson. Every lesson makes the next plant better. Thank you."
+]
+</script>
+
+<script src="deck-stage.js"></script>
+
+<deck-stage>
+
+  <!-- ================================== 01 COVER -->
+  <section class="s-cover" data-screen-label="01 Cover">
+    <div class="stamp">
+      <img class="mx-logo" src="assets/manex-mark.png" alt="Manex">
+      <b>MANEX</b>
+      <span class="sep"></span>
+      <span class="mark"></span>
+      <b>RESOLVE</b><em>&nbsp;by De.Constructors</em>
+      <span class="sep"></span>
+      <span class="hack-chip">CODEX&nbsp;·&nbsp;<b>THINC!</b></span>
+      <span class="sep"></span>
+      <span>De.Constructors · Manex.ai · Apr 2026</span>
+    </div>
+    <div class="chapter"><span class="chapter-num">Hackathon</span>03 : 00 Pitch</div>
+
+    <!-- Product lockup: Manex.ai × Resolve -->
+    <div class="product-lockup">
+      <img class="partner" src="assets/manex-ai-logo.png" alt="Manex.ai">
+      <span class="x">×</span>
+      <div class="product">
+        <span class="product-mark"></span>
+        <span class="product-name">Resolve<span class="product-dot">.</span></span>
+      </div>
+      <span class="lockup-tagline">Closed-loop quality intelligence for Manex.ai</span>
+    </div>
+
+    <div class="hero">
+      <h1>Every voice<br>becomes an<br><em>initiative.</em></h1>
+      <div class="oneline">Listen. <span class="dot"></span> Reason. <span class="dot"></span> Resolve.</div>
+    </div>
+
+    <div class="meta">
+      <div class="tagline">
+        <div><b>PRODUCT</b>&nbsp;&nbsp;CLOSED-LOOP QUALITY INTELLIGENCE</div>
+        <div><b>STATUS</b>&nbsp;&nbsp;LIVE PROTOTYPE · VOICE + CANVAS + INITIATIVES</div>
+        <div><b>ASK</b>&nbsp;&nbsp;ONE DESIGN PARTNER · 6-WEEK PILOT</div>
+      </div>
+      <div class="lockup">
+        <div class="lockup-top">
+          <div class="lockup-team">De.Constructors<span class="dot">.</span></div>
+          <div class="lockup-role">Team 07 · Codex Hackathon</div>
+        </div>
+        <div class="lockup-divider"></div>
+        <div class="lockup-bottom">
+          <div class="lockup-host">Hosted by <b>Thinc!</b></div>
+          <div class="lockup-event">CODEX HACKATHON · 2026</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="footline">RESOLVE / 01 COVER</div>
+    <div class="pager">01 / 07</div>
+  </section>
+
+  <!-- ================================== 02 PROBLEM -->
+  <section class="s-prob" data-screen-label="02 Problem">
+    <div class="stamp">
+      <img class="mx-logo" src="assets/manex-mark.png" alt="Manex">
+      <b>MANEX</b>
+      <span class="sep"></span>
+      <span class="mark"></span>
+      <b>RESOLVE</b><em>&nbsp;by De.Constructors</em>
+      <span class="sep"></span>
+      <span class="hack-chip">CODEX&nbsp;·&nbsp;<b>THINC!</b></span>
+      <span class="sep"></span>
+      <span>The Problem We Solve</span>
+    </div>
+    <div class="chapter"><span class="chapter-num">01</span>THE PROBLEM</div>
+
+    <div class="wrap">
+      <div class="title-block">
+        <div class="kicker" style="margin-bottom:22px">Rich in data · Poor in memory</div>
+        <h2>Quality dies in <em>documents</em> and <em>in speech</em><br>nobody ever logged.</h2>
+        <div class="sub">
+          8D, FMEA and Ishikawa still live as static Word and Excel files. Signals, decisions and execution sit in six systems that don't talk. And <b>the fix the senior technician mutters at 4 a.m.</b> never reaches any of them. Teams write reports — they don't resolve causes.
+        </div>
+      </div>
+
+      <div class="stat-row">
+        <div class="tr-panel">
+          <span class="tag">● LIVE CAPTURE · BWR-03 · 04:11</span>
+          <div class="row"><span class="t">04:11</span><span class="spk">TECH-07</span><span class="say">Alarm's on the feedwater pump. Third time this month.</span></div>
+          <div class="row"><span class="t">04:11</span><span class="spk">APPR-02</span><span class="say">Same as last Friday?</span></div>
+          <div class="row"><span class="t">04:11</span><span class="spk">TECH-07</span><span class="say"><span class="hl">It's the pressure sensor drifting, not the pump.</span> Swap the pump, you're back in a week.</span></div>
+          <div class="row"><span class="t">04:11</span><span class="spk">TECH-07</span><span class="say"><span class="hl">Check PT-414 first. Always.</span></span></div>
+          <div class="cap">↑ The most valuable data in the plant. Lost at shift-end.</div>
+        </div>
+
+        <div class="stat-col">
+          <div class="stat">
+            <div class="idx">GAP 01 · TIME</div>
+            <div class="n">~70<span class="unit">%</span></div>
+            <div class="lbl"><b>of 8D time</b> spent documenting, not resolving root cause.</div>
+            <div class="tiny">INDUSTRY BENCHMARK · TIER-1</div>
+          </div>
+          <div class="stat stat-sm">
+            <div class="idx">GAP 03 · RECURRENCE</div>
+            <div class="n">42<span class="unit">%</span></div>
+            <div class="lbl"><b>of root causes</b> recur within 12 months — the lesson never travels.</div>
+            <div class="tiny">APQP · REPEAT DEFECT STUDY</div>
+          </div>
+        </div>
+
+        <div class="stat-col">
+          <div class="stat">
+            <div class="idx">GAP 02 · SILOS</div>
+            <div class="n">6<span class="unit">+</span></div>
+            <div class="lbl"><b>quality data silos</b> per plant — none of them hold the spoken fix.</div>
+            <div class="tiny">MES · PLM · QMS · CRM · LIMS · EDI</div>
+          </div>
+          <div class="stat stat-sm">
+            <div class="idx">GAP 04 · COST</div>
+            <div class="n">$2.3<span class="unit">M</span></div>
+            <div class="lbl"><b>average cost of poor quality</b> per plant per year, 80% avoidable with closed-loop CAPA.</div>
+            <div class="tiny">ASQ · COPQ BENCHMARK 2024</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="footline">02 / PROBLEM</div>
+    <div class="pager">02 / 07</div>
+  </section>
+
+  <!-- ================================== 03 PERSONAS — WHO BREAKS THE LOOP -->
+  <section class="s-per" data-screen-label="03 Personas">
+    <div class="stamp">
+      <img class="mx-logo" src="assets/manex-mark.png" alt="Manex">
+      <b>MANEX</b>
+      <span class="sep"></span>
+      <span class="mark"></span>
+      <b>RESOLVE</b><em>&nbsp;by De.Constructors</em>
+      <span class="sep"></span>
+      <span class="hack-chip">CODEX&nbsp;·&nbsp;<b>THINC!</b></span>
+      <span class="sep"></span>
+      <span>Four Roles · Three Broken Handoffs</span>
+    </div>
+    <div class="chapter"><span class="chapter-num">02</span>WHO BREAKS THE LOOP</div>
+
+    <div class="wrap">
+      <div>
+        <div class="kicker" style="margin-bottom:22px">Personas · the handoffs that fail today</div>
+        <h2>Four roles. Three silent<br>handoffs <em>nobody</em> owns.</h2>
+        <div class="sub">
+          The plant isn't short on people who know the fix — it's short on a layer that <b>carries the fix from one role to the next</b> without losing it in a radio call, a Word doc or an audit PDF.
+        </div>
+      </div>
+
+      <div class="per-ladder">
+        <div class="per">
+          <div class="role">01 · Shift Foreman</div>
+          <div class="av">M</div>
+          <h3>Markus — <em>knows</em> the fix.</h3>
+          <div class="quote">"Check PT-414 first. Always."</div>
+          <div class="pain">Says it on the radio at 4 a.m. <b>It never gets typed into any system.</b> Shift ends; the knowledge walks home with him.</div>
+        </div>
+
+        <div class="pbrk"><div class="ico"></div><div class="lbl">voice is lost</div></div>
+
+        <div class="per">
+          <div class="role">02 · Junior QE</div>
+          <div class="av">A</div>
+          <h3>Anja — <em>re-solves</em> old problems.</h3>
+          <div class="quote">"Has this happened before on another line?"</div>
+          <div class="pain">Inherits partial facts across MES, QMS and chat. <b>Re-investigates root causes the plant already solved last quarter.</b></div>
+        </div>
+
+        <div class="pbrk"><div class="ico"></div><div class="lbl">context is lost</div></div>
+
+        <div class="per">
+          <div class="role">03 · Senior QE</div>
+          <div class="av">S</div>
+          <h3>Sven — <em>documents</em>, doesn't verify.</h3>
+          <div class="quote">"8D's closed. Is the countermeasure actually holding?"</div>
+          <div class="pain">Spends 70% of the loop on 8D / FMEA paperwork. <b>Nobody checks whether the fix stuck</b> across shifts and sister sites.</div>
+        </div>
+
+        <div class="pbrk"><div class="ico"></div><div class="lbl">verification is lost</div></div>
+
+        <div class="per">
+          <div class="role">04 · Plant / Auditor</div>
+          <div class="av">K</div>
+          <h3>Kerstin — <em>sees</em> the pattern.</h3>
+          <div class="quote">"Why is the same defect re-appearing across three plants?"</div>
+          <div class="pain">Audits flag clusters across sites. <b>Can't trace them to who actually resolved them</b> — or whether anyone did.</div>
+        </div>
+      </div>
+
+      <div class="per-foot">
+        <span>RESOLVE</span>
+        <span style="color:var(--line-2)">/</span>
+        <b>One layer. Four handoffs caught.</b>
+        <span style="color:var(--line-2)">·</span>
+        <em>voice → signal → initiative → lesson</em>
+      </div>
+    </div>
+
+    <div class="footline">03 / PERSONAS</div>
+    <div class="pager">03 / 07</div>
+  </section>
+
+  <!-- ================================== 04 SOLUTION — THE LOOP -->
+  <section class="s-sol" data-screen-label="03 Solution">
+    <div class="stamp">
+      <img class="mx-logo" src="assets/manex-mark.png" alt="Manex">
+      <b>MANEX</b>
+      <span class="sep"></span>
+      <span class="mark"></span>
+      <b>RESOLVE</b><em>&nbsp;by De.Constructors</em>
+      <span class="sep"></span>
+      <span class="hack-chip">CODEX&nbsp;·&nbsp;<b>THINC!</b></span>
+      <span class="sep"></span>
+      <span>Our Solution · The Loop</span>
+    </div>
+    <div class="chapter"><span class="chapter-num">03</span>OUR SOLUTION</div>
+
+    <div class="head">
+      <div>
+        <div class="kicker" style="margin-bottom:22px">One loop · end-to-end in under two minutes</div>
+        <h2>Listen. Reason. <em>Resolve.</em> Remember.</h2>
+      </div>
+      <div class="head-note">
+        Resolve turns every quality input — spoken, logged, scanned — into a typed <b>signal</b>, correlates signals into a single <b>incident</b>, closes the loop with a verified <b>initiative</b>, and writes a typed <b>lesson</b> that surfaces the next time a similar alarm fires.
+      </div>
+    </div>
+
+    <div class="loop">
+      <!-- 01 LISTEN -->
+      <div class="step">
+        <div class="hd"><span class="dm"></span>STEP 01 · LISTEN</div>
+        <h3>Every voice<br>a <em>signal.</em></h3>
+        <div class="desc">Push-to-talk on every radio. Noise-robust ASR. <b>Every utterance becomes a typed signal</b> with equipment, shift and confidence attached.</div>
+        <div class="viz">
+          <div class="v-listen">
+            <div class="mic"><span class="rec"></span>REC · TECH-07 · 04:11</div>
+            <div class="wave" id="w01"></div>
+            <div class="line">"Check PT-414 first. It's the sensor drifting, not the pump."</div>
+            <div class="attrib">SIGNAL · <b>PT-414</b> · BWR-03 · SHIFT-A</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 02 REASON -->
+      <div class="step">
+        <div class="hd"><span class="dm"></span>STEP 02 · REASON</div>
+        <h3>Signals<br>become an <em>incident.</em></h3>
+        <div class="desc">MES, LIMS, CRM, EDI and voice correlate on equipment, time and failure mode. <b>One incident — not six tickets.</b></div>
+        <div class="viz">
+          <div class="v-reason">
+            <div class="side before">
+              <div class="k">Before · 6 silos</div>
+              <div class="tix">
+                <span><b>MES</b><span>alarm ×12</span></span>
+                <span><b>LIMS</b><span>ESR drift</span></span>
+                <span><b>CRM</b><span>2 claims</span></span>
+                <span><b>VOICE</b><span>PT-414</span></span>
+              </div>
+            </div>
+            <div class="arrow">correlate ↓</div>
+            <div class="side after">
+              <div class="k">After · 1 incident</div>
+              <div class="inc-ttl">BWR-03 · Feedwater alarm cluster</div>
+              <div class="inc-meta">SEVERITY <b>S2</b> · 18 SIGNALS · ROOT HYPOTHESIS: <b>sensor drift</b></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 03 RESOLVE -->
+      <div class="step">
+        <div class="hd"><span class="dm"></span>STEP 03 · RESOLVE</div>
+        <h3>Four agents.<br><em>One canvas.</em></h3>
+        <div class="desc">Classify, Investigate, Compose, Propose run in parallel. <b>The engineer stays in the loop</b> — approves, edits, ships.</div>
+        <div class="viz">
+          <div class="v-resolve">
+            <div class="canv-tag"><span>INCIDENT CANVAS</span><b>ENGINEER-IN-LOOP</b></div>
+            <div class="ag done"><span class="n">CLASSIFY</span><div class="bar"><i style="width:100%"></i></div><span class="st">DONE</span></div>
+            <div class="ag done"><span class="n">INVESTIGATE</span><div class="bar"><i style="width:100%"></i></div><span class="st">DONE</span></div>
+            <div class="ag"><span class="n">COMPOSE</span><div class="bar"><i style="width:72%"></i></div><span class="st">7.2s</span></div>
+            <div class="ag"><span class="n">PROPOSE</span><div class="bar"><i style="width:38%"></i></div><span class="st">queued</span></div>
+            <div class="approval"><b>Proposed:</b> recalibrate PT-414 across 12 boiler rooms before Q2.</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 04 REMEMBER -->
+      <div class="step">
+        <div class="hd"><span class="dm"></span>STEP 04 · REMEMBER</div>
+        <h3>Each loop<br>writes a <em>lesson.</em></h3>
+        <div class="desc">Approved fixes become initiatives with owners and deadlines. <b>Closed initiatives write typed lessons</b> — retrieved by the next matching alarm, on any site.</div>
+        <div class="viz">
+          <div class="v-remember">
+            <div class="init">
+              <div class="ttl">Recalibrate PT-414 · 12 boiler rooms</div>
+              <div class="meta"><span>DUE JUN 14</span><span>12 SITES</span><span class="ok">ON TRACK</span></div>
+              <div class="bar"><i></i></div>
+            </div>
+            <div class="lesson">
+              <div class="ttl-hd">Lesson · retrievable across sites</div>
+              <div class="row"><span class="k">symptom</span><span class="v">feedwater alarm, intermittent</span></div>
+              <div class="row"><span class="k">root_cause</span><span class="v">sensor_drift(PT-414)</span></div>
+              <div class="row"><span class="k">check_first</span><span class="v">calibrate sensor</span></div>
+              <div class="row"><span class="k">source</span><span class="v">voice · TECH-07</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="loop-foot">
+      <span class="divmark" style="margin:0"></span>
+      <span>VOICE IN &nbsp;·&nbsp; <b>LESSONS OUT</b> &nbsp;·&nbsp; THE NEXT LOOP IS</span>
+      <em>faster</em>
+      <span>THAN THE LAST.</span>
+    </div>
+
+    <div class="footline">04 / SOLUTION</div>
+    <div class="pager">04 / 07</div>
+  </section>
+
+  <!-- ================================== 05 BUSINESS CASE · MODULE INSIDE MANEX -->
+  <section class="s-bc" data-screen-label="05 Business Case">
+    <div class="stamp">
+      <img class="mx-logo" src="assets/manex-mark.png" alt="Manex">
+      <b>MANEX</b>
+      <span class="sep"></span>
+      <span class="mark"></span>
+      <b>RESOLVE</b><em>&nbsp;by De.Constructors</em>
+      <span class="sep"></span>
+      <span class="hack-chip">CODEX&nbsp;·&nbsp;<b>THINC!</b></span>
+      <span class="sep"></span>
+      <span>Business Case · Module inside Manex</span>
+    </div>
+    <div class="chapter"><span class="chapter-num">04</span>BUSINESS CASE</div>
+
+    <div class="wrap">
+      <div>
+        <div class="kicker" style="margin-bottom:22px">Not a standalone product · A new module inside Manex</div>
+        <h2>Priced on the <em>savings</em><br>we unlock per plant.</h2>
+        <div class="sub">
+          Resolve ships inside the <b>Manex platform</b> and is sold to existing Manex customers — BMW, Audi, Henkel, Stellantis. We don't win a new TAM; we <b>raise ARPU on every plant you already own.</b>
+        </div>
+
+        <div class="val-stack">
+          <div class="val-row">
+            <div class="k">Time saved</div>
+            <div class="t">QE — ~<b>15 hrs/wk</b> on 8D & FMEA. Resolve cuts <b>60%.</b> 5–15 QEs/plant @ €80/hr loaded · 50 wk.</div>
+            <div class="n">€180–540<em>k / plant / yr</em></div>
+          </div>
+          <div class="val-row">
+            <div class="k">Defect cost</div>
+            <div class="t"><b>–10%</b> recurring defects on 1–3% of plant revenue lost to quality.</div>
+            <div class="n">€0.2–2<em>M / plant / yr</em></div>
+          </div>
+          <div class="val-row">
+            <div class="k">Module fee</div>
+            <div class="t"><b>&lt; 20%</b> capture of realized value · ROI in ~<b>6 months.</b></div>
+            <div class="n">€80–120<em>k / plant / yr</em></div>
+          </div>
+        </div>
+
+        <div class="assump">
+          <b>Assumptions — to validate in pilot</b>
+          Figures are estimates. Anchor points: industry benchmarks for QE hours on 8D/FMEA, typical quality-cost ratio of 1–3% of plant revenue, tier-1 plant headcount. One pilot plant closes the loop on every number on this slide.
+        </div>
+      </div>
+
+      <div class="bc-side">
+        <div class="tag">● ARPU MATH · PER EXISTING MANEX CUSTOMER</div>
+        <h3>A <em>module</em>, not a<br>new product.</h3>
+        <p>Sold inside Manex's SKU. No new procurement cycle, no new champion to recruit, no new TAM to educate. The customer already signed last year.</p>
+        <p>Cross-customer lesson library compounds on top of Manex's existing signal graph — defensibility you don't have today.</p>
+
+        <div class="uplift">
+          <div class="num">+15–25<em>%</em></div>
+          <div class="lbl"><b>ARPU uplift</b> on every Manex plant · first 3–5 pilots</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="footline">05 / BUSINESS CASE</div>
+    <div class="pager">05 / 07</div>
+  </section>
+
+  <!-- ================================== 06 TAM / SAM / SOM -->
+  <section class="s-tam" data-screen-label="06 Market">
+    <div class="stamp">
+      <img class="mx-logo" src="assets/manex-mark.png" alt="Manex">
+      <b>MANEX</b>
+      <span class="sep"></span>
+      <span class="mark"></span>
+      <b>RESOLVE</b><em>&nbsp;by De.Constructors</em>
+      <span class="sep"></span>
+      <span class="hack-chip">CODEX&nbsp;·&nbsp;<b>THINC!</b></span>
+      <span class="sep"></span>
+      <span>Market · Manex-anchored sizing</span>
+    </div>
+    <div class="chapter"><span class="chapter-num">05</span>MARKET</div>
+
+    <div class="wrap">
+      <div class="tam-left">
+        <div class="kicker" style="margin-bottom:18px">B2B · Enterprise · Module inside Manex</div>
+        <h2>Manex <em>already</em> sells<br>where we need to win.</h2>
+        <div class="sub">
+          We're not sizing the global quality-software market. We're sizing <b>the Manex install base</b> — the plants Manex already sells into — and layering Resolve as a module on day one.
+        </div>
+
+        <!-- B2B customer strip -->
+        <div class="cust-strip">
+          <div class="cust-label">REFERENCED IN MANEX MATERIALS<span>·</span>DACH AUTOMOTIVE &amp; TIER-1</div>
+          <div class="cust-row">
+            <span class="cust">BMW</span>
+            <span class="cust">Mercedes-Benz</span>
+            <span class="cust">Audi</span>
+            <span class="cust">Porsche</span>
+            <span class="cust">Bosch</span>
+            <span class="cust">ZF</span>
+            <span class="cust">Continental</span>
+            <span class="cust">Siemens</span>
+          </div>
+          <div class="cust-foot">Named prospects &amp; reference accounts · not confirmed customers of Resolve</div>
+        </div>
+
+        <div class="legend">
+          <div class="leg-row">
+            <span class="dot tam"></span>
+            <span class="lbl"><b>TAM</b> · MANEX INSTALL BASE — all plants running Manex signal capture</span>
+            <span class="n">~2,500<em>DACH plants</em></span>
+          </div>
+          <div class="leg-row">
+            <span class="dot sam"></span>
+            <span class="lbl"><b>SAM</b> · QUALITY-HEAVY SLICE — DACH auto + EMS, IATF / ISO, 8D culture, budgeted</span>
+            <span class="n">~1,100<em>plants</em></span>
+          </div>
+          <div class="leg-row">
+            <span class="dot som"></span>
+            <span class="lbl"><b>SOM</b> · YEAR 1–2 — design-partner plants, land one, expand per account</span>
+            <span class="n">3–5<em>pilots</em></span>
+          </div>
+        </div>
+
+        <!-- Assumptions / validation -->
+        <div class="assump-block">
+          <div class="assump-tag">ASSUMPTIONS &nbsp;·&nbsp; FIGURES ARE GUESSTIMATES · TO VALIDATE IN PILOT</div>
+          <div class="assump-grid">
+            <div class="assump-item">
+              <div class="assump-k">Plant ARR</div>
+              <div class="assump-v">€80–120<span>k</span></div>
+              <div class="assump-d">Module fee per plant · &lt; 20% of realized value</div>
+            </div>
+            <div class="assump-item">
+              <div class="assump-k">SAM ARR</div>
+              <div class="assump-v">~€110<span>M</span></div>
+              <div class="assump-d">1,100 plants × €100k · quality-heavy DACH slice</div>
+            </div>
+            <div class="assump-item">
+              <div class="assump-k">SOM ARR · Y1–2</div>
+              <div class="assump-v">€0.3–0.6<span>M</span></div>
+              <div class="assump-d">3–5 design-partner plants at pilot pricing</div>
+            </div>
+            <div class="assump-item">
+              <div class="assump-k">Land → expand</div>
+              <div class="assump-v">1 → 6<span></span></div>
+              <div class="assump-d">Plants per account · typical enterprise SaaS fan-out</div>
+            </div>
+          </div>
+          <div class="assump-foot">
+            Sources · <b>Manex public materials</b> &nbsp;·&nbsp; <b>VDA &amp; ACEA</b> ~2,500 DACH plants &nbsp;·&nbsp; <b>ASQ</b> COPQ 1–3% of revenue &nbsp;·&nbsp; <b>IATF 16949</b> 8D/FMEA mandate.
+          </div>
+        </div>
+      </div>
+
+      <div class="tam-stage">
+        <div class="label-top">
+          <span><b>MANEX-ANCHORED</b> &nbsp;·&nbsp; CONCENTRIC, NOT ADDITIVE</span>
+          <span>LAND <b>→</b> EXPAND <b>→</b> STANDARDIZE</span>
+        </div>
+        <div class="tam-onion">
+          <div class="ring r-tam">
+            <div class="lbl">
+              <span class="tag">TAM · MANEX INSTALL BASE</span>
+              <span class="big"><em>~2,500</em> plants</span>
+              <span class="mid">€250M<span class="sm">&nbsp;addressable ARR</span></span>
+              <span class="dsc">DACH manufacturing sites already wired into Manex's signal graph.</span>
+            </div>
+          </div>
+          <div class="ring r-sam">
+            <div class="lbl">
+              <span class="tag">SAM · QUALITY-HEAVY</span>
+              <span class="big"><em>~1,100</em> plants</span>
+              <span class="mid">€110M<span class="sm">&nbsp;ARR</span></span>
+              <span class="dsc">DACH auto &amp; EMS · IATF/ISO · 8D culture · budget in place.</span>
+            </div>
+          </div>
+          <div class="ring r-som">
+            <div class="lbl">
+              <span class="tag">SOM · Y1–2</span>
+              <span class="big"><em>3–5</em> pilots</span>
+              <span class="mid">€0.3–0.6M<span class="sm">&nbsp;ARR</span></span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="footline">06 / MARKET</div>
+    <div class="pager">06 / 07</div>
+  </section>
+
+  <!-- ================================== 07 WHY WE WIN + ASK -->
+  <section class="s-ask" data-screen-label="07 Why We Win">
+    <div class="stamp">
+      <img class="mx-logo" src="assets/manex-mark.png" alt="Manex">
+      <b>MANEX</b>
+      <span class="sep"></span>
+      <span class="mark"></span>
+      <b>RESOLVE</b><em>&nbsp;by De.Constructors</em>
+      <span class="sep"></span>
+      <span class="hack-chip">CODEX&nbsp;·&nbsp;<b>THINC!</b></span>
+      <span class="sep"></span>
+      <span>Why we win · The ask</span>
+    </div>
+    <div class="chapter"><span class="chapter-num">06</span>WHY WE WIN · THE ASK</div>
+
+    <div class="wrap">
+      <div>
+        <div class="kicker" style="margin-bottom:22px;color:var(--sky-2)">The moat compounds · every customer</div>
+        <h2>Every resolved incident<br>makes the next one <em>faster.</em></h2>
+        <div class="sub">
+          The hero moat is the <b>cross-customer lesson library</b> — the thing Manex doesn't have yet, and which only compounds with more customers.
+        </div>
+      </div>
+
+      <div class="moat-row">
+        <div class="moat">
+          <div class="idx">MOAT 01</div>
+          <h3>Data <em>flywheel.</em></h3>
+          <p>Typed lesson library that strengthens retrieval and classification with every resolved incident — <b>cross-customer patterns, privacy-preserving.</b></p>
+        </div>
+        <div class="moat">
+          <div class="idx">MOAT 02</div>
+          <h3>Integration <em>depth.</em></h3>
+          <p>Opinionated connectors to MES, PLM, QMS, CRM. High switching cost once the signal graph is live — and <b>no competitor has them all.</b></p>
+        </div>
+        <div class="moat">
+          <div class="idx">MOAT 03</div>
+          <h3>Audit-grade <em>trust.</em></h3>
+          <p>Typed tool layer, evidence contract, session replay. <b>Meets IATF / ISO / CSRD out of the box</b> — Copilots cannot.</p>
+        </div>
+      </div>
+
+      <div class="ask-block">
+        <div class="ask-item">
+          <div class="n">01</div>
+          <div class="h">Design partner.</div>
+          <div class="d">One Manex customer plant for a 6-week closed-loop pilot on a live incident. We install voice + canvas. You keep every lesson.</div>
+        </div>
+        <div class="ask-item">
+          <div class="n">02</div>
+          <div class="h">Integration access.</div>
+          <div class="d">Sandbox for MES + QMS + CRM connectors inside the Manex platform — so the loop runs on real signals, not demo data.</div>
+        </div>
+        <div class="ask-item">
+          <div class="n">03</div>
+          <div class="h">Product-roadmap seat.</div>
+          <div class="d">A voice in Manex's module prioritization — so the signal graph evolves toward what the loop actually needs next.</div>
+        </div>
+        <div class="ask-sig">
+          <div>
+            <div class="lbl">DE.CONSTRUCTORS · CODEX HACKATHON · THINC! · 2026</div>
+            <div style="margin-top:10px;font-family:var(--mono);font-size:11px;color:rgba(255,255,255,0.55);letter-spacing:0.2em">03:00 PITCH · 02:00 LIVE DEMO · Q&amp;A</div>
+          </div>
+          <div class="sign">Every voice<br>becomes an <span class="accent">initiative.</span><br><span style="font-size:18px;color:rgba(255,255,255,0.72)">Every initiative becomes a lesson.<br>Every lesson makes the next plant <span style="color:var(--sky-2);font-style:italic">better.</span></span></div>
+          <div class="mail"><a href="/cdn-cgi/l/email-protection" class="__cf_email__" data-cfemail="81f5e4e0ecc1e5e4e2eeeff2f5f3f4e2f5eef3f2afe5e4f7">[email&#160;protected]</a></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="footline">07 / WHY WE WIN · ASK</div>
+    <div class="pager">07 / 07</div>
+  </section>
+
+</deck-stage>
+
+<script data-cfasync="false" src="/cdn-cgi/scripts/5c5dd728/cloudflare-static/email-decode.min.js" defer></script><script>
+  (function(){
+    const w = document.getElementById('w01');
+    if(!w) return;
+    const on = new Set([2,5,11,12,16,22,23,24,28]);
+    for(let i=0;i<36;i++){
+      const s=document.createElement('span');
+      const h=4+Math.round(Math.abs(Math.sin(i*0.8))*34);
+      s.style.height=h+'px';
+      if(on.has(i)) s.classList.add('on');
+      w.appendChild(s);
+    }
+  })();
+</script>
+</body>
+</html>
