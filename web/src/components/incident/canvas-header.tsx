@@ -9,7 +9,7 @@ import {
 } from "@/lib/display";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { RunAiButton } from "./run-ai-button";
+import { RunAiButton, type RunAiStatus } from "./run-ai-button";
 import { DispatchAllButton } from "./dispatch-all-button";
 
 type Phase = {
@@ -29,6 +29,7 @@ type Props = {
   hasDispatchedInitiative: boolean;
   archetype: ReportArchetype;
   lastActivityAt: string | null;
+  onRunAiStatusChange?: (status: RunAiStatus) => void;
 };
 
 const ARCHETYPE_BADGE: Record<string, string> = {
@@ -69,6 +70,7 @@ export function CanvasHeader({
   hasDispatchedInitiative,
   archetype,
   lastActivityAt,
+  onRunAiStatusChange,
 }: Props) {
   const sevKey = (incident.severity ?? "medium").toLowerCase();
   const sev = SEVERITY_BADGE[sevKey] ?? SEVERITY_BADGE.medium;
@@ -147,7 +149,10 @@ export function CanvasHeader({
         </div>
 
         <div className="flex items-center gap-2 shrink-0">
-          <RunAiButton incidentId={incident.incident_id} />
+          <RunAiButton
+            incidentId={incident.incident_id}
+            onStatusChange={onRunAiStatusChange}
+          />
           <DispatchAllButton
             incidentId={incident.incident_id}
             initiativeCount={initiativeCount}

@@ -24,6 +24,8 @@ import { SignalTimeline } from "./signal-timeline";
 import { ReasoningTimeline } from "./reasoning-timeline";
 import { ToolCallDrawer } from "./tool-call-drawer";
 import { HypothesisDetailPanel } from "./hypothesis-detail-panel";
+import { InvestigationBanner } from "./investigation-banner";
+import type { RunAiStatus } from "./run-ai-button";
 
 type Props = {
   incident: IncidentRow;
@@ -80,6 +82,7 @@ export function CanvasView({
   // without promoting that hypothesis to primary.
   const [focusedHypId, setFocusedHypId] = useState<string | null>(null);
   const [openToolCallId, setOpenToolCallId] = useState<string | null>(null);
+  const [runAiStatus, setRunAiStatus] = useState<RunAiStatus | null>(null);
 
   const primary = useMemo(
     () => hypotheses.find((h) => h.id === primaryId) ?? hypotheses[0],
@@ -121,7 +124,10 @@ export function CanvasView({
         hasDispatchedInitiative={false}
         archetype={archetype}
         lastActivityAt={lastActivity}
+        onRunAiStatusChange={setRunAiStatus}
       />
+
+      <InvestigationBanner status={runAiStatus} />
 
       {signals.length > 0 ? <SignalTimeline signals={signals} /> : null}
 
@@ -173,6 +179,8 @@ export function CanvasView({
           initiatives={initiatives}
           incidentId={incident.incident_id}
           productId={incident.primary_product_id ?? null}
+          toolCalls={toolCalls}
+          onOpenToolCall={(id) => setOpenToolCallId(id)}
         />
 
         <ContributionsSection contributions={contributions} />

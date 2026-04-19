@@ -8,10 +8,23 @@ import { cn } from "@/lib/utils";
 
 type State = "idle" | "running" | "done" | "error";
 
+export type RunAiStatus = {
+  state: State;
+  elapsedMs: number;
+  isPolling: boolean;
+  errorMsg: string | null;
+};
+
 const POLL_INTERVAL_MS = 3000;
 const MAX_ELAPSED_MS = 90_000;
 
-export function RunAiButton({ incidentId }: { incidentId: string }) {
+export function RunAiButton({
+  incidentId,
+  onStatusChange,
+}: {
+  incidentId: string;
+  onStatusChange?: (status: RunAiStatus) => void;
+}) {
   const [state, setState] = useState<State>("idle");
   const [elapsed, setElapsed] = useState(0);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -23,6 +36,12 @@ export function RunAiButton({ incidentId }: { incidentId: string }) {
       if (tickRef.current) clearInterval(tickRef.current);
     };
   }, []);
+
+  const isPolling = state === "done" && tickRef.current !== null;
+
+  useEffect(() => {
+    onStatusChange?.({ state, elapsedMs: elapsed, isPolling, errorMsg });
+  }, [state, elapsed, isPolling, errorMsg, onStatusChange]);
 
   const stopTicking = () => {
     if (tickRef.current) {
@@ -80,7 +99,6 @@ export function RunAiButton({ incidentId }: { incidentId: string }) {
   };
 
   const elapsedS = Math.floor(elapsed / 1000);
-  const isPolling = state === "done" && tickRef.current !== null;
 
   const label =
     state === "running"

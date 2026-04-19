@@ -72,14 +72,18 @@ export function HypothesisDetailPanel({
       role="dialog"
       aria-label={`Hypothesis ${hypothesis.id}`}
       onClick={onClose}
-      className="fixed inset-0 z-50 bg-foreground/40 flex justify-end"
+      className="fixed inset-0 z-50 bg-black/50 backdrop-blur-[2px] flex justify-end"
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="w-[min(640px,100vw)] h-full bg-card border-l border-border overflow-auto shadow-xl"
+        style={{ backgroundColor: "#ffffff" }}
+        className="w-[min(640px,100vw)] h-full border-l border-border overflow-auto shadow-2xl"
       >
         {/* Sticky header */}
-        <div className="sticky top-0 bg-card border-b border-border px-6 py-4 z-10">
+        <div
+          style={{ backgroundColor: "#ffffff" }}
+          className="sticky top-0 border-b border-border px-6 py-4 z-10"
+        >
           <div className="flex items-start gap-3">
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 flex-wrap">

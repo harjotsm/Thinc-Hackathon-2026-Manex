@@ -359,11 +359,12 @@ export function PrimaryHypothesisCard({
             role="dialog"
             aria-label={`Signal ${focused.signal_id}`}
             onClick={() => setDrawerSignal(null)}
-            className="fixed inset-0 z-50 bg-foreground/40 flex justify-end"
+            className="fixed inset-0 z-50 bg-black/50 backdrop-blur-[2px] flex justify-end"
           >
             <div
               onClick={(e) => e.stopPropagation()}
-              className="w-[min(420px,100vw)] h-full bg-card border-l border-border p-6 overflow-auto shadow-xl"
+              style={{ backgroundColor: "#ffffff" }}
+              className="w-[min(420px,100vw)] h-full border-l border-border p-6 overflow-auto shadow-2xl"
             >
               <div className="flex items-center gap-2 mb-3">
                 <Badge

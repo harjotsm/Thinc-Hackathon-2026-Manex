@@ -43,10 +43,10 @@ const ARCHETYPE_BADGE: Record<string, string> = {
 };
 
 const VIEWS: Array<{ id: ViewMode; label: string; icon: typeof Network }> = [
+  { id: "fishbone", label: "Fishbone", icon: Fish },
   { id: "radial",   label: "Radial",   icon: Network },
   { id: "tree",     label: "Tree",     icon: Share2 },
   { id: "stack",    label: "Stack",    icon: Workflow },
-  { id: "fishbone", label: "Fishbone", icon: Fish },
   { id: "chips",    label: "Chips",    icon: LayoutList },
 ];
 
@@ -58,7 +58,7 @@ export function AlternativeHypotheses({
   onFocusHypothesis,
   incidentId,
 }: Props) {
-  const [view, setView] = useState<ViewMode>("radial");
+  const [view, setView] = useState<ViewMode>("fishbone");
   const [drawerOpen, setDrawerOpen] = useState(false);
 
   const alternates = hypotheses.filter((h) => h.id !== primaryId);
@@ -167,36 +167,40 @@ export function AlternativeHypotheses({
               );
             })}
           </div>
-        ) : view === "fishbone" ? (
-          <IshikawaView
-            hypotheses={hypotheses}
-            problemStatement={problemStatement}
-            activeId={primaryId}
-            onSelect={handleNodeClick}
-          />
         ) : (
-          <div className="rounded-lg border border-border/60 bg-muted/20 overflow-hidden">
-            {view === "radial" ? (
-              <GraphRadial
-                hypotheses={graphHypotheses}
+          <>
+            {view === "fishbone" ? (
+              <IshikawaView
+                hypotheses={hypotheses}
+                problemStatement={problemStatement}
                 activeId={primaryId}
                 onSelect={handleNodeClick}
-                incidentId={incidentId}
-              />
-            ) : view === "tree" ? (
-              <GraphTree
-                hypotheses={graphHypotheses}
-                activeId={primaryId}
-                onSelect={handleNodeClick}
-                incidentId={incidentId}
               />
             ) : (
-              <GraphStack
-                hypotheses={graphHypotheses}
-                activeId={primaryId}
-                onSelect={handleNodeClick}
-                incidentId={incidentId}
-              />
+              <div className="rounded-lg border border-border/60 bg-muted/20 overflow-hidden">
+                {view === "radial" ? (
+                  <GraphRadial
+                    hypotheses={graphHypotheses}
+                    activeId={primaryId}
+                    onSelect={handleNodeClick}
+                    incidentId={incidentId}
+                  />
+                ) : view === "tree" ? (
+                  <GraphTree
+                    hypotheses={graphHypotheses}
+                    activeId={primaryId}
+                    onSelect={handleNodeClick}
+                    incidentId={incidentId}
+                  />
+                ) : (
+                  <GraphStack
+                    hypotheses={graphHypotheses}
+                    activeId={primaryId}
+                    onSelect={handleNodeClick}
+                    incidentId={incidentId}
+                  />
+                )}
+              </div>
             )}
             {/* Keep keyboard-accessible chip targets in the DOM so the
                 existing alternative-hypotheses test (which asserts chips by
@@ -215,7 +219,7 @@ export function AlternativeHypotheses({
                 </button>
               ))}
             </div>
-          </div>
+          </>
         )}
 
         {drawerOpen ? (
