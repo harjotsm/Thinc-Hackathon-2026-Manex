@@ -51,6 +51,8 @@ Archetype definitions:
 - operator: handling errors, rework variation, or procedural non-conformance by individual operators.
 - unknown: insufficient signal to classify; requires investigation.
 
+If signal samples are provided, classify based on them — they carry the real incident content. Only return "unknown" when no signals indicate a clear archetype.
+
 Keep signature_text short and keyword-rich for embedding search.`.trim();
 
 // ─── Investigate instructions ─────────────────────────────────────────────────
