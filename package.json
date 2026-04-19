@@ -1,10 +1,31 @@
 {
+  "name": "resolve-root",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@9.0.0",
+  "scripts": {
+    "health": "tsx scripts/health-check.ts",
+    "db:migrate:remote": "tsx scripts/apply-remote-migrations.ts",
+    "db:seed:demo": "tsx scripts/seed-demo.ts",
+    "backfill:seed": "tsx scripts/backfill-signals.ts",
+    "lessons:embed": "tsx scripts/embed-demo-lessons.ts",
+    "demo:reset": "tsx scripts/demo-reset.ts",
+    "test": "vitest",
+    "test:integration": "vitest run tests/integration",
+    "test:golden": "vitest run tests/golden"
+  },
   "dependencies": {
+    "@supabase/postgrest-js": "^2.103.3",
     "@supabase/supabase-js": "^2.103.3",
+    "openai": "^6.34.0",
     "pg": "^8.20.0",
     "zod": "^4.3.6"
   },
   "devDependencies": {
-    "@types/node": "^25.6.0"
+    "@types/node": "^25.6.0",
+    "@types/pg": "^8.11.0",
+    "dotenv": "^16.4.5",
+    "tsx": "^4.19.0",
+    "vitest": "^2.1.0"
   }
 }

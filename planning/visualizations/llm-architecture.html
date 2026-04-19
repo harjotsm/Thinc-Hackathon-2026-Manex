@@ -1,0 +1,898 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>LLM Pipeline — Act II Deep-Dive · Resolve</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<style>
+  :root {
+    --bg: #0a0f1f;
+    --panel: #111a30;
+    --panel-soft: #17223f;
+    --panel-solid: #1d2a4d;
+    --text: #e8ecf8;
+    --muted: #9aa6c7;
+    --subtle: #6b7aa0;
+    --accent: #7dd3fc;
+    --border: #263356;
+    --blue: #3b82f6;
+    --cyan: #06b6d4;
+    --teal: #14b8a6;
+    --amber: #f59e0b;
+    --orange: #f97316;
+    --rose: #f43f5e;
+    --green: #10b981;
+    --violet: #a855f7;
+
+    --tier-primary: #f97316;
+    --tier-fast: #10b981;
+    --tier-embed: #a855f7;
+    --tier-vision: #f43f5e;
+
+    --phase-classify:  #10b981;
+    --phase-investigate: #f97316;
+    --phase-compose:   #3b82f6;
+    --phase-propose:   #a855f7;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    background: radial-gradient(ellipse at top, #162045 0%, var(--bg) 60%) fixed;
+    color: var(--text);
+    font-family: -apple-system, "Inter", "Segoe UI", system-ui, sans-serif;
+    line-height: 1.55;
+  }
+  code, pre, .mono { font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace; }
+  header { padding: 56px 48px 24px; max-width: 1440px; margin: 0 auto; }
+  header .kicker { text-transform: uppercase; letter-spacing: 0.18em; font-size: 11px; color: var(--accent); font-weight: 600; }
+  header h1 { font-size: 40px; margin: 12px 0 8px; font-weight: 700; letter-spacing: -0.02em; line-height: 1.1; }
+  header p.lead { color: var(--muted); max-width: 860px; font-size: 17px; margin: 0; }
+  main { max-width: 1440px; margin: 0 auto; padding: 0 48px 96px; }
+  section { margin-top: 56px; }
+  section > h2 { font-size: 13px; text-transform: uppercase; letter-spacing: 0.2em; color: var(--muted); margin: 0 0 6px; font-weight: 600; }
+  section > h3 { font-size: 26px; margin: 0 0 12px; font-weight: 700; letter-spacing: -0.015em; }
+  section > .sub { color: var(--muted); margin: 0 0 24px; max-width: 880px; }
+
+  .scope-banner { background: linear-gradient(180deg, rgba(6,182,212,0.12), rgba(59,130,246,0.06)); border: 1px solid rgba(6,182,212,0.3); border-radius: 14px; padding: 20px 26px; font-size: 14px; }
+  .scope-banner strong { color: #67e8f9; }
+
+  .phases { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-top: 12px; }
+  .phase { background: var(--panel); border: 1px solid var(--border); border-top: 4px solid; border-radius: 14px; padding: 20px; position: relative; }
+  .phase.classify    { border-top-color: var(--phase-classify); }
+  .phase.investigate { border-top-color: var(--phase-investigate); }
+  .phase.compose     { border-top-color: var(--phase-compose); }
+  .phase.propose     { border-top-color: var(--phase-propose); }
+  .phase .n { font-family: "JetBrains Mono", monospace; font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase; font-weight: 700; }
+  .phase.classify .n    { color: var(--phase-classify); }
+  .phase.investigate .n { color: var(--phase-investigate); }
+  .phase.compose .n     { color: var(--phase-compose); }
+  .phase.propose .n     { color: var(--phase-propose); }
+  .phase h4 { margin: 6px 0 10px; font-size: 18px; letter-spacing: -0.01em; }
+  .phase .io { font-size: 12px; color: var(--subtle); margin: 0 0 12px; font-family: "JetBrains Mono", monospace; }
+  .phase .io b { color: var(--muted); font-weight: 500; }
+  .phase .details { font-size: 12.5px; color: var(--text); line-height: 1.55; }
+  .phase .details ul { padding-left: 18px; margin: 6px 0 0; color: var(--muted); }
+  .phase .meta { margin-top: 14px; padding-top: 12px; border-top: 1px dashed var(--border); font-size: 11.5px; color: var(--subtle); }
+  .phase .meta span { display: inline-block; margin-right: 14px; font-family: "JetBrains Mono", monospace; }
+
+  .decisions { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 14px; }
+  .decision { background: var(--panel); border: 1px solid var(--border); border-left: 4px solid var(--accent); border-radius: 12px; padding: 18px 20px; }
+  .decision .num { font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--muted); font-weight: 700; }
+  .decision h4 { margin: 4px 0 8px; font-size: 16px; letter-spacing: -0.01em; }
+  .decision p { margin: 0 0 6px; font-size: 13.5px; color: var(--text); }
+  .decision .why { color: var(--muted); font-size: 12.5px; font-style: italic; margin-top: 6px; }
+  .decision.critical { border-left-color: var(--orange); }
+  .decision.novel    { border-left-color: var(--violet); }
+  .decision.safety   { border-left-color: var(--rose); }
+  .decision.cost     { border-left-color: var(--green); }
+
+  .models { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 14px; }
+  .model { background: var(--panel); border: 1px solid var(--border); border-top: 4px solid; border-radius: 12px; padding: 20px; }
+  .model.primary { border-top-color: var(--tier-primary); }
+  .model.fast    { border-top-color: var(--tier-fast); }
+  .model.embed   { border-top-color: var(--tier-embed); }
+  .model.vision  { border-top-color: var(--tier-vision); }
+  .model .tier { font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase; font-weight: 700; }
+  .model.primary .tier { color: var(--tier-primary); }
+  .model.fast .tier    { color: var(--tier-fast); }
+  .model.embed .tier   { color: var(--tier-embed); }
+  .model.vision .tier  { color: var(--tier-vision); }
+  .model h4 { margin: 6px 0 4px; font-size: 18px; letter-spacing: -0.01em; }
+  .model .id { font-family: "JetBrains Mono", monospace; font-size: 11.5px; color: var(--muted); background: var(--panel-soft); padding: 3px 8px; border-radius: 6px; display: inline-block; margin-bottom: 12px; }
+  .model .roles { font-size: 12.5px; color: var(--muted); margin: 0; padding-left: 16px; line-height: 1.6; }
+  .model .cost { margin-top: 14px; padding-top: 12px; border-top: 1px dashed var(--border); font-size: 11.5px; color: var(--subtle); font-family: "JetBrains Mono", monospace; }
+
+  .tool-groups { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 18px; }
+  .tool-group { background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 22px; }
+  .tool-group h4 { margin: 0 0 4px; font-size: 16px; }
+  .tool-group .desc { color: var(--muted); font-size: 13px; margin: 0 0 14px; }
+  .tool { border-top: 1px solid var(--border); padding: 12px 0; display: grid; grid-template-columns: 1fr; gap: 4px; }
+  .tool:first-of-type { border-top: none; padding-top: 0; }
+  .tool .sig { font-family: "JetBrains Mono", monospace; font-size: 12.5px; color: var(--accent); }
+  .tool .sig .ret { color: var(--green); }
+  .tool .purpose { font-size: 12.5px; color: var(--muted); }
+  .tool .tag { display: inline-block; font-size: 10px; padding: 2px 6px; border-radius: 4px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; margin-right: 6px; }
+  .tag.read     { background: rgba(59,130,246,0.15); color: #93c5fd; }
+  .tag.write    { background: rgba(16,185,129,0.18); color: #6ee7b7; }
+  .tag.sem      { background: rgba(168,85,247,0.18); color: #c4b5fd; }
+  .tag.vis      { background: rgba(244,63,94,0.18); color: #fda4af; }
+  .tag.correl   { background: rgba(6,182,212,0.18); color: #67e8f9; }
+  .tag.sim      { background: rgba(251,146,60,0.18); color: #fdba74; }
+
+  .playbook { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 16px; }
+  .play { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 20px; }
+  .play .head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 8px; }
+  .play .arch { font-size: 11px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--muted); font-weight: 700; }
+  .play h4 { margin: 0 0 10px; font-size: 17px; }
+  .play .chain { display: flex; flex-wrap: wrap; gap: 6px; font-family: "JetBrains Mono", monospace; font-size: 11.5px; }
+  .play .chain .step { background: var(--panel-soft); border: 1px solid var(--border); padding: 4px 10px; border-radius: 6px; color: var(--text); }
+  .play .chain .arrow { color: var(--subtle); padding: 4px 2px; }
+  .play .verdict { margin-top: 12px; padding-top: 12px; border-top: 1px dashed var(--border); font-size: 12px; color: var(--muted); font-style: italic; }
+
+  .guards { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 14px; }
+  .guard { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 18px; position: relative; }
+  .guard::before { content: "🛡️"; position: absolute; top: 16px; right: 16px; font-size: 20px; opacity: 0.5; }
+  .guard h4 { margin: 0 0 6px; font-size: 15px; }
+  .guard p { margin: 0; font-size: 12.5px; color: var(--muted); }
+
+  .diagram { background: var(--panel); border: 1px solid var(--border); border-radius: 16px; padding: 32px; overflow: auto; }
+  .diagram .note { color: var(--muted); font-size: 13px; margin-top: 16px; padding-top: 16px; border-top: 1px dashed var(--border); }
+
+  .contract { background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 24px; overflow-x: auto; }
+  .contract pre { margin: 0; font-family: "JetBrains Mono", monospace; font-size: 12.5px; color: var(--text); line-height: 1.55; }
+  .contract .comment { color: var(--subtle); }
+  .contract .kw      { color: #c084fc; }
+  .contract .str     { color: #86efac; }
+  .contract .num     { color: #fbbf24; }
+
+  .prompt-card { background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 22px; }
+  .prompt-card h4 { margin: 0 0 10px; font-size: 16px; }
+  .prompt-card .blocks { display: grid; grid-template-columns: 80px 1fr 70px; gap: 8px; margin-top: 10px; font-family: "JetBrains Mono", monospace; font-size: 12px; }
+  .prompt-card .blocks .num, .prompt-card .blocks .tok { background: var(--panel-soft); padding: 10px; border-radius: 6px; color: var(--muted); text-align: center; font-weight: 700; }
+  .prompt-card .blocks .body { background: var(--panel-soft); padding: 10px 14px; border-radius: 6px; color: var(--text); border-left: 3px solid; }
+  .prompt-card .blocks .body.system    { border-left-color: var(--cyan); }
+  .prompt-card .blocks .body.cache     { border-left-color: var(--green); }
+  .prompt-card .blocks .body.fewshot   { border-left-color: var(--violet); }
+  .prompt-card .blocks .body.session   { border-left-color: var(--amber); }
+  .prompt-card .blocks .body.turn      { border-left-color: var(--orange); }
+  .prompt-card .break { margin: 8px 0; display: grid; grid-template-columns: 80px 1fr 70px; gap: 8px; }
+  .prompt-card .break .marker { grid-column: 2; text-align: center; font-size: 11px; color: var(--green); font-weight: 700; letter-spacing: 0.1em; padding: 6px; background: rgba(16,185,129,0.08); border: 1px dashed rgba(16,185,129,0.3); border-radius: 4px; }
+
+  .cost-table { background: var(--panel); border: 1px solid var(--border); border-radius: 14px; overflow: hidden; }
+  .cost-table table { width: 100%; border-collapse: collapse; }
+  .cost-table th, .cost-table td { padding: 12px 18px; text-align: left; font-size: 13px; border-bottom: 1px solid var(--border); }
+  .cost-table th { background: var(--panel-soft); font-weight: 700; font-size: 11px; text-transform: uppercase; letter-spacing: 0.12em; color: var(--muted); }
+  .cost-table td.num { font-family: "JetBrains Mono", monospace; color: var(--accent); }
+  .cost-table tr:last-child td { border-bottom: none; font-weight: 700; background: var(--panel-soft); }
+
+  .callout { background: linear-gradient(180deg, rgba(249,115,22,0.12), rgba(168,85,247,0.08)); border: 1px solid rgba(249,115,22,0.3); border-radius: 14px; padding: 22px 26px; margin-top: 20px; font-size: 14.5px; }
+  .callout strong { color: #fdba74; }
+
+  footer { color: var(--muted); text-align: center; padding: 40px 20px; font-size: 12px; border-top: 1px solid var(--border); margin-top: 60px; }
+  @media (max-width: 1200px) {
+    .decisions, .tool-groups, .playbook { grid-template-columns: 1fr; }
+    .phases { grid-template-columns: repeat(2,1fr); }
+    .models { grid-template-columns: repeat(2,1fr); }
+    .guards { grid-template-columns: 1fr; }
+    header { padding: 32px 24px 16px; }
+    main { padding: 0 24px 60px; }
+    header h1 { font-size: 28px; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="kicker">Resolve · LLM Pipeline · Joscha's ownership · feat/joscha</div>
+  <h1>Act II deep-dive — the LLM pipeline inside Reason</h1>
+  <p class="lead">
+    Technical reference for building the <strong>Reason</strong> act of Resolve.
+    Input = <code>incident</code> (from Listen's correlator). Output = filled
+    8D projection + <code>initiative</code> candidates with typed closure
+    predicates (consumed by Resolve's domain agents). Everything below is
+    LLM-layer specific — <a href="architecture.html" style="color:#7dd3fc">architecture.html</a>
+    has the three-act overview.
+  </p>
+</header>
+
+<main>
+
+  <section>
+    <div class="scope-banner">
+      <strong>Positioning:</strong>
+      This file is the single-source reference while building the agent code under
+      <code>app/server/agent/</code>, <code>app/server/tools/</code>,
+      <code>app/server/prompts/</code>, and <code>app/server/models/</code>.
+      If you change a decision here, update <a href="../ARCHITECTURE.md" style="color:#7dd3fc">ARCHITECTURE.md</a>
+      in the same PR — they must stay consistent.
+    </div>
+  </section>
+
+  <section>
+    <h2>Section 1</h2>
+    <h3>The four phases of Reason</h3>
+    <p class="sub">Orchestrated pipeline, not pure ReAct. Each phase has a typed I/O contract. Tool calls are bounded; model choice is explicit.</p>
+
+    <div class="phases">
+      <div class="phase classify">
+        <div class="n">Phase 1</div>
+        <h4>Classify</h4>
+        <div class="io"><b>in:</b> Incident<br/><b>out:</b> Archetype + Playbook</div>
+        <div class="details">
+          Routes to one of five archetypes: <code>supplier</code>, <code>drift</code>, <code>design</code>, <code>operator</code>, <code>unknown</code>. Returns confidence + playbook snippet for Investigate.
+          <ul>
+            <li>1 LLM call · no tools · Zod-validated JSON</li>
+            <li>Retrieves 3 nearest <code>lesson</code> rows as prior</li>
+          </ul>
+        </div>
+        <div class="meta"><span>Model: Haiku 4.5</span><span>Budget: 2k in / 150 out</span></div>
+      </div>
+
+      <div class="phase investigate">
+        <div class="n">Phase 2</div>
+        <h4>Investigate</h4>
+        <div class="io"><b>in:</b> Incident + Playbook<br/><b>out:</b> EvidenceBundle</div>
+        <div class="details">
+          Bounded ReAct. Plans, calls tools, reasons over results, iterates. Stops on confidence ≥ 0.75 or max 8 turns (then stalls to engineer-hint).
+          <ul>
+            <li>Tool calls via Anthropic SDK <code>toolUse</code></li>
+            <li>Evidence cached by <code>hash(tool_name, args)</code></li>
+            <li>Haiku noise-filter removes detection-bias + false positives</li>
+          </ul>
+        </div>
+        <div class="meta"><span>Model: Sonnet 4.6</span><span>Budget: 18k in / 3k out</span></div>
+      </div>
+
+      <div class="phase compose">
+        <div class="n">Phase 3</div>
+        <h4>Compose</h4>
+        <div class="io"><b>in:</b> EvidenceBundle<br/><b>out:</b> Report8D + Viz</div>
+        <div class="details">
+          Fills 8D projection (D1–D8). Every claim cites <code>tool_call_id</code>s. Emits <code>render_hint</code> JSON for the Canvas UI.
+          <ul>
+            <li>Structured output via Zod schema</li>
+            <li>Viz picks from: pareto / timeline / fault_tree / bom_graph / image_row / kpi_card</li>
+            <li>DE / EN adapts to source-data language</li>
+          </ul>
+        </div>
+        <div class="meta"><span>Model: Sonnet 4.6</span><span>Budget: 6k in / 2.5k out</span></div>
+      </div>
+
+      <div class="phase propose">
+        <div class="n">Phase 4</div>
+        <h4>Propose</h4>
+        <div class="io"><b>in:</b> Report8D<br/><b>out:</b> Initiative[]</div>
+        <div class="details">
+          N initiative candidates. Each: <code>agent_domain</code>, rationale, owner, deadline, typed <code>closure_predicate</code>, <code>impact_estimate</code>, confidence, evidence.
+          <ul>
+            <li>Owner from <code>rework.user_id</code> frequency</li>
+            <li>Closure predicate = discriminated union</li>
+            <li>1–5 candidates typical; &gt;5 → Haiku compacts</li>
+          </ul>
+        </div>
+        <div class="meta"><span>Model: Sonnet 4.6</span><span>Budget: 3k in / 1.5k out</span></div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Section 2</h2>
+    <h3>Detailed pipeline with control flow</h3>
+    <p class="sub">End-to-end inside Reason. Branching, caching, stall recovery, post-validation.</p>
+
+    <div class="diagram">
+      <pre class="mermaid">
+flowchart TB
+  IN["Incident (from Listen correlator)<br/>+ seed signals + BOM context"] --> CLS
+
+  subgraph CLASSIFY["🟢 PHASE 1 · Classify (Haiku 4.5)"]
+    CLS["1 LLM call<br/>→ {archetype, confidence, playbook}"]
+    LES["retrieve_lessons(top=3)<br/>nearest past resolutions"]
+  end
+  LES -.prior.-> CLS
+
+  CLS --> INV_LOOP
+
+  subgraph INVESTIGATE["🟠 PHASE 2 · Investigate (Sonnet 4.6 · max 8 turns)"]
+    INV_LOOP{"Agent loop<br/>(think → tool_use → observe)"}
+    TOOL_DISPATCH{"tool dispatch"}
+    EV_CACHE[("evidence cache<br/>hash(args) → result")]
+    NOISE["Noise filter (Haiku)<br/>detection bias · false-pos · holiday dip"]
+    CONF{"confidence ≥ 0.75<br/>or max turns?"}
+    STALL["stall → request_hint event<br/>→ UI chat panel"]
+  end
+
+  INV_LOOP <--> TOOL_DISPATCH
+  TOOL_DISPATCH --> EV_CACHE
+  EV_CACHE --> INV_LOOP
+  INV_LOOP --> NOISE --> CONF
+  CONF -- "no" --> STALL
+  STALL -- "engineer input" --> INV_LOOP
+  CONF -- "yes" --> CM
+
+  subgraph COMPOSE["🔵 PHASE 3 · Compose (Sonnet 4.6)"]
+    CM["Evidence bundler<br/>filter to cited-only"]
+    D8["8D template filler<br/>D1..D8 with evidence[] per claim"]
+    VIZ["Viz selector<br/>→ render_hints"]
+  end
+  CM --> D8 --> VIZ
+
+  VIZ --> PR
+
+  subgraph PROPOSE["🟣 PHASE 4 · Propose (Sonnet 4.6)"]
+    PR["Initiative composer<br/>(1..N candidates)"]
+    OWN["Owner + deadline suggest<br/>(from rework patterns)"]
+    PRED["Closure predicate builder<br/>(typed discriminated union)"]
+    SIM["Impact Simulator<br/>(rule + lesson similarity)"]
+  end
+  PR --> OWN --> PRED --> SIM
+
+  SIM --> OUT
+
+  OUT["AgentOutput (Zod-validated)<br/>→ Engineer review UI (SSE stream)"] --> VAL["Evidence-cite post-validator<br/>every tool_call_id must exist"]
+  VAL -- "ok" --> DONE["Ready for Act III (Resolve)"]
+  VAL -- "missing id" --> RETRY["retry with error feedback<br/>(max 1 retry)"]
+  RETRY --> PR
+
+  classDef classify fill:#14532d,stroke:#10b981,color:#bbf7d0
+  classDef investigate fill:#7c2d12,stroke:#f97316,color:#fed7aa
+  classDef compose fill:#1e40af,stroke:#3b82f6,color:#dbeafe
+  classDef propose fill:#581c87,stroke:#a855f7,color:#e9d5ff
+  classDef io fill:#1f2937,stroke:#6b7280,color:#d1d5db
+
+  class CLS,LES classify
+  class INV_LOOP,TOOL_DISPATCH,EV_CACHE,NOISE,CONF,STALL investigate
+  class CM,D8,VIZ compose
+  class PR,OWN,PRED,SIM propose
+  class IN,OUT,VAL,DONE,RETRY io
+      </pre>
+      <div class="note">
+        <strong>Reading this:</strong> dashed edges are data (cache reads, priors); solid edges are control.
+        The retry from VAL → PR is intentional — un-cited evidence ID gets one retry with the validation error as feedback. Second failure = hard error (don't paper over hallucinations).
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Section 3</h2>
+    <h3>System prompt structure &amp; cache breakpoint strategy</h3>
+    <p class="sub">~8k cached tokens up front = every turn after the first hits the cache. &gt;80% hit rate during a demo session = &gt;60% input-cost reduction and ~3× latency drop on cached prefix.</p>
+
+    <div class="prompt-card">
+      <h4>Anthropic messages payload layout (every phase)</h4>
+      <div class="blocks">
+        <div class="num">Block 1</div>
+        <div class="body system">SYSTEM PROMPT: Resolve role · vocabulary (signal/incident/initiative) · Manex domain primer · 8D structure · output format rules</div>
+        <div class="tok">~2 000</div>
+
+        <div class="num">Block 2</div>
+        <div class="body fewshot">TOOL SCHEMAS: all 20+ tool definitions (Zod → JSON Schema) with examples</div>
+        <div class="tok">~3 000</div>
+
+        <div class="num">Block 3</div>
+        <div class="body fewshot">ARCHETYPE PLAYBOOKS (few-shots): supplier · drift · design · operator</div>
+        <div class="tok">~3 000</div>
+      </div>
+      <div class="break"><div class="marker">↑ cache_control: ephemeral (5 min TTL) — breakpoint here</div></div>
+      <div class="blocks">
+        <div class="num">Block 4</div>
+        <div class="body session">SESSION CONTEXT: incident summary · seed signals · retrieved lessons · archetype pick (from Classify)</div>
+        <div class="tok">~1 500</div>
+
+        <div class="num">Block 5</div>
+        <div class="body turn">TURN MESSAGES: previous tool_use + tool_result blocks in the ReAct loop (grows each turn)</div>
+        <div class="tok">~500–10k</div>
+      </div>
+    </div>
+
+    <div class="callout">
+      <strong>Cache hit accounting during a full run:</strong>
+      Turn 1 = cold miss on blocks 1–3 (~$0.024), warm block 4. Turns 2–8 = cache hits on blocks 1–3 (~$0.0024 each), blocks 4–5 grow.
+      Across a 6-turn Investigate: <em>one</em> cold read of the 8k prefix instead of six. Caching pays for itself on turn 2.
+    </div>
+  </section>
+
+  <section>
+    <h2>Section 4</h2>
+    <h3>Model routing</h3>
+    <p class="sub">Four models, mapped explicitly.</p>
+
+    <div class="models">
+      <div class="model primary">
+        <div class="tier">Primary · Reasoning</div>
+        <h4>Claude Sonnet 4.6</h4>
+        <div class="id mono">claude-sonnet-4-6</div>
+        <ul class="roles">
+          <li>Investigate loop (tool use)</li>
+          <li>Compose (8D narrative)</li>
+          <li>Propose (initiative composer)</li>
+          <li>Vision call for operator photos</li>
+        </ul>
+        <div class="cost">≈ $3 / $15 per 1M tok<br/>Cached input: $0.30 / 1M</div>
+      </div>
+      <div class="model fast">
+        <div class="tier">Fast · Classifier</div>
+        <h4>Claude Haiku 4.5</h4>
+        <div class="id mono">claude-haiku-4-5-20251001</div>
+        <ul class="roles">
+          <li>Classify phase</li>
+          <li>Noise-filter pre-compose</li>
+          <li>Tool-result summarization</li>
+          <li>Stall heuristic</li>
+        </ul>
+        <div class="cost">≈ $0.80 / $4 per 1M tok<br/>~4× cheaper than Sonnet</div>
+      </div>
+      <div class="model embed">
+        <div class="tier">Embedding · Semantic</div>
+        <h4>OpenAI text-embedding-3-small</h4>
+        <div class="id mono">text-embedding-3-small</div>
+        <ul class="roles">
+          <li>signal.embedding (13 source types)</li>
+          <li>complaint · action · notes</li>
+          <li>lesson signatures</li>
+          <li>Query-time embedding</li>
+        </ul>
+        <div class="cost">≈ $0.02 / 1M tok · 1536 dims<br/>~$0.01 initial index</div>
+      </div>
+      <div class="model vision">
+        <div class="tier">Fallback · Deep think</div>
+        <h4>Claude Opus 4.7</h4>
+        <div class="id mono">claude-opus-4-7</div>
+        <ul class="roles">
+          <li>Stall + engineer-hint only</li>
+          <li>Cross-archetype conflicts</li>
+          <li>Optional final review</li>
+        </ul>
+        <div class="cost">≈ $15 / $75 per 1M tok<br/>Gated: max_calls=2/session</div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Section 5</h2>
+    <h3>Tool catalog (typed, Zod-validated, bounded)</h3>
+    <p class="sub">Every tool in <code>app/server/tools/*.ts</code>. Read tools have <code>LIMIT 50</code>; write tools are gated to post-approval.</p>
+
+    <div class="tool-groups">
+
+      <div class="tool-group">
+        <h4>🧲 Signal &amp; Incident (Listen act — LLM reads)</h4>
+        <div class="desc">Listen owns these records; LLM consumes them via typed getters.</div>
+        <div class="tool">
+          <div class="sig"><span class="tag read">read</span>get_incident(incident_id: <span class="ret">string</span>) → <span class="ret">Incident + Signal[]</span></div>
+          <div class="purpose">Full incident + all correlated signals with raw payloads. Entry point for Classify.</div>
+        </div>
+        <div class="tool">
+          <div class="sig"><span class="tag read">read</span>list_signals_for_incident(incident_id: <span class="ret">string</span>) → <span class="ret">Signal[]</span></div>
+          <div class="purpose">Raw signal stream with source_system, captured_ts, text_payload, severity_hint.</div>
+        </div>
+        <div class="tool">
+          <div class="sig"><span class="tag correl">corr</span>find_related_incidents(incident_id: <span class="ret">string</span>, top_k=5) → <span class="ret">Incident[]</span></div>
+          <div class="purpose">pgvector similarity over incident embeddings. For recurrence detection.</div>
+        </div>
+      </div>
+
+      <div class="tool-group">
+        <h4>🔍 Retrieval (deterministic SQL)</h4>
+        <div class="desc">Bounded Postgres queries through PostgREST / Supabase-JS.</div>
+        <div class="tool">
+          <div class="sig"><span class="tag read">read</span>query_defects(filter: <span class="ret">DefectFilter</span>) → <span class="ret">Defect[]</span></div>
+          <div class="purpose">Filter: code, section, severity, window, article_id, limit.</div>
+        </div>
+        <div class="tool">
+          <div class="sig"><span class="tag read">read</span>trace_batch(batch_id: <span class="ret">string</span>) → <span class="ret">BatchTrace</span></div>
+          <div class="purpose">{ parts, products, defects, claims }. Mandatory for supplier.</div>
+        </div>
+        <div class="tool">
+          <div class="sig"><span class="tag read">read</span>bom_parts_for_product(product_id: <span class="ret">string</span>) → <span class="ret">BomInstall[]</span></div>
+          <div class="purpose">Reads <code>v_product_bom_parts</code>. Full supplier/batch trace.</div>
+        </div>
+        <div class="tool">
+          <div class="sig"><span class="tag read">read</span>pareto_defect_codes(window?, article_id?) → <span class="ret">ParetoBucket[]</span></div>
+          <div class="purpose">Top-N codes. Emits <code>render_hint.pareto_chart</code>.</div>
+        </div>
+        <div class="tool">
+          <div class="sig"><span class="tag read">read</span>test_results_marginal(test_key?, window?) → <span class="ret">TestResult[]</span></div>
+          <div class="purpose">Near-limit MARGINAL values — leading-indicator retrieval.</div>
+        </div>
+      </div>
+
+      <div class="tool-group">
+        <h4>🌐 Cross-boundary (archetype-specific joins)</h4>
+        <div class="desc">Tools that encode the joins which reveal each archetype's signature.</div>
+        <div class="tool">
+          <div class="sig"><span class="tag read">read</span>field_vs_factory_gap(article_id: <span class="ret">string</span>) → <span class="ret">GapReport</span></div>
+          <div class="purpose">Anti-join: field_claim without matching defect. Mandatory for design.</div>
+        </div>
+        <div class="tool">
+          <div class="sig"><span class="tag read">read</span>operator_effect_analysis(user_id?, order_ids?) → <span class="ret">OperatorPattern</span></div>
+          <div class="purpose">Rework density per user vs. baseline. Mandatory for operator.</div>
+        </div>
+        <div class="tool">
+          <div class="sig"><span class="tag read">read</span>rework_timeline_by_section(section_id, window) → <span class="ret">TimelineEvent[]</span></div>
+          <div class="purpose">Rework + defect events merged on one timeline. Essential for drift.</div>
+        </div>
+        <div class="tool">
+          <div class="sig"><span class="tag read">read</span>weekly_quality_summary(article_id?) → <span class="ret">WeeklySummary[]</span></div>
+          <div class="purpose">Wrapper over <code>v_quality_summary</code>. Drift baseline.</div>
+        </div>
+      </div>
+
+      <div class="tool-group">
+        <h4>🧬 Semantic · Vision · Lessons</h4>
+        <div class="desc">pgvector + multimodal for free text and images.</div>
+        <div class="tool">
+          <div class="sig"><span class="tag sem">vec</span>semantic_search_signals(query: <span class="ret">string</span>, top_k=10) → <span class="ret">Signal[]</span></div>
+          <div class="purpose">Cosine over all <code>signal.embedding</code>. Cross-source retrieval.</div>
+        </div>
+        <div class="tool">
+          <div class="sig"><span class="tag sem">vec</span>retrieve_lessons(incident_id: <span class="ret">string</span>, top_k=5) → <span class="ret">Lesson[]</span></div>
+          <div class="purpose">Network effect: past resolutions inform current hypothesis + Impact Simulator.</div>
+        </div>
+        <div class="tool">
+          <div class="sig"><span class="tag vis">vis</span>classify_defect_image(image_url: <span class="ret">string</span>) → <span class="ret">ImageClassification</span></div>
+          <div class="purpose">Sonnet 4.6 Vision. Returns { category, severity_estimate, features }.</div>
+        </div>
+      </div>
+
+      <div class="tool-group">
+        <h4>💡 Simulation (Propose phase only)</h4>
+        <div class="desc">Business-case artifact surfaced to engineer before dispatch.</div>
+        <div class="tool">
+          <div class="sig"><span class="tag sim">sim</span>simulate_impact(initiative: <span class="ret">InitiativeDraft</span>) → <span class="ret">ImpactEstimate</span></div>
+          <div class="purpose">Rule prior + lesson similarity. Returns { claims_avoided, eur_avoided, residual_risk, confidence }.</div>
+        </div>
+      </div>
+
+      <div class="tool-group">
+        <h4>✍️ Write (post-approval, orchestrator calls)</h4>
+        <div class="desc">LLM proposes; orchestrator writes. Never exposed in Investigate.</div>
+        <div class="tool">
+          <div class="sig"><span class="tag write">write</span>create_initiative(payload: <span class="ret">InitiativePayload</span>) → <span class="ret">{ initiative_id, action_id? }</span></div>
+          <div class="purpose">INSERT into <code>initiative</code> + (if Manex-native) <code>product_action</code>.</div>
+        </div>
+        <div class="tool">
+          <div class="sig"><span class="tag write">write</span>register_closure_predicate(pred: <span class="ret">ClosurePredicate</span>) → <span class="ret">{ predicate_id }</span></div>
+          <div class="purpose">Typed discriminated union persisted in <code>team_closure_predicate</code>.</div>
+        </div>
+        <div class="tool">
+          <div class="sig"><span class="tag write">write</span>emit_lesson(incident_id: <span class="ret">string</span>, summary: <span class="ret">string</span>) → <span class="ret">{ lesson_id }</span></div>
+          <div class="purpose">Fired by closure monitor on resolved incidents. Embeds for network effect.</div>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <section>
+    <h2>Section 6</h2>
+    <h3>Archetype playbooks (few-shot priors)</h3>
+    <p class="sub">Each playbook is a prompt snippet with an exemplary tool chain. Classifier picks one; Investigate follows (may deviate).</p>
+
+    <div class="playbook">
+      <div class="play">
+        <div class="head"><span class="arch">Story 01 · Supplier</span></div>
+        <h4>Vertical traceability</h4>
+        <div class="chain">
+          <span class="step">pareto_defect_codes</span><span class="arrow">→</span>
+          <span class="step">query_defects(code=top)</span><span class="arrow">→</span>
+          <span class="step">bom_parts_for_product</span><span class="arrow">→</span>
+          <span class="step">trace_batch</span><span class="arrow">→</span>
+          <span class="step">semantic_search_signals("batch supplier")</span><span class="arrow">→</span>
+          <span class="step">retrieve_lessons</span>
+        </div>
+        <div class="verdict">Signal: code cluster + field-lag 4–8w. Root: batch &gt;10× baseline. Demo-target Story 1.</div>
+      </div>
+      <div class="play">
+        <div class="head"><span class="arch">Story 02 · Drift</span></div>
+        <h4>Time + place localization</h4>
+        <div class="chain">
+          <span class="step">weekly_quality_summary</span><span class="arrow">→</span>
+          <span class="step">query_defects(code=VIB_FAIL)</span><span class="arrow">→</span>
+          <span class="step">rework_timeline_by_section</span><span class="arrow">→</span>
+          <span class="step">semantic_search_signals("torque")</span>
+        </div>
+        <div class="verdict">Signal: narrow window + one section + self-healing. Root: tool calibration.</div>
+      </div>
+      <div class="play">
+        <div class="head"><span class="arch">Story 03 · Design</span></div>
+        <h4>Cross-boundary gap</h4>
+        <div class="chain">
+          <span class="step">field_vs_factory_gap</span><span class="arrow">→</span>
+          <span class="step">query_defects → [ ]</span><span class="arrow">→</span>
+          <span class="step">bom_parts_for_product</span><span class="arrow">→</span>
+          <span class="step">semantic_search_signals("thermal drift")</span>
+        </div>
+        <div class="verdict">Signal: claims &gt; 0, defects = 0. Root: latent design. Demo-target Story 3.</div>
+      </div>
+      <div class="play">
+        <div class="head"><span class="arch">Story 04 · Operator</span></div>
+        <h4>Join through rework</h4>
+        <div class="chain">
+          <span class="step">query_defects(sev=low)</span><span class="arrow">→</span>
+          <span class="step">group_by(order_id)</span><span class="arrow">→</span>
+          <span class="step">operator_effect_analysis</span><span class="arrow">→</span>
+          <span class="step">rework_timeline_by_section</span>
+        </div>
+        <div class="verdict">Signal: cluster on few orders + one user_id. Root: operator handling.</div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Section 7</h2>
+    <h3>Output contract — what the LLM emits</h3>
+    <p class="sub">Zod schema. Engineer-Review UI and orchestrator consume this exact shape. Every field has lineage to a tool call.</p>
+
+    <div class="contract">
+<pre><span class="comment">// app/server/schemas/agent-output.ts</span>
+<span class="kw">const</span> AgentOutput <span class="kw">=</span> z.object({
+  session_id: z.string(),
+  incident_id: z.string(),                              <span class="comment">// durable anchor, from Listen</span>
+  archetype: z.object({
+    primary: z.enum([<span class="str">"supplier"</span>, <span class="str">"drift"</span>, <span class="str">"design"</span>, <span class="str">"operator"</span>, <span class="str">"unknown"</span>]),
+    confidence: z.number().min(<span class="num">0</span>).max(<span class="num">1</span>),
+    rationale: z.string(),
+    playbook_applied: z.string(),
+  }),
+  contributions: z.array(Contribution),                 <span class="comment">// 9 stakeholder domains (orchestrator-injected)</span>
+  report_8d: z.object({
+    d1_team: Section, d2_problem: Section, d3_containment: Section,
+    d4_root_cause: Section, d5_permanent_action: Section,
+    d6_implementation: Section, d7_prevention: Section, d8_closure: Section,
+  }),                                                   <span class="comment">// Section = { text, evidence: tool_call_id[] }</span>
+  visualizations: z.array(z.object({
+    component: z.enum([<span class="str">"pareto_chart"</span>, <span class="str">"timeline"</span>, <span class="str">"fault_tree"</span>, <span class="str">"bom_graph"</span>, <span class="str">"image_row"</span>, <span class="str">"kpi_card"</span>]),
+    props: z.record(z.unknown()),
+    source_tool_call_id: z.string(),
+  })),
+  initiatives: z.array(z.object({
+    agent_domain: z.enum([<span class="str">"production"</span>, <span class="str">"supplier"</span>, <span class="str">"rnd"</span>, <span class="str">"logistics"</span>, <span class="str">"cx"</span>]),
+    target_system: z.string(),                          <span class="comment">// "MES" | "SRM" | "Jira" | "ERP" | "CRM"</span>
+    action_type: z.enum([<span class="str">"corrective"</span>, <span class="str">"preventive"</span>, <span class="str">"investigate"</span>, <span class="str">"initiate_8d"</span>]),
+    rationale: z.string(),
+    suggested_owner_hint: z.string().optional(),
+    suggested_deadline_days: z.number().int().positive(),
+    closure_predicate: ClosurePredicate,                <span class="comment">// discriminated union</span>
+    impact_estimate: ImpactEstimate,                    <span class="comment">// { claims_avoided, eur_avoided, confidence }</span>
+    confidence: z.number(),
+    evidence: z.array(z.string()),                      <span class="comment">// tool_call_ids — post-validated</span>
+  })),
+  meta: z.object({
+    model_calls: z.array(ModelCallLog),                 <span class="comment">// { phase, model, in, out, cached_in, latency_ms }</span>
+    tool_calls: z.array(ToolCallLog),                   <span class="comment">// { id, name, args, result_hash, latency_ms }</span>
+    lessons_retrieved: z.array(z.string()),
+    total_cost_usd: z.number(),
+    total_latency_ms: z.number(),
+  }),
+});</pre>
+    </div>
+  </section>
+
+  <section>
+    <h2>Section 8</h2>
+    <h3>Grounding contract — the anti-hallucination discipline</h3>
+    <p class="sub">Our single most important trust marker. 8D in front of a juror + hallucination = catastrophe.</p>
+
+    <div class="decisions">
+      <div class="decision safety">
+        <div class="num">Rule 1</div>
+        <h4>Every claim cites tool_call_id</h4>
+        <p>System prompt: <em>"For every factual statement in the 8D report, include <code>evidence: [tool_call_id, ...]</code>. If you cannot cite a tool call, omit the claim."</em></p>
+      </div>
+      <div class="decision safety">
+        <div class="num">Rule 2</div>
+        <h4>Post-validator enforces it</h4>
+        <p>Parse AgentOutput. For each <code>evidence[]</code> ID, verify it exists in <code>meta.tool_calls</code>. Unknown → reject + retry (max 1) with the validation error fed back.</p>
+      </div>
+      <div class="decision safety">
+        <div class="num">Rule 3</div>
+        <h4>No free-form SQL, ever</h4>
+        <p>Typed tools only. Tool arg validation (Zod) before SQL execution. Invalid filter → error message back; model self-corrects.</p>
+      </div>
+      <div class="decision safety">
+        <div class="num">Rule 4</div>
+        <h4>Confidence &lt; 0.6 after 4 turns → stall</h4>
+        <p>Silent dead-ends get worse with more turns. Early stall → human hint → re-enter. Better than looping to max and outputting a bad report.</p>
+      </div>
+      <div class="decision safety">
+        <div class="num">Rule 5</div>
+        <h4>Noise-filter pre-emit</h4>
+        <p>Before Compose, a Haiku pass removes detection-bias + false-positive candidates. Discarded candidates stay in <code>meta.tool_calls</code> for auditability.</p>
+      </div>
+      <div class="decision safety">
+        <div class="num">Rule 6</div>
+        <h4>Image-based claims need vision citation</h4>
+        <p>If the model asserts a visual feature ("cap shows bulging"), evidence must include the <code>classify_defect_image</code> tool call ID.</p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Section 9</h2>
+    <h3>Guardrails &amp; failure modes</h3>
+    <p class="sub">Defensive design. The demo must not die from typical agent pitfalls.</p>
+
+    <div class="guards">
+      <div class="guard"><h4>Tool-loop cap</h4><p><code>max_iterations = 8</code> per Investigate. After 8 → stall state, not output.</p></div>
+      <div class="guard"><h4>Output validator (Zod)</h4><p>Every LLM emission through Zod. On fail: 1 retry with error feedback, then hard error.</p></div>
+      <div class="guard"><h4>Evidence-cite check</h4><p>Every <code>evidence[]</code> ID must exist in <code>meta.tool_calls</code>. Unknown IDs → reject.</p></div>
+      <div class="guard"><h4>Amend budget</h4><p>Engineer can amend max 2× per session. After that: full restart from Classify.</p></div>
+      <div class="guard"><h4>Per-phase token budget</h4><p>Classify 1k · Investigate 16k · Compose 8k · Propose 4k. Overflow → Haiku summarize + retry.</p></div>
+      <div class="guard"><h4>Tool-arg Zod gate</h4><p>Args validated before SQL execution. Invalid filter → error back to agent (self-corrects).</p></div>
+      <div class="guard"><h4>Rate limit / timeout</h4><p>Max 5 concurrent tool calls. Tool timeout 5s. Agent total 60s.</p></div>
+      <div class="guard"><h4>Write gate</h4><p>Write tools unavailable in Investigate. Orchestrator invokes post-approval only.</p></div>
+      <div class="guard"><h4>Cache TTL</h4><p>Evidence 15min · embedding 24h · prompt 5min. Warm before demo.</p></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Section 10</h2>
+    <h3>Cost envelope (per full run)</h3>
+    <p class="sub">One incident → 8D + 3 initiatives. With prompt caching active.</p>
+
+    <div class="cost-table">
+      <table>
+        <thead><tr><th>Stage</th><th>Model</th><th>Input (tok)</th><th>Output (tok)</th><th>Cost</th></tr></thead>
+        <tbody>
+          <tr><td>Classify</td><td>Haiku 4.5</td><td class="num">2 000</td><td class="num">150</td><td class="num">$0.0022</td></tr>
+          <tr><td>Investigate · 6 turns avg</td><td>Sonnet 4.6</td><td class="num">18 000 (80% cached)</td><td class="num">3 000</td><td class="num">$0.0498</td></tr>
+          <tr><td>Compose · 8D</td><td>Sonnet 4.6</td><td class="num">6 000</td><td class="num">2 500</td><td class="num">$0.0555</td></tr>
+          <tr><td>Propose · initiatives</td><td>Sonnet 4.6</td><td class="num">3 000</td><td class="num">1 500</td><td class="num">$0.0315</td></tr>
+          <tr><td>Noise filter pre-emit</td><td>Haiku 4.5</td><td class="num">1 500</td><td class="num">200</td><td class="num">$0.0020</td></tr>
+          <tr><td>Vision (if operator photo)</td><td>Sonnet 4.6</td><td class="num">2 500</td><td class="num">300</td><td class="num">$0.0120</td></tr>
+          <tr><td>Embedding (one-time index)</td><td>OpenAI 3-small</td><td class="num">50 000</td><td class="num">—</td><td class="num">$0.0010</td></tr>
+          <tr><td><strong>Total per run</strong></td><td></td><td></td><td></td><td class="num"><strong>≈ $0.15</strong></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="callout">
+      <strong>Hackathon budget:</strong> ~$33 across 200 dev runs + 20 demo runs. Opus fallback adds ~$5.
+      <strong>Without prompt caching</strong>, Investigate would cost ~$0.15 instead of $0.05 — 3× more expensive. Caching is not optional.
+    </div>
+  </section>
+
+  <section>
+    <h2>Section 11</h2>
+    <h3>Implementation stack — Joscha's files on feat/joscha</h3>
+    <div class="diagram">
+      <pre class="mermaid">
+flowchart LR
+  subgraph API["API surface (Next.js Route Handlers)"]
+    A1["POST /api/agent/run<br/>accepts { incident_id }"]
+    A2["GET /api/agent/stream<br/>SSE: phase progress + tool calls"]
+    A3["POST /api/initiative/approve<br/>write gate for orchestrator"]
+  end
+
+  subgraph ORCH["app/server/agent/ (orchestrator)"]
+    O1["index.ts<br/>runAgent(incident_id)"]
+    O2["classify.ts<br/>phase 1"]
+    O3["investigate.ts<br/>phase 2 (ReAct loop)"]
+    O4["compose.ts<br/>phase 3"]
+    O5["propose.ts<br/>phase 4"]
+    O6["validate.ts<br/>Zod + evidence-cite check"]
+  end
+
+  subgraph TOOLS["app/server/tools/"]
+    TL["one file per tool<br/>Zod schema + impl + export"]
+  end
+
+  subgraph PROMPTS["app/server/prompts/"]
+    P1["system.ts<br/>role + vocab + 8D"]
+    P2["playbooks/<br/>{supplier,drift,design,operator}.md"]
+    P3["tool-schemas.ts<br/>JSON Schema export"]
+  end
+
+  subgraph MODELS["app/server/models/"]
+    M1["sonnet.ts · haiku.ts · opus.ts"]
+    M2["router.ts — task → model"]
+    M3["cache.ts — prompt cache breakpoints"]
+  end
+
+  subgraph SCHEMAS["app/server/schemas/"]
+    SC1["incident.ts · signal.ts<br/>initiative.ts · closure-predicate.ts"]
+    SC2["agent-output.ts (the big one)"]
+  end
+
+  A1 --> O1
+  A2 -.SSE.-> O1
+  A3 --> O6
+  O1 --> O2 --> O3 --> O4 --> O5 --> O6
+  O3 <--> TOOLS
+  O2 & O3 & O4 & O5 <--> MODELS
+  O2 & O3 & O4 & O5 <--> PROMPTS
+  O6 --> SCHEMAS
+  TOOLS --> SCHEMAS
+
+  classDef api fill:#7c2d12,stroke:#f97316,color:#fed7aa
+  classDef orch fill:#581c87,stroke:#a855f7,color:#e9d5ff
+  classDef tools fill:#1e3a8a,stroke:#3b82f6,color:#dbeafe
+  classDef prompts fill:#134e4a,stroke:#14b8a6,color:#ccfbf1
+  classDef models fill:#7f1d1d,stroke:#ef4444,color:#fecaca
+  classDef schemas fill:#1f2937,stroke:#6b7280,color:#d1d5db
+  class A1,A2,A3 api
+  class O1,O2,O3,O4,O5,O6 orch
+  class TL tools
+  class P1,P2,P3 prompts
+  class M1,M2,M3 models
+  class SC1,SC2 schemas
+      </pre>
+      <div class="note">
+        <strong>Build order:</strong> schemas → models → prompts → tools → orchestrator phases → API routes.
+        Each layer depends downward; building upward gives you types to lean on at every step.
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Section 12</h2>
+    <h3>Joscha's milestones on feat/joscha (24h)</h3>
+    <p class="sub">Each milestone demoable standalone. PR to develop once verified.</p>
+
+    <div class="decisions" style="grid-template-columns: 1fr;">
+      <div class="decision cost">
+        <div class="num">M1 · +2h</div>
+        <h4>Schemas + model clients</h4>
+        <p>Zod schemas for incident/signal/initiative/closure-predicate/agent-output. Anthropic SDK wired. Cache breakpoints set. Smoke test: verify cache hit on second call.</p>
+      </div>
+      <div class="decision cost">
+        <div class="num">M2 · +5h</div>
+        <h4>Classify phase + first 3 tools</h4>
+        <p>Haiku classifier with 4-archetype few-shots. Tools: <code>get_incident</code>, <code>query_defects</code>, <code>pareto_defect_codes</code>. Mock incident → correct archetype on ≥3/4 stories.</p>
+      </div>
+      <div class="decision critical">
+        <div class="num">M3 · +9h</div>
+        <h4>Investigate loop + all retrieval tools</h4>
+        <p>Bounded ReAct (max 8). All 9 retrieval + cross-boundary tools live. Evidence cache. Stall detection. Stories 1 and 3 trace correctly.</p>
+      </div>
+      <div class="decision critical">
+        <div class="num">M4 · +13h</div>
+        <h4>Compose + Propose + streaming</h4>
+        <p>8D with evidence-cite contract. Initiative composer with typed closure predicates. SSE streaming of reasoning trace + render_hints. Post-validator blocks un-cited claims.</p>
+      </div>
+      <div class="decision novel">
+        <div class="num">M5 · +17h</div>
+        <h4>Semantic layer + vision + lessons + simulator</h4>
+        <p>pgvector index for signals + lessons. <code>semantic_search_signals</code>, <code>retrieve_lessons</code>, <code>classify_defect_image</code>, <code>simulate_impact</code>. Pre-seed 2–3 lessons for demo magic.</p>
+      </div>
+      <div class="decision safety">
+        <div class="num">M6 · +20h</div>
+        <h4>Guardrails · prompt-cache verified · demo-deterministic</h4>
+        <p>All 9 guardrails live. Prompt-cache hit rate measured &gt;80%. Deterministic triggers for all 4 stories, &lt;60s each.</p>
+      </div>
+      <div class="decision cost">
+        <div class="num">M7 · +22h</div>
+        <h4>PR to develop + integrate with canvas</h4>
+        <p>Wire into Lila's Canvas UI (streamText). Harjot's closure monitor reads typed predicates. Harsh's visualizations consume render_hints. 2h pitch buffer.</p>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  De.Constructors — Manex Hackathon 2026 · LLM Pipeline Deep-Dive · feat/joscha · companion to <a href="architecture.html" style="color:#7dd3fc">architecture.html</a>
+</footer>
+
+<script>
+  mermaid.initialize({
+    startOnLoad: true,
+    theme: 'dark',
+    themeVariables: {
+      background: '#111a30',
+      primaryColor: '#1e293b',
+      primaryTextColor: '#e8ecf8',
+      primaryBorderColor: '#475569',
+      lineColor: '#64748b',
+      secondaryColor: '#334155',
+      tertiaryColor: '#1e293b',
+      fontFamily: "-apple-system, Inter, system-ui, sans-serif",
+      fontSize: '13px'
+    },
+    flowchart: { htmlLabels: true, curve: 'basis', padding: 16 },
+  });
+</script>
+
+</body>
+</html>

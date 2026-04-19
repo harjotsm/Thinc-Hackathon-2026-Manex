@@ -1,171 +1,251 @@
+import "server-only";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
-import { archetypePlaybooks } from "@/server/prompts/playbooks";
-import { classifyArchetype } from "@/server/models/router";
-import { queryDefects } from "@/server/tools/query-defects";
-import { queryClaims } from "@/server/tools/query-claims";
-import { traceBatch } from "@/server/tools/trace-batch";
-import { weeklyQualitySummary } from "@/server/tools/weekly-quality-summary";
-import { semanticSearchComplaints } from "@/server/tools/semantic-search-complaints";
-import { validateEvidenceContract } from "@/server/agent/evidence-validator";
-import { buildProductionInitiative } from "@/server/domain-agents/production";
-import { buildSupplierInitiative } from "@/server/domain-agents/supplier";
-import { buildRndInitiative } from "@/server/domain-agents/rnd";
-import type { OrchestratorResult, ToolCallResult } from "@/server/agent/types";
+import { makeId } from "@/server/utils/id";
+import { logEvent, updateSessionStatus } from "@/server/agent/session-logger";
+import { publishSessionEvent } from "@/lib/event-bus";
+import { runClassify } from "@/server/agent/phases/classify";
+import { runInvestigate } from "@/server/agent/phases/investigate";
+import { runCompose, EvidenceCiteUnfixableError, type ComposeOutput } from "@/server/agent/phases/compose";
+import { runPropose } from "@/server/agent/phases/propose";
+import type { OrchestratorResult } from "@/server/agent/types";
+import type { IncidentSeed } from "@/server/agent/phases/classify";
 
-type IncidentSeed = {
-  incident_id: string;
-  title: string | null;
-  summary: string | null;
-  primary_product_id: string | null;
-  primary_part: string | null;
-};
+// ─── Error helpers ────────────────────────────────────────────────────────────
 
-const makeToolArgs = (incident: IncidentSeed) => ({
-  product_id: incident.primary_product_id ?? undefined,
-  part_number: incident.primary_part ?? undefined,
-  query: `${incident.title ?? ""} ${incident.summary ?? ""} ${incident.primary_part ?? ""}`.trim(),
-});
+const isEvidenceCiteUnfixable = (err: unknown): boolean =>
+  err instanceof EvidenceCiteUnfixableError ||
+  (err instanceof Error && err.message.includes("evidence_cite_unfixable"));
 
-const runTool = async (tool: string, args: ReturnType<typeof makeToolArgs>): Promise<ToolCallResult> => {
-  switch (tool) {
-    case "query_defects":
-      return queryDefects({ product_id: args.product_id, part_number: args.part_number });
-    case "query_claims":
-      return queryClaims({ product_id: args.product_id, part_number: args.part_number });
-    case "trace_batch":
-      return traceBatch({ product_id: args.product_id });
-    case "weekly_quality_summary":
-      return weeklyQualitySummary({});
-    case "semantic_search_complaints":
-      return semanticSearchComplaints({ query: args.query });
-    default:
-      throw new Error(`Unknown tool in playbook: ${tool}`);
-  }
-};
+const isMaxTurnsError = (err: unknown): boolean =>
+  err instanceof Error && err.message.toLowerCase().includes("max_turns");
 
-const getPrimaryDefectCode = (toolCalls: ToolCallResult[]) => {
-  const defectCall = toolCalls.find((call) => call.tool === "query_defects");
-  if (!defectCall || !Array.isArray(defectCall.data) || defectCall.data.length === 0) {
-    return undefined;
-  }
-  const first = defectCall.data[0] as Record<string, unknown>;
-  const defectCode = first.defect_code;
-  return typeof defectCode === "string" ? defectCode : undefined;
-};
+const isApiError = (err: unknown): boolean =>
+  err instanceof Error &&
+  (err.message.includes("ANTHROPIC") ||
+    err.message.includes("rate_limit") ||
+    err.message.includes("overloaded") ||
+    err.message.includes("APIError"));
 
-const getSupplierName = (toolCalls: ToolCallResult[]) => {
-  const supplierCall = toolCalls.find((call) => call.tool === "trace_batch");
-  if (!supplierCall || !Array.isArray(supplierCall.data) || supplierCall.data.length === 0) {
-    return undefined;
-  }
-  const first = supplierCall.data[0] as Record<string, unknown>;
-  const supplierName = first.supplier_name;
-  return typeof supplierName === "string" ? supplierName : undefined;
-};
+// ─── Session creation helper ──────────────────────────────────────────────────
 
-export const runOrchestrator = async (incidentId: string): Promise<OrchestratorResult> => {
+const createSession = async (
+  incidentId: string,
+  meta: Record<string, unknown> = {},
+): Promise<string> => {
   const supabase = getSupabaseServerClient();
-  const { data: incident, error: incidentError } = await supabase
+  const sessionId = makeId("SES");
+  const now = new Date().toISOString();
+  const { error } = await supabase.from("session").insert({
+    id: sessionId,
+    incident_id: incidentId,
+    phase: "classify",
+    status: "running",
+    started_at: now,
+    created_by_user_id: (meta.demo === true ? "system_demo" : null),
+  });
+  if (error) throw new Error(`createSession failed: ${error.message}`);
+  return sessionId;
+};
+
+// ─── Incident loader ──────────────────────────────────────────────────────────
+
+const loadIncidentSeed = async (incidentId: string): Promise<IncidentSeed> => {
+  const supabase = getSupabaseServerClient();
+  const { data, error } = await supabase
     .from("incident")
     .select("incident_id,title,summary,primary_product_id,primary_part")
     .eq("incident_id", incidentId)
     .single();
 
-  if (incidentError || !incident) {
-    throw new Error(`Incident not found: ${incidentError?.message ?? incidentId}`);
+  if (error || !data) {
+    throw new Error(`Incident not found: ${error?.message ?? incidentId}`);
   }
 
-  const typedIncident = incident as IncidentSeed;
-  const phases: OrchestratorResult["phases"] = [];
-  const summaryText = `${typedIncident.title ?? ""} ${typedIncident.summary ?? ""}`.trim();
-  const archetype = await classifyArchetype(summaryText);
-  phases.push({ phase: "classify", detail: `Archetype classified as ${archetype}.` });
+  // Pull up to 8 signal text samples for richer classification.
+  // Two-hop join mirrors the pattern in web/src/server/incident/loaders.ts.
+  const linkRes = await supabase
+    .from("incident_signal")
+    .select("signal_id")
+    .eq("incident_id", incidentId)
+    .limit(20);
 
-  const playbook = archetypePlaybooks[archetype] ?? archetypePlaybooks.unknown;
-  const args = makeToolArgs(typedIncident);
-  const toolCalls: ToolCallResult[] = [];
-  for (const tool of playbook) {
-    const result = await runTool(tool, args);
-    toolCalls.push(result);
+  const signalIds = ((linkRes.data ?? []) as { signal_id: string }[]).map(
+    (r) => r.signal_id,
+  );
+
+  let signalSamples: string[] = [];
+  if (signalIds.length > 0) {
+    const sigRes = await supabase
+      .from("signal")
+      .select("signal_id,raw_text,text_payload")
+      .in("signal_id", signalIds)
+      .limit(8);
+
+    signalSamples = ((sigRes.data ?? []) as { raw_text: string | null; text_payload: string | null }[])
+      .map((s) => (s.raw_text ?? s.text_payload ?? "").trim())
+      .filter((t) => t.length > 0);
   }
-  phases.push({
-    phase: "investigate",
-    detail: `Executed ${toolCalls.length} tools: ${toolCalls.map((t) => t.tool).join(", ")}.`,
-  });
 
-  const evidenceIds = toolCalls.map((call) => call.tool_call_id);
-  const primaryDefectCode = getPrimaryDefectCode(toolCalls);
-  const supplierName = getSupplierName(toolCalls);
-  const draft8d: OrchestratorResult["draft_8d"] = {
-    problem:
-      typedIncident.summary ??
-      "Correlated multi-source quality signals require coordinated cross-domain resolution.",
-    containment: [
-      "Quarantine affected products/batches immediately.",
-      "Increase targeted inspection coverage for next production window.",
-      "Notify relevant stakeholders with incident context.",
-    ],
-    likely_root_causes: [
-      `Primary hypothesis (${archetype}) based on correlated signals and tool outputs.`,
-      "Secondary hypotheses remain open until owner validation.",
-    ],
-    evidence: evidenceIds,
-    claims: [
-      {
-        claim:
-          primaryDefectCode !== undefined
-            ? `Dominant defect signal suggests ${primaryDefectCode} as leading containment target.`
-            : `Correlated quality signals indicate a non-random, multi-source incident pattern.`,
-        evidence: evidenceIds.slice(0, 2),
-      },
-      {
-        claim:
-          supplierName !== undefined
-            ? `Supplier context indicates upstream influence from ${supplierName}.`
-            : "Cross-source complaints and in-plant indicators point to upstream/downstream coupling.",
-        evidence: evidenceIds.slice(0, 3),
-      },
-    ],
+  return {
+    ...(data as Omit<IncidentSeed, "signal_samples">),
+    signal_samples: signalSamples,
   };
-  phases.push({ phase: "compose", detail: "Built draft 8D projection with evidence references." });
+};
 
-  const initiatives: OrchestratorResult["initiatives"] = [
-    buildProductionInitiative({
-      incidentId,
-      evidenceIds,
-      productId: typedIncident.primary_product_id ?? undefined,
-      partNumber: typedIncident.primary_part ?? undefined,
-      primaryDefectCode,
-      supplierName,
-    }),
-    buildSupplierInitiative({
-      incidentId,
-      evidenceIds,
-      productId: typedIncident.primary_product_id ?? undefined,
-      partNumber: typedIncident.primary_part ?? undefined,
-      primaryDefectCode,
-      supplierName,
-    }),
-    buildRndInitiative({
-      incidentId,
-      evidenceIds,
-      productId: typedIncident.primary_product_id ?? undefined,
-      partNumber: typedIncident.primary_part ?? undefined,
-      primaryDefectCode,
-      supplierName,
-    }),
-  ];
-  phases.push({ phase: "propose", detail: "Generated 3 initiative candidates." });
+// ─── Session-aware orchestrator ───────────────────────────────────────────────
 
-  const result: OrchestratorResult = {
+export type RunSessionParams = {
+  session_id: string;
+  incident_id: string;
+  user_id?: string;
+};
+
+export const runOrchestratorWithSession = async (
+  p: RunSessionParams,
+): Promise<OrchestratorResult> => {
+  try {
+    // Phase 1 — Classify
+    await updateSessionStatus(p.session_id, { phase: "classify" });
+    const incident = await loadIncidentSeed(p.incident_id);
+    const classified = await runClassify(p.session_id, incident);
+
+    // Phase 2 — Investigate
+    await updateSessionStatus(p.session_id, { phase: "investigate" });
+    const investigated = await runInvestigate(p.session_id, incident, classified);
+
+    // Phase 3 — Compose
+    await updateSessionStatus(p.session_id, { phase: "compose" });
+    const composeOutput: ComposeOutput = await runCompose(p.session_id, incident, classified, investigated);
+    const { draft_8d, report_id } = composeOutput;
+
+    // Phase 4 — Propose
+    await updateSessionStatus(p.session_id, { phase: "propose" });
+    const initiatives = await runPropose(
+      p.session_id,
+      incident,
+      classified,
+      investigated,
+      draft_8d,
+    );
+
+    const result: OrchestratorResult = {
+      incident_id: p.incident_id,
+      archetype: classified.archetype,
+      tool_calls: investigated.tool_calls,
+      draft_8d,
+      initiatives,
+      phases: [
+        { phase: "classify", detail: `Archetype: ${classified.archetype}` },
+        {
+          phase: "investigate",
+          detail: `${investigated.tool_calls.length} tool calls`,
+        },
+        {
+          phase: "compose",
+          detail: `8D composed with ${draft_8d.evidence.length} citations`,
+        },
+        {
+          phase: "propose",
+          detail: `${initiatives.length} initiatives`,
+        },
+      ],
+    };
+
+    // Patch report with initiatives + tool_calls so the report endpoint can serve everything
+    if (report_id) {
+      const supabase = getSupabaseServerClient();
+      await supabase
+        .from("report")
+        .update({
+          report_8d: {
+            ...(draft_8d as unknown as Record<string, unknown>),
+            _initiatives: initiatives as unknown as unknown[],
+            _tool_calls: investigated.tool_calls as unknown as unknown[],
+            _archetype: classified.archetype,
+          } as unknown as Record<string, unknown>,
+        })
+        .eq("id", report_id);
+    }
+
+    // Write archetype back to incident so drilldown filters stay in sync.
+    // Non-fatal: a failure here must not abort the orchestrator result.
+    try {
+      const supabase = getSupabaseServerClient();
+      const { error: archetypeWriteErr } = await supabase
+        .from("incident")
+        .update({ archetype: classified.archetype })
+        .eq("incident_id", p.incident_id);
+      if (archetypeWriteErr) {
+        console.warn(
+          `[orchestrator] archetype writeback failed for ${p.incident_id}: ${archetypeWriteErr.message}`,
+        );
+      }
+    } catch (archetypeErr) {
+      console.warn(
+        `[orchestrator] archetype writeback threw for ${p.incident_id}:`,
+        archetypeErr,
+      );
+    }
+
+    await updateSessionStatus(p.session_id, {
+      status: "succeeded",
+      phase: "complete",
+      ended_at: new Date().toISOString(),
+    });
+
+    await logEvent(p.session_id, "session_complete", {
+      archetype: classified.archetype,
+      initiative_count: initiatives.length,
+      report_id,
+    });
+
+    // Publish live so SSE consumers can close the stream immediately
+    publishSessionEvent(p.session_id, {
+      event_seq: 0,
+      event_type: "session_complete",
+      payload: { archetype: classified.archetype, initiative_count: initiatives.length, report_id },
+      ts: new Date().toISOString(),
+    });
+
+    return result;
+  } catch (err) {
+    const failureReason = isEvidenceCiteUnfixable(err)
+      ? "evidence_cite_unfixable"
+      : isMaxTurnsError(err)
+        ? "max_turns"
+        : isApiError(err)
+          ? "api_error_exhausted"
+          : "orchestrator_crash";
+
+    await updateSessionStatus(p.session_id, {
+      status: "failed",
+      ended_at: new Date().toISOString(),
+      failure_reason: failureReason,
+    });
+
+    await logEvent(p.session_id, "session_failed", {
+      error: (err as Error).message,
+      reason: failureReason,
+    });
+
+    // Publish live so SSE consumers know the session ended
+    publishSessionEvent(p.session_id, {
+      event_seq: 0,
+      event_type: "session_failed",
+      payload: { reason: failureReason },
+      ts: new Date().toISOString(),
+    });
+
+    throw err;
+  }
+};
+
+// ─── Backward-compat wrapper (used by /api/agent/run) ────────────────────────
+
+export const runOrchestrator = async (incidentId: string): Promise<OrchestratorResult> => {
+  const sessionId = await createSession(incidentId, { demo: true });
+  return runOrchestratorWithSession({
+    session_id: sessionId,
     incident_id: incidentId,
-    archetype,
-    tool_calls: toolCalls,
-    draft_8d: draft8d,
-    initiatives,
-    phases,
-  };
-
-  validateEvidenceContract(result);
-  return result;
+  });
 };
