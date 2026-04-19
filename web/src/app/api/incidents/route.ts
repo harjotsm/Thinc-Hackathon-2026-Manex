@@ -20,6 +20,7 @@ const QuerySchema = z.object({
       return isNaN(n) ? undefined : n;
     }),
   q: z.string().optional(),
+  theme: z.string().optional(),
   since: z.string().optional(),
   // Pagination
   page: z
@@ -74,7 +75,8 @@ const parseCommaSep = (raw: string | undefined, valid: Set<string>): string[] | 
 // ─── Handler ──────────────────────────────────────────────────────────────────
 
 export async function GET(request: NextRequest) {
-  const url = request.nextUrl;
+  // Support both NextRequest (nextUrl) and plain Request (url) for testability
+  const url = request.nextUrl ?? new URL(request.url);
   const parsed = QuerySchema.safeParse(Object.fromEntries(url.searchParams));
 
   if (!parsed.success) {
@@ -128,6 +130,28 @@ export async function GET(request: NextRequest) {
     );
   }
 
+  // Parse ?theme=<archetype>:<entity> drilldown param
+  let themeArchetype: string | null = null;
+  let themeProduct: string | null = null;
+  if (q.theme) {
+    const sep = q.theme.indexOf(":");
+    if (sep <= 0) {
+      return NextResponse.json(
+        { code: "invalid_query", message: `Invalid theme signature: "${q.theme}".`, retryable: false },
+        { status: 400 },
+      );
+    }
+    themeArchetype = q.theme.slice(0, sep);
+    const entity = q.theme.slice(sep + 1);
+    themeProduct = entity === "—" ? null : entity;
+    if (!VALID_ARCHETYPE.has(themeArchetype)) {
+      return NextResponse.json(
+        { code: "invalid_query", message: `Invalid archetype in theme signature.`, retryable: false },
+        { status: 400 },
+      );
+    }
+  }
+
   try {
     const supabase = getSupabaseServerClient();
 
@@ -148,6 +172,12 @@ export async function GET(request: NextRequest) {
     }
     if (archetypeFilter && archetypeFilter.length > 0) {
       query = query.in("archetype", archetypeFilter);
+    }
+    if (themeArchetype) {
+      query = query.in("archetype", [themeArchetype]);
+    }
+    if (themeProduct) {
+      query = query.eq("primary_product_id", themeProduct);
     }
     if (q.product_id) {
       query = query.eq("primary_product_id", q.product_id);
