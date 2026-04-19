@@ -20,11 +20,28 @@ export async function POST(request: Request) {
   const embedding = await createEmbedding(payload.text_payload ?? "");
   const supabase = getSupabaseServerClient();
 
+  const idempotencyKey = payload.idempotency_key ?? `auto-${crypto.randomUUID()}`;
+
+  // Map source_system → signal_source enum (matches the migration backfill logic)
+  const sourceEnumMap: Record<string, string> = {
+    manex_defect: "backfill_defect",
+    manex_field_claim: "backfill_field_claim",
+    manex_test_result: "backfill_test_result",
+    operator: "operator",
+    engineer: "engineer",
+    detector: "detector",
+    customer_email: "customer_email",
+  };
+  const source = sourceEnumMap[payload.source_system] ?? "operator";
+
   const insertPayload = {
     signal_id: signalId,
+    idempotency_key: idempotencyKey,
     signal_type: payload.signal_type,
+    source,
     source_system: payload.source_system,
     captured_ts: payload.captured_ts ?? new Date().toISOString(),
+    raw_text: payload.text_payload ?? "",
     product_id: payload.product_id ?? null,
     part_number: payload.part_number ?? null,
     section_id: payload.section_id ?? null,

@@ -94,13 +94,17 @@ export async function POST(request: Request) {
 
   // 5. Insert signal row
   const signalId = makeId("SIG");
+  const idempotencyKey = (form.get("idempotency_key") as string | null) ?? `auto-${crypto.randomUUID()}`;
   const supabase = getSupabaseServerClient();
 
   const attachmentUrl = storedRef.publicUrl ?? `${storedRef.bucket}/${storedRef.path}`;
 
   const insertPayload = {
     signal_id: signalId,
+    idempotency_key: idempotencyKey,
     signal_type: "operator_report",
+    source: "operator",
+    raw_text: textPayload,
     source_system: sourceSystem.trim(),
     captured_ts: new Date().toISOString(),
     text_payload: textPayload,

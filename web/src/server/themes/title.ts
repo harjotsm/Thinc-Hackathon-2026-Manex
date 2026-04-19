@@ -22,12 +22,13 @@ const template = (archetype: string, dominantEntity: string | null): string => {
 
 const LLM_TIMEOUT_MS = 2000;
 
-const llmTitle = async (signalTexts: string[]): Promise<string | null> => {
+const llmTitle = async (signalTexts: string[], dominantEntity?: string | null): Promise<string | null> => {
   const client = getAnthropicClient();
   if (!client) return null;
   const sample = signalTexts.slice(0, 6).join(" | ").slice(0, 800);
   if (!sample) return null;
 
+  const entityHint = dominantEntity ? `Signals about ${dominantEntity}:\n` : "Signals:\n";
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), LLM_TIMEOUT_MS);
   try {
@@ -36,7 +37,7 @@ const llmTitle = async (signalTexts: string[]): Promise<string | null> => {
         model: "claude-opus-4-7",
         max_tokens: 60,
         system: "You write 3–6 word quality-engineering theme titles. No periods. Format: '<Topic> · <key entity>'.",
-        messages: [{ role: "user", content: `Signals:\n${sample}\n\nTitle:` }],
+        messages: [{ role: "user", content: `${entityHint}${sample}\n\nTitle:` }],
       },
       { signal: controller.signal },
     );
@@ -51,16 +52,18 @@ const llmTitle = async (signalTexts: string[]): Promise<string | null> => {
 };
 
 export const themeTitle = async (input: ThemeTitleInput): Promise<ThemeTitleResult> => {
-  // If we have a deterministic dominant entity, use the template — fast and cheap.
-  if (input.dominantEntity !== null) {
+  // If we have a dominant entity AND archetype is NOT unknown, use template — fast and cheap.
+  // For unknown archetype we always use the LLM (even if dominantEntity is set) to avoid
+  // showing "Unknown · PM-00015" labels to judges.
+  if (input.archetype !== "unknown" && input.dominantEntity !== null) {
     return { title: template(input.archetype, input.dominantEntity), source: "template" };
   }
-  // Otherwise (any archetype, no entity) try the LLM, fall back to "Untriaged".
+  // Otherwise (unknown archetype, or any archetype with no entity) try the LLM.
   const key = cacheKey(input);
   const cached = cache.get(key);
   if (cached) return cached;
 
-  const llm = await llmTitle(input.signalTexts);
+  const llm = await llmTitle(input.signalTexts, input.dominantEntity);
   const result: ThemeTitleResult = llm
     ? { title: llm, source: "llm" }
     : { title: "Untriaged", source: "fallback" };

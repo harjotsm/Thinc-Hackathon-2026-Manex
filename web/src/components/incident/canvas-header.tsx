@@ -1,5 +1,6 @@
 import Link from "next/link";
 import type { IncidentRow, ReportArchetype } from "@/server/incident/loaders";
+import { RunAiButton } from "./run-ai-button";
 
 type Phase = {
   id: "detect" | "find" | "explain" | "lead" | "suggest" | "track";
@@ -144,9 +145,7 @@ export function CanvasHeader({
         <div className="spacer" style={{ flex: 1 }} />
 
         <div style={{ display: "flex", gap: 8, flexShrink: 0, alignItems: "center" }}>
-          <button className="btn ghost sm" type="button" title="Re-run AI orchestrator">
-            Run AI ↻
-          </button>
+          <RunAiButton incidentId={incident.incident_id} />
           <Link
             href={`/incident/${incident.incident_id}/resolve`}
             className="btn primary sm"
