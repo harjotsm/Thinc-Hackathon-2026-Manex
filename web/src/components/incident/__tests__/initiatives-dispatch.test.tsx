@@ -43,6 +43,27 @@ describe("InitiativesPreview — dispatch flow", () => {
       expect.objectContaining({ method: "POST" }),
     );
 
+    // Bug C regression: payload must use the API-expected schema.
+    // - `agent_domain` (not `domain`)
+    // - `target_system` non-empty string
+    // - `closure_predicate` present (legacy { type, params } shape)
+    // - `status: "approved"` (the DB check constraint rejects "proposed")
+    const firstCall = fetchSpy.mock.calls[0];
+    const init = firstCall[1] as RequestInit;
+    const body = JSON.parse(init.body as string);
+    expect(body.incident_id).toBe("INC-1");
+    expect(body.agent_domain).toBe("production");
+    expect(body.target_system).toBe("MES");
+    expect(body.status).toBe("approved");
+    expect(body.closure_predicate).toEqual({
+      type: "no_defect_code_in_window",
+      params: { defect_code: "PM_SHUTDOWN", days: 30 },
+    });
+    // The second initiative is the supplier one
+    const secondBody = JSON.parse((fetchSpy.mock.calls[1][1] as RequestInit).body as string);
+    expect(secondBody.agent_domain).toBe("supplier");
+    expect(secondBody.target_system).toBe("SRM");
+
     // Success message
     expect(screen.getByText(/2 initiatives created/)).toBeTruthy();
 

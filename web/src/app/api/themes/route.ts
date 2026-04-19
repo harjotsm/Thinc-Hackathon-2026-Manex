@@ -111,27 +111,120 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const incidents: AggregatorIncidentInput[] = (data ?? []).map(
-      (row: Record<string, unknown>) => ({
-        incident_id: row.incident_id as string,
-        archetype:
-          (row.archetype as AggregatorIncidentInput["archetype"]) ?? "unknown",
-        primary_product_id: (row.primary_product_id as string | null) ?? null,
-        // DB uses "primary_part"; map to the app-internal "primary_part_number"
-        primary_part_number: (row.primary_part as string | null) ?? null,
-        title: (row.title as string | null) ?? null,
-        severity: (row.severity as string | null) ?? null,
-        last_activity_at: (row.last_activity_at as string | null) ?? null,
-        signal_count: Number(row.signal_count ?? 0),
-        centroid_embedding: Array.isArray(row.centroid_embedding)
-          ? (row.centroid_embedding as number[])
-          : null,
-        source_count: 0,
-      }),
+    const incidentRows = (data ?? []) as Record<string, unknown>[];
+    const incidentIds = incidentRows.map((r) => r.incident_id as string);
+
+    // ─── Enrich with latest report per incident ─────────────────────────────
+    // The orchestrator writes its classification to report.report_8d._archetype
+    // and the post-Compose confidence to report.confidence. The incident row's
+    // own archetype/severity are usually NULL because correlator-spawned
+    // incidents don't get them backfilled. Read the report instead so themes
+    // show real archetypes (supplier/drift/design/operator) rather than
+    // "unknown" everywhere.
+    type ReportEnrich = {
+      archetype: AggregatorIncidentInput["archetype"] | null;
+      confidence: number | null;
+    };
+    const reportByIncident = new Map<string, ReportEnrich>();
+
+    if (incidentIds.length > 0) {
+      const { data: reportRows, error: reportError } = await supabase
+        .from("report")
+        .select("incident_id,version,status,confidence,report_8d")
+        .in("incident_id", incidentIds)
+        .order("version", { ascending: false });
+
+      if (reportError) {
+        console.warn(
+          `[themes] report enrichment failed: ${reportError.message}`,
+        );
+      } else {
+        for (const r of (reportRows ?? []) as Record<string, unknown>[]) {
+          const incId = r.incident_id as string;
+          // Skip if we already kept a higher-version row (sorted desc above).
+          // Prefer rows where status === "current" if present; otherwise the
+          // first one we see (highest version) wins.
+          const existing = reportByIncident.get(incId);
+          const isCurrent = (r.status as string | null) === "current";
+          if (existing && !isCurrent) continue;
+
+          const raw8d = (r.report_8d ?? {}) as Record<string, unknown>;
+          const archetypeRaw = raw8d._archetype;
+          const validArchetypes = new Set([
+            "supplier",
+            "drift",
+            "design",
+            "operator",
+            "unknown",
+          ]);
+          const archetype =
+            typeof archetypeRaw === "string" && validArchetypes.has(archetypeRaw)
+              ? (archetypeRaw as AggregatorIncidentInput["archetype"])
+              : null;
+          const confidence =
+            typeof r.confidence === "number" ? (r.confidence as number) : null;
+          reportByIncident.set(incId, { archetype, confidence });
+        }
+      }
+    }
+
+    // ─── Enrich with real signal counts via incident_signal join ────────────
+    // The denormalized incident.signal_count column is often NULL/0. Compute
+    // counts from the link table directly. Cheaper than nested PostgREST count
+    // and works against any seed.
+    const signalCountByIncident = new Map<string, number>();
+
+    if (incidentIds.length > 0) {
+      const { data: signalLinks, error: signalLinkError } = await supabase
+        .from("incident_signal")
+        .select("incident_id,signal_id")
+        .in("incident_id", incidentIds);
+      if (signalLinkError) {
+        console.warn(
+          `[themes] incident_signal count failed: ${signalLinkError.message}`,
+        );
+      } else {
+        for (const link of (signalLinks ?? []) as { incident_id: string }[]) {
+          signalCountByIncident.set(
+            link.incident_id,
+            (signalCountByIncident.get(link.incident_id) ?? 0) + 1,
+          );
+        }
+      }
+    }
+
+    const incidents: AggregatorIncidentInput[] = incidentRows.map(
+      (row: Record<string, unknown>) => {
+        const incId = row.incident_id as string;
+        const enrich = reportByIncident.get(incId);
+        const enrichedArchetype =
+          enrich?.archetype ??
+          (row.archetype as AggregatorIncidentInput["archetype"] | null) ??
+          "unknown";
+        const realSignalCount =
+          signalCountByIncident.get(incId) ?? Number(row.signal_count ?? 0);
+        return {
+          incident_id: incId,
+          archetype: enrichedArchetype,
+          primary_product_id: (row.primary_product_id as string | null) ?? null,
+          // DB uses "primary_part"; map to the app-internal "primary_part_number"
+          primary_part_number: (row.primary_part as string | null) ?? null,
+          title: (row.title as string | null) ?? null,
+          severity: (row.severity as string | null) ?? null,
+          last_activity_at: (row.last_activity_at as string | null) ?? null,
+          signal_count: realSignalCount,
+          centroid_embedding: Array.isArray(row.centroid_embedding)
+            ? (row.centroid_embedding as number[])
+            : null,
+          source_count: 0,
+          confidence: enrich?.confidence ?? null,
+        };
+      },
     );
 
-    // confidence_avg defaults to 0 from the aggregator. The UI renders 0 as "—".
-    // TODO: enrich per-theme from incident_contribution data once the contributions fetch lands.
+    // confidence_avg is averaged from per-incident report.confidence (Bug A
+    // fix). When no incident has a report yet, it stays 0; the UI renders
+    // 0 as "—".
     const themes = aggregateThemes(incidents);
 
     // LLM-title any theme where:

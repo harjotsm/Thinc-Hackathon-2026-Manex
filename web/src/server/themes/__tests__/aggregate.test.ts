@@ -94,4 +94,37 @@ describe("aggregateThemes", () => {
     ]);
     expect(themes.map((t) => t.signature).sort()).toEqual(["unknown:PM-00008", "unknown:—"]);
   });
+
+  // Bug A regression: confidence_avg must come from per-incident confidence
+  // (typically report.confidence) not be a hard-coded 0.
+  it("averages per-incident confidence into theme.confidence_avg", () => {
+    const [theme] = aggregateThemes([
+      inc({ incident_id: "C1", primary_product_id: "P-X", confidence: 0.9 }),
+      inc({ incident_id: "C2", primary_product_id: "P-X", confidence: 0.7 }),
+    ]);
+    expect(theme.confidence_avg).toBeCloseTo(0.8, 5);
+  });
+
+  it("ignores undefined/null confidence and averages the rest", () => {
+    const [theme] = aggregateThemes([
+      inc({ incident_id: "C1", primary_product_id: "P-Y", confidence: 0.6 }),
+      inc({ incident_id: "C2", primary_product_id: "P-Y", confidence: null }),
+      inc({ incident_id: "C3", primary_product_id: "P-Y" /* undefined */ }),
+    ]);
+    expect(theme.confidence_avg).toBeCloseTo(0.6, 5);
+  });
+
+  it("defaults confidence_avg to 0 when no member has one", () => {
+    const [theme] = aggregateThemes([
+      inc({ incident_id: "C1", primary_product_id: "P-Z" }),
+    ]);
+    expect(theme.confidence_avg).toBe(0);
+  });
+
+  it("clamps averaged confidence to [0,1]", () => {
+    const [theme] = aggregateThemes([
+      inc({ incident_id: "C1", primary_product_id: "P-X", confidence: 1.4 }),
+    ]);
+    expect(theme.confidence_avg).toBe(1);
+  });
 });

@@ -13,6 +13,8 @@ export type AggregatorIncidentInput = {
   signal_count: number;
   centroid_embedding: number[] | null;
   source_count: number;
+  /** Per-incident confidence (typically from the latest report.confidence). */
+  confidence?: number | null;
 };
 
 const SEVERITY_RANK: Record<string, number> = { low: 1, medium: 2, high: 3, critical: 4 };
@@ -100,6 +102,17 @@ export const aggregateThemes = (
       .sort()
       .reverse()[0] ?? new Date(0).toISOString();
 
+    // Average per-incident confidence across members that have one. If none of
+    // the members have a confidence (e.g. report not yet composed), fall back
+    // to 0 — the UI renders 0 as "—" so this is safe.
+    const confValues = members
+      .map((m) => m.confidence)
+      .filter((v): v is number => typeof v === "number" && !Number.isNaN(v));
+    const confidenceAvg =
+      confValues.length > 0
+        ? confValues.reduce((a, b) => a + b, 0) / confValues.length
+        : 0;
+
     themes.push({
       signature: sig,
       archetype,
@@ -116,7 +129,7 @@ export const aggregateThemes = (
         products,
         lines: [],
       },
-      confidence_avg: 0, // populated by route (needs contributions data); 0 default
+      confidence_avg: Math.max(0, Math.min(1, confidenceAvg)),
       severity_max: SEVERITY_BY_RANK[severityRank],
       last_seen: lastSeen,
       related_signatures: [],

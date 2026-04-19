@@ -36,8 +36,9 @@ const formatTarget = (target: string): string => {
 };
 
 /** Map a ReportInitiative to the body expected by POST /api/initiative/approve */
-function buildApprovePayload(init: ReportInitiative, incidentId: string, productId?: string | null) {
-  // Derive agentDomain: must be one of the enum values
+export function buildApprovePayload(init: ReportInitiative, incidentId: string, productId?: string | null) {
+  // Derive agent_domain: must be one of the agentDomainEnum values
+  // (production | supplier | rnd | logistics | customer_response)
   const domainMap: Record<string, string> = {
     production: "production",
     supplier: "supplier",
@@ -46,21 +47,35 @@ function buildApprovePayload(init: ReportInitiative, incidentId: string, product
     customer_response: "customer_response",
   };
   const agent_domain =
-    domainMap[init.domain.toLowerCase()] ?? "production";
+    domainMap[(init.domain ?? "").toLowerCase()] ?? "production";
 
-  // Build a closure_predicate in legacyClosurePredicateSchema shape
+  // Closure predicate must match legacyClosurePredicateSchema:
+  //   { type: "no_defect_code_in_window" | "manual_confirmation", params: {...} }
+  // Orchestrator output already conforms (see propose.ts ClosurePredicateSchema).
+  // If a draft initiative is missing one entirely, fall back to a manual gate
+  // so dispatch never fails on a missing field.
   const closure_predicate = init.closure_predicate ?? {
-    type: "manual_confirmation",
+    type: "manual_confirmation" as const,
     params: {},
   };
+
+  // target_system is a free-form string downstream; orchestrator emits lowercase
+  // ("srm","mes","jira",…). Default to "mes" so the field is never empty.
+  const target_system =
+    typeof init.target_system === "string" && init.target_system.trim().length > 0
+      ? init.target_system
+      : "mes";
 
   return {
     incident_id: incidentId,
     agent_domain,
-    target_system: init.target_system,
+    target_system,
     comments: init.rationale,
     closure_predicate,
-    status: "proposed",
+    // DB check constraint allows: draft|approved|dispatched|failed|done|cancelled|
+    // reopen|rejected|in_progress|closed (NOT "proposed"). Approving from the
+    // canvas means the user has accepted the draft, so "approved" is correct.
+    status: "approved" as const,
     ...(productId && { product_id: productId }),
   };
 }

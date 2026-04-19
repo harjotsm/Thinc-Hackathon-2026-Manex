@@ -91,19 +91,28 @@ export const ThemeInbox = ({ themes }: Props) => {
           </div>
           <button
             type="button"
+            aria-label={expanded.has(t.signature) ? `Collapse ${t.signature}` : `Expand ${t.signature}`}
+            title={expanded.has(t.signature) ? "Collapse" : "Expand"}
             onClick={() => toggle(t.signature, expanded, setExpanded)}
             style={{
               alignSelf: "flex-start",
-              marginTop: 8,
-              border: "1px solid #e2e8f0",
-              background: "white",
+              marginTop: 14,
+              width: 22,
+              height: 22,
+              border: "none",
+              background: "transparent",
               borderRadius: 4,
-              padding: "2px 8px",
+              padding: 0,
               fontSize: 11,
+              lineHeight: 1,
+              color: "#94a3b8",
               cursor: "pointer",
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
             }}
           >
-            {expanded.has(t.signature) ? "Collapse" : "Expand"}
+            {expanded.has(t.signature) ? "▾" : "▸"}
           </button>
         </div>
       ))}
