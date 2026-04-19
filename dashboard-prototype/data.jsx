@@ -10,6 +10,11 @@ const DATA = {
     role: "Plant Quality",
     plant: "Werk München",
     initials: "MB",
+    // Role-based access. Current user is an engineer — sees only the Engineer lens.
+    // Floor roles (line operators) get Floor only. Leadership roles get Leadership.
+    canAccessEngineer: true,
+    canAccessFloor: true,
+    canAccessLeadership: true,
   },
   now: "14:42",
   shift: "Shift 2",

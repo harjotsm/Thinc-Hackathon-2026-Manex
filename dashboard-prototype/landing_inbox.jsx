@@ -64,7 +64,7 @@ function LandingScreen() {
         )}
       </div>
 
-      {variant !== "feed" ? (
+      {variant === "split" ? (
         <div style={{display:"grid", gridTemplateColumns:"2fr 1fr", gap:16}}>
           <div className="panel" style={{padding:16, position:"relative"}}>
             <div className="row" style={{justifyContent:"space-between", marginBottom:12}}>
@@ -152,7 +152,7 @@ function LandingScreen() {
             )}
           </div>
         </div>
-      ) : (
+      ) : variant === "feed" ? (
         <div className="panel" style={{padding:16}}>
           <div className="eyebrow">Unified feed · incidents + patterns</div>
           <div style={{display:"flex", flexDirection:"column", gap:8, marginTop:10}}>
@@ -174,6 +174,51 @@ function LandingScreen() {
               </div>
             ))}
           </div>
+        </div>
+      ) : (
+        /* COMPACT — ultra-dense single-column list; zero chrome, built for triage speed */
+        <div className="panel" style={{padding:"4px 0", overflow:"hidden"}}>
+          <div className="row" style={{padding:"10px 14px 8px", borderBottom:"1px solid var(--line)", justifyContent:"space-between"}}>
+            <div className="eyebrow">Triage list · {DATA.topIncidents.length} items + 3 patterns</div>
+            <span className="muted tt">Compact · 32px rows</span>
+          </div>
+          {DATA.topIncidents.map((inc, i) => (
+            <div key={inc.id} onClick={() => setRoute(inc.primary ? "canvas" : "inbox")}
+              style={{display:"grid", gridTemplateColumns:"18px 80px 1fr 60px 70px 70px",
+                alignItems:"center", gap:10, padding:"6px 14px",
+                borderBottom: i < DATA.topIncidents.length - 1 ? "1px solid var(--line)" : "none",
+                cursor:"pointer", fontSize:12,
+                background: inc.primary ? "var(--accent-bg)" : "transparent"}}
+              onMouseEnter={e => { if (!inc.primary) e.currentTarget.style.background = "var(--bg-subtle)"; }}
+              onMouseLeave={e => { if (!inc.primary) e.currentTarget.style.background = "transparent"; }}>
+              <span className={"sev-dot " + inc.sev}/>
+              <span className="mono" style={{fontWeight:700, fontSize:11}}>{inc.id}</span>
+              <span style={{overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", fontWeight:500}}>{inc.title}</span>
+              <span className="muted tt" style={{overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>{inc.product}</span>
+              <span className="muted tt mono">{inc.signals}sig · {inc.age}</span>
+              <span className={"mono tt " + confCls(inc.conf)} style={{textAlign:"right", fontWeight:600}}>
+                <span className="ai-tag" style={{marginRight:3}}/>{inc.conf}%
+              </span>
+            </div>
+          ))}
+          <div style={{padding:"6px 14px", background:"var(--bg-subtle)", borderTop:"1px solid var(--line)", fontSize:10, color:"var(--ink-muted)", letterSpacing:"0.08em", textTransform:"uppercase", fontWeight:600}}>Rising patterns</div>
+          {[
+            {id:"PAT-014", title:"Dull-solder language cluster", synopsis:"VoF + Trustpilot → PM-00008", conf:71},
+            {id:"PAT-015", title:"Shift 2 near-miss clustering", synopsis:"EOL near-misses +40% Stn-04",  conf:68},
+            {id:"PAT-016", title:"ElektroParts ESR creep",       synopsis:"Inbound ESR drift · 4 batches", conf:82},
+          ].map((p, i) => (
+            <div key={p.id} style={{display:"grid", gridTemplateColumns:"18px 80px 1fr 60px 70px 70px",
+              alignItems:"center", gap:10, padding:"6px 14px",
+              borderBottom: i < 2 ? "1px solid var(--line)" : "none", cursor:"pointer", fontSize:12}}
+              onMouseEnter={e => e.currentTarget.style.background = "var(--bg-subtle)"}
+              onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+              <span className="ai-tag" style={{marginLeft:2}}/>
+              <span className="mono" style={{fontWeight:700, fontSize:11, color:"var(--accent)"}}>{p.id}</span>
+              <span style={{overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", fontWeight:500}}>{p.title}</span>
+              <span className="muted tt" style={{gridColumn:"4 / 6", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>{p.synopsis}</span>
+              <span className={"mono tt " + confCls(p.conf)} style={{textAlign:"right", fontWeight:600}}>{p.conf}%</span>
+            </div>
+          ))}
         </div>
       )}
 
@@ -229,7 +274,23 @@ function InboxScreen() {
   React.useEffect(() => { localStorage.setItem("inbox.left", leftOpen ? "1" : "0"); }, [leftOpen]);
   React.useEffect(() => { localStorage.setItem("inbox.right", rightOpen ? "1" : "0"); }, [rightOpen]);
 
-  const rows = DATA.inbox;
+  // Cross-screen drill-down: leadership Pareto/heatmap can stash a filter string
+  // in localStorage before routing to /inbox.
+  const [drillFilter, setDrillFilter] = React.useState(() => localStorage.getItem("inbox.drillFilter") || "");
+  React.useEffect(() => {
+    const f = localStorage.getItem("inbox.drillFilter");
+    if (f) {
+      setDrillFilter(f);
+      localStorage.removeItem("inbox.drillFilter");
+    }
+  }, []);
+
+  const rows = drillFilter
+    ? DATA.inbox.filter(r => {
+        const hay = (r.id + " " + r.title + " " + r.product).toLowerCase();
+        return hay.includes(drillFilter.toLowerCase());
+      })
+    : DATA.inbox;
   const toggle = id => setSelected(s => s.includes(id) ? s.filter(x => x !== id) : [...s, id]);
 
   const confCls = (c) => c >= 80 ? "conf-hi" : c >= 50 ? "conf-med" : "conf-lo";
@@ -301,6 +362,14 @@ function InboxScreen() {
               <span className="chip" style={{background:"var(--accent-bg)", color:"var(--cta)", borderColor:"var(--accent-ring)"}}>
                 filter: {filter}
                 <button onClick={() => setFilter("all")} style={{marginLeft:4, color:"var(--cta)"}}>×</button>
+              </span>
+            </div>
+          )}
+          {drillFilter && (
+            <div className="row" style={{gap:6}}>
+              <span className="chip" style={{background:"var(--accent-bg)", color:"var(--cta)", borderColor:"var(--accent-ring)"}}>
+                drill-down: "{drillFilter}"
+                <button onClick={() => setDrillFilter("")} style={{marginLeft:4, color:"var(--cta)", cursor:"pointer", background:"transparent", border:"none"}}>×</button>
               </span>
             </div>
           )}

@@ -112,35 +112,91 @@ function ResolveScreen() {
           </div>
         </div>
 
-        {/* Impact Simulator */}
-        <div style={{borderLeft:"1px solid var(--line)", padding:18, overflow:"auto", position:"relative"}}>
-          <div className="eyebrow">Impact Simulator</div>
-          <div style={{fontSize:16, fontWeight:600, margin:"4px 0 16px"}}>Projected outcome</div>
+        {/* Impact Simulator — reactive to included agents */}
+        <div style={{borderLeft:"1px solid var(--line)", padding:0, overflow:"auto", position:"relative",
+          display:"flex", flexDirection:"column", background:"linear-gradient(180deg, #f4faff 0%, #fff 30%)"}}>
+          {/* HERO IMPACT BLOCK — sticky, always visible */}
+          {(() => {
+            // Each agent contributes to claims/€ avoided. Sum dynamically.
+            const contribs = {
+              "A-prod": { claims: 8, eurMin: 22, eurMax: 38 },
+              "A-sup":  { claims: 0, eurMin: 12, eurMax: 24 },  // upstream prevent
+              "A-rd":   { claims: 0, eurMin: 6,  eurMax: 14 },  // long-term prevent
+              "A-log":  { claims: 0, eurMin: 4,  eurMax: 8  },
+              "A-cust": { claims: 3, eurMin: 4,  eurMax: 8  },
+            };
+            const totals = Object.entries(included).reduce((acc, [id, on]) => {
+              if (!on) return acc;
+              const c = contribs[id] || { claims:0, eurMin:0, eurMax:0 };
+              return { claims: acc.claims + c.claims, eurMin: acc.eurMin + c.eurMin, eurMax: acc.eurMax + c.eurMax };
+            }, { claims: 0, eurMin: 0, eurMax: 0 });
+            const pctReduction = Math.min(95, Math.round((totals.eurMax / 100) * 100));
 
-          <div className="panel" style={{padding:16, marginBottom:12}}>
-            <div className="label muted" style={{fontSize:10, letterSpacing:"0.12em", textTransform:"uppercase"}}>Claims avoided</div>
-            <div style={{fontSize:44, fontWeight:600, color:"var(--accent)", letterSpacing:"-0.02em", lineHeight:1}}>11</div>
-            <div className="muted tt" style={{marginTop:4}}>over 12 weeks · ±2 at 80% confidence</div>
-          </div>
+            return (
+              <div style={{
+                position:"sticky", top:0, zIndex:5,
+                padding:"20px 18px 16px",
+                background:"linear-gradient(180deg, var(--accent-bg) 0%, #f4faff 100%)",
+                borderBottom:"1px solid var(--accent-ring)"
+              }}>
+                <div className="eyebrow" style={{color:"var(--accent)", fontWeight:600, marginBottom:4}}>
+                  <span className="ai-spark">✦</span>Impact Simulator · live
+                </div>
+                <div style={{fontSize:11, color:"var(--ink-secondary)", marginBottom:14, lineHeight:1.4}}>
+                  Updates as you toggle agents below.
+                </div>
 
-          <div className="panel" style={{padding:16, marginBottom:12}}>
-            <div className="eyebrow" style={{marginBottom:4}}>€ cost avoided (range)</div>
-            <div style={{fontSize:26, fontWeight:600}}>€48k – €92k</div>
-            <div style={{display:"flex", gap:2, marginTop:10, height:36, alignItems:"flex-end"}}>
-              <div style={{flex:1, background:"var(--bg-inset)", borderRadius:4, height:"100%", display:"flex", flexDirection:"column", justifyContent:"flex-end"}}>
-                <div style={{height:"85%", background:"var(--sev-crit)"}}/>
+                {/* Hero metric */}
+                <div style={{display:"grid", gridTemplateColumns:"1fr 1fr", gap:12, marginBottom:12}}>
+                  <div>
+                    <div className="label muted" style={{fontSize:9, letterSpacing:"0.12em", textTransform:"uppercase", fontWeight:600}}>Claims avoided</div>
+                    <div style={{fontSize:42, fontWeight:700, color:"var(--cta)", letterSpacing:"-0.02em", lineHeight:1, marginTop:2,
+                      transition:"color 200ms"}}>
+                      {totals.claims}
+                    </div>
+                    <div className="muted tt" style={{marginTop:4}}>over 12 weeks · ±2</div>
+                  </div>
+                  <div>
+                    <div className="label muted" style={{fontSize:9, letterSpacing:"0.12em", textTransform:"uppercase", fontWeight:600}}>€ avoided</div>
+                    <div style={{fontSize:24, fontWeight:700, color:"var(--cta)", letterSpacing:"-0.01em", lineHeight:1, marginTop:6}}>
+                      €{totals.eurMin}–{totals.eurMax}k
+                    </div>
+                    <div className="muted tt" style={{marginTop:4}}>{pctReduction}% reduction</div>
+                  </div>
+                </div>
+
+                {/* Without action vs With dispatch — compact bar */}
+                <div style={{padding:"10px 12px", background:"#fff", border:"1px solid var(--line)", borderRadius:8}}>
+                  <div className="muted tt" style={{marginBottom:6, fontWeight:600}}>12-week exposure</div>
+                  <div style={{display:"flex", alignItems:"center", gap:8, marginBottom:4}}>
+                    <span style={{fontSize:10, width:60, color:"var(--ink-muted)"}}>No action</span>
+                    <div style={{flex:1, height:8, background:"var(--bg-inset)", borderRadius:4, overflow:"hidden"}}>
+                      <div style={{width:"100%", height:"100%", background:"var(--sev-crit)"}}/>
+                    </div>
+                    <span className="mono" style={{fontSize:10, fontWeight:600, width:42, textAlign:"right", color:"var(--sev-crit)"}}>€100k</span>
+                  </div>
+                  <div style={{display:"flex", alignItems:"center", gap:8}}>
+                    <span style={{fontSize:10, width:60, color:"var(--accent)"}}>Dispatch {onCount}</span>
+                    <div style={{flex:1, height:8, background:"var(--bg-inset)", borderRadius:4, overflow:"hidden"}}>
+                      <div style={{width: Math.max(8, 100 - pctReduction) + "%", height:"100%", background:"var(--cta)", transition:"width 250ms"}}/>
+                    </div>
+                    <span className="mono" style={{fontSize:10, fontWeight:600, width:42, textAlign:"right", color:"var(--cta)"}}>
+                      €{Math.max(8, 100 - totals.eurMax)}k
+                    </span>
+                  </div>
+                </div>
+
+                {showAnno && (
+                  <Anno tag="R-IMP · Reactive sim" style={{left:-280, top:60, maxWidth:240}}>
+                    Numbers update as engineer toggles agents on/off. The "money shot": shows the trade-off in real time.
+                  </Anno>
+                )}
               </div>
-              <div style={{flex:1, background:"var(--bg-inset)", borderRadius:4, height:"100%", display:"flex", flexDirection:"column", justifyContent:"flex-end"}}>
-                <div style={{height:"30%", background:"var(--accent)"}}/>
-              </div>
-            </div>
-            <div className="row muted tt" style={{justifyContent:"space-between", marginTop:4}}>
-              <span>Without action</span>
-              <span>With dispatch</span>
-            </div>
-          </div>
+            );
+          })()}
 
-          <div className="eyebrow" style={{margin:"14px 0 8px"}}>Similar past incidents</div>
+          <div style={{padding:"14px 18px", flex:1, overflow:"auto"}}>
+            <div className="eyebrow" style={{margin:"0 0 8px"}}>Similar past incidents</div>
           {DATA.lessons.slice(0,3).map(L => (
             <div key={L.id} className="card" style={{padding:10, marginBottom:8}}>
               <div className="row" style={{justifyContent:"space-between"}}>
@@ -157,6 +213,7 @@ function ResolveScreen() {
               3 nearest lessons retrieved by embedding similarity. The more plants use Resolve, the better this gets.
             </Anno>
           )}
+          </div>
         </div>
       </div>
 
@@ -248,12 +305,26 @@ function EightDScreen() {
                 </div>
                 {s.src.length > 0 && (
                   <div className="muted mono" style={{fontSize:10, marginTop:10, letterSpacing:"0.04em"}}>
-                    Sourced from: {s.src.map((x,i) => (
-                      <span key={x}>
-                        <a href="#" style={{color:"var(--accent)", textDecoration:"none"}}>{x}</a>
-                        {i < s.src.length - 1 && ", "}
-                      </span>
-                    ))}
+                    Sourced from: {s.src.map((x,i) => {
+                      // Provenance click-through: signals/contributions jump back to canvas + auto-focus.
+                      const isSig = x.startsWith("SIG-");
+                      const isInit = x.startsWith("INI-");
+                      const target = isInit ? "initiatives" : "canvas";
+                      return (
+                        <span key={x}>
+                          <a href="#" onClick={(e) => {
+                            e.preventDefault();
+                            if (isSig) {
+                              localStorage.setItem("canvas.focusSignal", x);
+                            }
+                            setRoute(target);
+                          }}
+                          style={{color:"var(--accent)", textDecoration:"none", cursor:"pointer"}}
+                          title={isSig ? "Jump to canvas + focus this signal" : isInit ? "Open initiative" : "View source"}>{x}</a>
+                          {i < s.src.length - 1 && ", "}
+                        </span>
+                      );
+                    })}
                   </div>
                 )}
               </div>
