@@ -29,14 +29,11 @@ vi.mock("@/server/transcription", () => ({
 }));
 
 const mockInsertSingle = vi.fn();
+const mockInsert = vi.fn();
 vi.mock("@/lib/supabase-server", () => ({
   getSupabaseServerClient: () => ({
     from: () => ({
-      insert: () => ({
-        select: () => ({
-          single: mockInsertSingle,
-        }),
-      }),
+      insert: (...args: unknown[]) => mockInsert(...args),
     }),
   }),
 }));
@@ -91,6 +88,11 @@ const fakeSignalRow = {
 describe("POST /api/intake/voice", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockInsert.mockReturnValue({
+      select: () => ({
+        single: mockInsertSingle,
+      }),
+    });
     // Default happy-path stubs
     mockUploadVoiceClip.mockResolvedValue({
       bucket: "voice-signals",
@@ -196,6 +198,7 @@ describe("POST /api/intake/voice", () => {
     expect(body.correlator).toBeDefined();
     expect(body.correlator.linkedSignals).toBe(0);
     expect(Array.isArray(body.correlator.incidentIds)).toBe(true);
+    expect(mockRunCorrelator).toHaveBeenCalledOnce();
   });
 
   it("201 — note is prepended to transcript in text_payload", async () => {
@@ -251,7 +254,46 @@ describe("POST /api/intake/voice", () => {
     expect(body.retryable).toBe(true);
   });
 
-  it("502 — returns transcription_error when Whisper fails", async () => {
+  it("201 — creates fallback signal when Whisper fails but note exists", async () => {
+    mockTranscribeAudio.mockRejectedValue(new Error("Whisper API rate limited"));
+
+    mockInsertSingle.mockResolvedValue({
+      data: {
+        ...fakeSignalRow,
+        text_payload: "Operator fallback note.",
+        attachments: [{ kind: "audio", url: "https://cdn.example.com/clip.webm", transcript: null, status: "failed" }],
+        raw_payload: { transcription_error: { message: "Whisper API rate limited" } },
+      },
+      error: null,
+    });
+
+    const form = makeVoiceForm({ note: "Operator fallback note." });
+    const req = makeRequest(form);
+
+    const { POST } = await import("../route");
+    const res = await POST(req);
+    const body = await res.json();
+
+    expect(res.status).toBe(201);
+    expect(mockInsert).toHaveBeenCalledOnce();
+    const insertPayload = mockInsert.mock.calls[0][0] as Record<string, unknown>;
+    expect(insertPayload.text_payload).toBe("Operator fallback note.");
+    expect(insertPayload.raw_payload).toMatchObject({
+      transcription_error: {
+        message: "Whisper API rate limited",
+      },
+    });
+    expect(insertPayload.attachments).toEqual([
+      expect.objectContaining({
+        status: "failed",
+        transcript: null,
+      }),
+    ]);
+    expect(mockRunCorrelator).toHaveBeenCalledOnce();
+    expect(body.signal).toBeDefined();
+  });
+
+  it("502 — returns transcription_error when Whisper fails and no note exists", async () => {
     mockTranscribeAudio.mockRejectedValue(new Error("Whisper API rate limited"));
 
     const form = makeVoiceForm();
@@ -264,6 +306,8 @@ describe("POST /api/intake/voice", () => {
     expect(res.status).toBe(502);
     expect(body.code).toBe("transcription_error");
     expect(body.retryable).toBe(true);
+    expect(mockInsert).not.toHaveBeenCalled();
+    expect(mockRunCorrelator).not.toHaveBeenCalled();
   });
 
   it("500 — returns db_error when signal insert fails", async () => {

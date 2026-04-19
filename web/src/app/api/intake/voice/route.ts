@@ -71,18 +71,22 @@ export async function POST(request: Request) {
   }
 
   // 2. Transcribe via Whisper
-  let transcription: Awaited<ReturnType<typeof transcribeAudio>>;
+  let transcription: Awaited<ReturnType<typeof transcribeAudio>> | null = null;
+  let transcriptionError: { message: string } | null = null;
   try {
     transcription = await transcribeAudio(audioEntry, filenameHint, language);
   } catch (transcribeErr) {
     const msg = transcribeErr instanceof Error ? transcribeErr.message : String(transcribeErr);
-    return err("transcription_error", `Whisper transcription failed: ${msg}`, true, 502);
+    if (!note) {
+      return err("transcription_error", `Whisper transcription failed: ${msg}`, true, 502);
+    }
+    transcriptionError = { message: msg };
   }
 
   // 3. Compose signal text: optional operator note + transcript
   const textParts: string[] = [];
   if (note) textParts.push(note);
-  textParts.push(transcription.text);
+  if (transcription?.text) textParts.push(transcription.text);
   const textPayload = textParts.join("\n\n");
 
   if (!textPayload.trim()) {
@@ -115,15 +119,16 @@ export async function POST(request: Request) {
       content_type: contentType,
       filename: filenameHint,
       note: note ?? null,
-      transcription_language: transcription.language,
-      transcription_duration_seconds: transcription.duration_seconds,
+      transcription_language: transcription?.language ?? null,
+      transcription_duration_seconds: transcription?.duration_seconds ?? null,
+      ...(transcriptionError ? { transcription_error: transcriptionError } : {}),
     },
     attachments: [
       {
         kind: "audio",
         url: attachmentUrl,
-        transcript: transcription.text,
-        status: "transcribed",
+        transcript: transcription?.text ?? null,
+        status: transcription ? "transcribed" : "failed",
       },
     ],
     embedding: vectorLiteral(embedding),
@@ -162,9 +167,9 @@ export async function POST(request: Request) {
       signal: rowParsed.success ? rowParsed.data : signal,
       correlator: correlatorResult,
       transcript: {
-        text: transcription.text,
-        language: transcription.language,
-        duration_seconds: transcription.duration_seconds,
+        text: transcription?.text ?? (note ?? ""),
+        language: transcription?.language ?? null,
+        duration_seconds: transcription?.duration_seconds ?? null,
       },
     },
     { status: 201 },
