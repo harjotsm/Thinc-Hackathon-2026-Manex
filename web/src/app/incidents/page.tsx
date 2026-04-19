@@ -2,6 +2,7 @@ import { AlertCircle } from "lucide-react";
 import { getIncidents } from "@/server/incidents/loaders";
 import { IncidentsFilterStrip } from "@/components/incidents/incidents-filter-strip";
 import { IncidentsTable } from "@/components/incidents/incidents-table";
+import { IncidentsKpiBlock } from "@/components/incidents/incidents-kpi-block";
 import { ThemeBreadcrumb } from "@/components/incidents/theme-breadcrumb";
 
 export const revalidate = 30;
@@ -68,7 +69,10 @@ export default async function IncidentsPage({
           </p>
         </div>
       ) : (
-        <IncidentsTable incidents={incidents} />
+        <>
+          <IncidentsTable incidents={incidents} />
+          <IncidentsKpiBlock incidents={incidents} />
+        </>
       )}
     </div>
   );
