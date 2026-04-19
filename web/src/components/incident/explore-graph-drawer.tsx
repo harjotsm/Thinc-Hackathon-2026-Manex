@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import type { HypothesisView } from "@/server/incident/loaders";
+import { displayIncidentId } from "@/lib/display";
 
 export type GraphVariant = "radial" | "tree" | "stack";
 type Variant = GraphVariant;
@@ -251,8 +252,12 @@ export function GraphRadial({
           >
             Incident
           </div>
-          <div style={{ fontSize: 11, fontWeight: 600, lineHeight: 1.2, marginTop: 3 }}>
-            {incidentId}
+          <div
+            className="mono"
+            style={{ fontSize: 11, fontWeight: 600, lineHeight: 1.2, marginTop: 3 }}
+            title={incidentId}
+          >
+            {displayIncidentId(incidentId)}
           </div>
           <div
             className="muted tt mono"
@@ -359,8 +364,12 @@ export function GraphTree({
           >
             Incident · root
           </div>
-          <div style={{ fontSize: 13, fontWeight: 600, lineHeight: 1.3, marginTop: 4 }}>
-            {incidentId}
+          <div
+            className="mono"
+            style={{ fontSize: 13, fontWeight: 600, lineHeight: 1.3, marginTop: 4 }}
+            title={incidentId}
+          >
+            {displayIncidentId(incidentId)}
           </div>
           <div className="muted tt mono" style={{ marginTop: 4, color: "var(--ink-muted, #94a3b8)" }}>
             {hypotheses.length} hypotheses
@@ -405,7 +414,13 @@ export function GraphStack({
         <div className="eyebrow" style={{ color: "var(--accent, #639fc4)", fontSize: 10 }}>
           Incident · root
         </div>
-        <div style={{ fontSize: 14, fontWeight: 600, marginTop: 2 }}>{incidentId}</div>
+        <div
+          className="mono"
+          style={{ fontSize: 14, fontWeight: 600, marginTop: 2 }}
+          title={incidentId}
+        >
+          {displayIncidentId(incidentId)}
+        </div>
       </div>
       {hypotheses.map((h) => (
         <div key={h.id} style={{ marginLeft: 24 }}>
