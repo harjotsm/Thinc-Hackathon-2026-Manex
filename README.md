@@ -41,6 +41,15 @@ main     ← always deployable · only merged from develop via PR
 Next.js 15 · TypeScript · Supabase-JS · Tailwind · shadcn/ui · Vercel AI SDK ·
 Anthropic SDK · OpenAI (Whisper + embeddings) · pgvector · React Flow · Recharts.
 
+## Voice pipeline setup (web)
+
+- `OPENAI_API_KEY` must be set in `web/.env.local` before starting the web app (`npm run dev` in `web/`), otherwise voice server paths fail fast on startup/import.
+- Run the live voice smoke test from `web/` with an audio fixture path:
+
+```bash
+VOICE_SMOKE_AUDIO_PATH=/absolute/path/to/sample.wav npm run test:voice-smoke
+```
+
 ---
 
 # Manex Challenge Environment (scaffold)
