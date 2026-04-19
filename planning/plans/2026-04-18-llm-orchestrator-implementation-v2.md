@@ -326,11 +326,11 @@ Based on spec §16.3 + real Manex credentials from team handout. See v1 Task 0.2
 
 ```bash
 # at repo root (not web/)
-MANEX_API_URL=http://34.89.205.150:8005/
+MANEX_API_URL=http://<manex-stack-ip>:8005/
 MANEX_ANON_KEY=<bearer-jwt>  # same as MANEX_API_KEY in v1
 MANEX_SERVICE_ROLE_KEY=<bearer-jwt>
-MANEX_PG_URL=postgres://team_writer_deconstructors:<pw>@34.89.205.150:5435/hackathon
-MANEX_IMAGES_URL=http://34.89.205.150:9000/defect_images/
+MANEX_PG_URL=postgres://team_writer_deconstructors:<pw>@<manex-stack-ip>:5435/hackathon
+MANEX_IMAGES_URL=http://<manex-stack-ip>:9000/defect_images/
 ANTHROPIC_API_KEY=sk-ant-...
 OPENAI_API_KEY=sk-...
 CRON_SECRET=<random>

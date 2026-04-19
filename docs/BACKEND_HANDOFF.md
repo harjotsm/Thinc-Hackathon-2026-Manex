@@ -117,9 +117,9 @@ cp -f .env.example .env.local
 Set these values in `web/.env.local`:
 
 ```env
-NEXT_PUBLIC_SUPABASE_URL=http://34.89.205.150:8005
+NEXT_PUBLIC_SUPABASE_URL=http://<manex-stack-ip>:8005
 NEXT_PUBLIC_SUPABASE_ANON_KEY=<TEAM_API_KEY>
-MANEX_API_URL=http://34.89.205.150:8005
+MANEX_API_URL=http://<manex-stack-ip>:8005
 MANEX_SERVICE_ROLE_KEY=<TEAM_API_KEY>
 ANTHROPIC_API_KEY=
 OPENAI_API_KEY=
@@ -136,7 +136,7 @@ Use Dockerized `psql` (works even if local `psql` is missing):
 
 ```bash
 cd /Users/harjot/Thinc-Hackathon-2026-Manex
-DB_URL='postgres://team_writer_deconstructors:<PASSWORD>@34.89.205.150:5435/hackathon'
+DB_URL='postgres://team_writer_deconstructors:<PASSWORD>@<manex-stack-ip>:5435/hackathon'
 
 docker run --rm -v "$PWD:/work" postgres:15-alpine psql "$DB_URL" -v ON_ERROR_STOP=1 -f /work/supabase/migrations/00003_resolve_core.sql
 docker run --rm -v "$PWD:/work" postgres:15-alpine psql "$DB_URL" -v ON_ERROR_STOP=1 -f /work/supabase/migrations/00004_resolve_workflow_atomic.sql

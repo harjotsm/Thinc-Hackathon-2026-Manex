@@ -437,10 +437,10 @@ DEMO_USER_HEADER=X-Demo-User
 Copy `.env.local.example` to `.env.local`, replace placeholders with real values. Joscha pastes team credentials from handout message into `.env.local` directly (the plan does not persist them).
 
 Values to fill in (team `deconstructors`):
-- `MANEX_POSTGREST_URL=http://34.89.205.150:8005/`
-- `MANEX_PG_URL=postgres://team_writer_deconstructors:<password>@34.89.205.150:5435/hackathon`
+- `MANEX_POSTGREST_URL=http://<manex-stack-ip>:8005/`
+- `MANEX_PG_URL=postgres://team_writer_deconstructors:<password>@<manex-stack-ip>:5435/hackathon`
 - `MANEX_API_KEY=<JWT bearer token from handout>`
-- `MANEX_IMAGES_URL=http://34.89.205.150:9000/defect_images/`
+- `MANEX_IMAGES_URL=http://<manex-stack-ip>:9000/defect_images/`
 - `ANTHROPIC_API_KEY=<own sk-ant-...>`
 - `OPENAI_API_KEY=<own sk-...>`
 
