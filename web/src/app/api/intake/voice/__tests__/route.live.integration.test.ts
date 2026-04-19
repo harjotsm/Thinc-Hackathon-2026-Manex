@@ -144,8 +144,10 @@ const collectEvidenceIds = (draft: Record<string, unknown>): string[] => {
 
 loadEnvLocal();
 
+const liveSmokeTest = process.env.VOICE_SMOKE_AUDIO_PATH?.trim() ? it : it.skip;
+
 describe("POST /api/intake/voice (live smoke)", () => {
-  it(
+  liveSmokeTest(
     "processes live audio through intake, linkage, orchestrator, and report evidence trail",
     async () => {
       const audioPath = resolveAudioPath(requireEnv("VOICE_SMOKE_AUDIO_PATH"));
