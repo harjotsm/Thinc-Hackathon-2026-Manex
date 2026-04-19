@@ -14,3 +14,4 @@ data-generation/*.pyc
 # macOS
 .DS_Store
 .superpowers/
+.worktrees/
