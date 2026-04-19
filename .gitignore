@@ -15,3 +15,7 @@ data-generation/*.pyc
 .DS_Store
 .superpowers/
 .worktrees/
+
+# Tooling artifacts (Claude Code + Playwright MCP)
+.claude/
+.playwright-mcp/

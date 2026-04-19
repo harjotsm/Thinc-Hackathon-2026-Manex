@@ -2,9 +2,10 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import { Send, Sparkles } from "lucide-react";
-import type { ReportInitiative } from "@/server/incident/loaders";
+import { ChevronDown, ChevronUp, Send, Sparkles, Terminal } from "lucide-react";
+import type { ReportInitiative, ReportToolCall } from "@/server/incident/loaders";
 import { cn } from "@/lib/utils";
+import { shortId } from "@/lib/display";
 import {
   Card,
   CardContent,
@@ -20,6 +21,27 @@ type Props = {
   initiatives: ReportInitiative[];
   incidentId: string;
   productId?: string | null;
+  toolCalls?: ReportToolCall[];
+  onOpenToolCall?: (toolCallId: string) => void;
+};
+
+// Turn {type, params} into a human line. Falls back to raw type.
+const formatClosurePredicate = (
+  pred: ReportInitiative["closure_predicate"],
+): string => {
+  if (!pred) return "Manual confirmation";
+  const t = pred.type;
+  const p = (pred.params ?? {}) as Record<string, unknown>;
+  const str = (v: unknown, fallback: string) =>
+    v === undefined || v === null ? fallback : String(v);
+  if (t === "no_defect_code_in_window") {
+    return `No "${str(p.defect_code, "<defect>")}" defect for ${str(p.days, "?")} days`;
+  }
+  if (t === "manual_confirmation") return "Manual confirmation by owner";
+  if (t === "metric_threshold") {
+    return `${str(p.metric, "metric")} ${str(p.op, "≤")} ${str(p.value, "?")} over ${str(p.window, "rolling window")}`;
+  }
+  return t.replace(/_/g, " ");
 };
 
 type DispatchState = "idle" | "dispatching" | "done" | "error";
@@ -89,14 +111,27 @@ const ownerInitials = (name: string): string => {
   return (parts[0][0] + (parts[1]?.[0] ?? "")).toUpperCase();
 };
 
-export function InitiativesPreview({ initiatives, incidentId, productId }: Props) {
+export function InitiativesPreview({
+  initiatives,
+  incidentId,
+  productId,
+  toolCalls = [],
+  onOpenToolCall,
+}: Props) {
   const [approved, setApproved] = useState<Record<number, boolean>>(() =>
     Object.fromEntries(initiatives.map((_, i) => [i, true])),
   );
+  const [expanded, setExpanded] = useState<Record<number, boolean>>({});
 
   const [dispatchState, setDispatchState] = useState<DispatchState>("idle");
   const [dispatchError, setDispatchError] = useState<string | null>(null);
   const [createdCount, setCreatedCount] = useState(0);
+
+  const toolCallMap = useMemo(() => {
+    const m = new Map<string, ReportToolCall>();
+    for (const t of toolCalls) m.set(t.tool_call_id, t);
+    return m;
+  }, [toolCalls]);
 
   const approvedCount = useMemo(
     () => Object.values(approved).filter(Boolean).length,
@@ -177,6 +212,7 @@ export function InitiativesPreview({ initiatives, incidentId, productId }: Props
         {initiatives.map((init, i) => {
           const tint = DOMAIN_BADGE[init.domain] ?? DOMAIN_BADGE.production;
           const isApproved = approved[i] ?? false;
+          const isExpanded = expanded[i] ?? false;
           const target = formatTarget(init.target_system);
           return (
             <Card
@@ -215,9 +251,93 @@ export function InitiativesPreview({ initiatives, incidentId, productId }: Props
                 <h4 className="text-sm font-semibold leading-snug text-foreground m-0">
                   {init.title}
                 </h4>
-                <p className="text-xs text-muted-foreground leading-relaxed line-clamp-3 m-0">
+                <p
+                  data-testid={`initiative-rationale-${i}`}
+                  className={cn(
+                    "text-xs text-muted-foreground leading-relaxed m-0",
+                    !isExpanded && "line-clamp-3",
+                  )}
+                >
                   {init.rationale}
                 </p>
+
+                {isExpanded ? (
+                  <div
+                    data-testid={`initiative-details-${i}`}
+                    className="mt-2 pt-3 border-t border-border/60 space-y-3"
+                  >
+                    {/* Closure predicate — what success looks like */}
+                    <div>
+                      <div className="text-[9px] uppercase tracking-wider font-semibold text-muted-foreground mb-1">
+                        Resolves when
+                      </div>
+                      <div className="text-xs text-foreground/85 leading-relaxed">
+                        {formatClosurePredicate(init.closure_predicate)}
+                      </div>
+                    </div>
+
+                    {/* Evidence chips — link to tool calls if the orchestrator
+                        trace is available. */}
+                    {init.evidence.length > 0 ? (
+                      <div>
+                        <div className="text-[9px] uppercase tracking-wider font-semibold text-muted-foreground mb-1">
+                          Cites · {init.evidence.length}
+                        </div>
+                        <div className="flex flex-wrap gap-1">
+                          {init.evidence.map((e) => {
+                            const tc = toolCallMap.get(e);
+                            const clickable = !!tc && !!onOpenToolCall;
+                            return (
+                              <button
+                                key={e}
+                                type="button"
+                                disabled={!clickable}
+                                onClick={() => clickable && onOpenToolCall(e)}
+                                title={tc?.tool ?? e}
+                                className={cn(
+                                  "inline-flex items-center gap-1 font-mono text-[10px] font-medium px-1.5 py-0.5 rounded border transition-colors",
+                                  clickable
+                                    ? "border-border bg-card hover:border-primary/50 hover:bg-primary/5 cursor-pointer text-foreground"
+                                    : "border-border/50 bg-muted/40 text-muted-foreground cursor-default",
+                                )}
+                              >
+                                <Terminal className="size-2.5" aria-hidden />
+                                {shortId(e)}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
+
+                <div className="flex-1" />
+
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  data-testid={`initiative-toggle-details-${i}`}
+                  onClick={() =>
+                    setExpanded((cur) => ({ ...cur, [i]: !cur[i] }))
+                  }
+                  aria-expanded={isExpanded}
+                  aria-controls={`initiative-details-${i}`}
+                  className="h-6 self-start -ml-1 px-1.5 text-[11px] font-medium text-muted-foreground hover:text-foreground"
+                >
+                  {isExpanded ? (
+                    <>
+                      Hide details
+                      <ChevronUp className="size-3" />
+                    </>
+                  ) : (
+                    <>
+                      Show details
+                      <ChevronDown className="size-3" />
+                    </>
+                  )}
+                </Button>
               </CardContent>
 
               <CardFooter className="bg-muted/30 border-t-border flex items-center gap-2 px-3 py-2">

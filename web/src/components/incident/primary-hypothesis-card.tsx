@@ -11,8 +11,11 @@ import {
   Terminal,
   X,
 } from "lucide-react";
-import type { HypothesisView } from "@/server/incident/loaders";
-import type { SignalRow } from "@/server/incident/loaders";
+import type {
+  HypothesisView,
+  ReportToolCall,
+  SignalRow,
+} from "@/server/incident/loaders";
 import { cn } from "@/lib/utils";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -23,6 +26,8 @@ type Props = {
   hypothesis: HypothesisView;
   problemStatement: string;
   signals: SignalRow[];
+  toolCalls?: ReportToolCall[];
+  onOpenToolCall?: (id: string) => void;
   defaultEvidenceOpen?: boolean;
 };
 
@@ -175,6 +180,8 @@ export function PrimaryHypothesisCard({
   hypothesis,
   problemStatement,
   signals,
+  toolCalls = [],
+  onOpenToolCall,
   defaultEvidenceOpen,
 }: Props) {
   const [trailOpen, setTrailOpen] = useState(
@@ -190,6 +197,12 @@ export function PrimaryHypothesisCard({
     for (const s of signals) m.set(s.signal_id, s);
     return m;
   }, [signals]);
+
+  const toolCallById = useMemo(() => {
+    const m = new Map<string, ReportToolCall>();
+    for (const t of toolCalls) m.set(t.tool_call_id, t);
+    return m;
+  }, [toolCalls]);
 
   const focused = drawerSignal ? signalById.get(drawerSignal) ?? null : null;
 
@@ -277,19 +290,26 @@ export function PrimaryHypothesisCard({
             <ol className="flex flex-col gap-1.5 m-0 p-0 list-none">
               {hypothesis.supportingEvidence.slice(0, 8).map((evId, i) => {
                 const sig = signalById.get(evId);
+                const tc = toolCallById.get(evId);
                 const isSignal = !!sig;
+                const isToolCall = !isSignal && !!tc;
+                const interactive = isSignal || (isToolCall && !!onOpenToolCall);
                 const kind = classifyEvidence(evId, isSignal);
                 const KindIcon = kind.icon;
+                const handleClick = () => {
+                  if (isSignal) setDrawerSignal(evId);
+                  else if (isToolCall && onOpenToolCall) onOpenToolCall(evId);
+                };
                 return (
                   <li key={evId}>
                     <button
                       type="button"
-                      disabled={!isSignal}
-                      onClick={() => isSignal && setDrawerSignal(evId)}
+                      disabled={!interactive}
+                      onClick={handleClick}
                       className={cn(
                         "w-full text-left px-2.5 py-2 rounded-md border border-border/70 bg-muted/30 flex items-center gap-2.5 text-xs text-foreground/80",
-                        isSignal && "hover:bg-muted/60 hover:border-primary/30 cursor-pointer transition-colors",
-                        !isSignal && "cursor-default",
+                        interactive && "hover:bg-muted/60 hover:border-primary/30 cursor-pointer transition-colors",
+                        !interactive && "cursor-default",
                       )}
                     >
                       <span className="font-mono font-semibold text-primary text-[10px] w-5 text-right shrink-0">
@@ -314,11 +334,11 @@ export function PrimaryHypothesisCard({
                       </Badge>
                       <span className="text-muted-foreground/40">·</span>
                       <span className="text-muted-foreground text-[11px] shrink-0 capitalize">
-                        {sig?.source_system ?? sig?.signal_type ?? kind.label}
+                        {sig?.source_system ?? sig?.signal_type ?? tc?.tool ?? kind.label}
                       </span>
                       <span className="text-muted-foreground/40">·</span>
                       <span className="flex-1 truncate">
-                        {sig?.text_payload ?? kind.description}
+                        {sig?.text_payload ?? tc?.summary ?? kind.description}
                       </span>
                     </button>
                   </li>
@@ -339,11 +359,12 @@ export function PrimaryHypothesisCard({
             role="dialog"
             aria-label={`Signal ${focused.signal_id}`}
             onClick={() => setDrawerSignal(null)}
-            className="fixed inset-0 z-50 bg-foreground/40 flex justify-end"
+            className="fixed inset-0 z-50 bg-black/50 backdrop-blur-[2px] flex justify-end"
           >
             <div
               onClick={(e) => e.stopPropagation()}
-              className="w-[min(420px,100vw)] h-full bg-card border-l border-border p-6 overflow-auto shadow-xl"
+              style={{ backgroundColor: "#ffffff" }}
+              className="w-[min(420px,100vw)] h-full border-l border-border p-6 overflow-auto shadow-2xl"
             >
               <div className="flex items-center gap-2 mb-3">
                 <Badge

@@ -1,5 +1,5 @@
-/* ===== DM Sans webfont ===== */
-@import url("https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300..700;1,9..40,300..700&family=JetBrains+Mono:wght@400;700&display=swap");
+/* ===== Plus Jakarta Sans webfont (Stitch-skin) ===== */
+@import url("https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,200..800;1,200..800&family=JetBrains+Mono:wght@400;700&display=swap");
 
 @import "tailwindcss";
 
@@ -11,16 +11,16 @@
 
 /* ===== Resolve design tokens (from dashboard-prototype/styles.css) ===== */
 :root {
-  /* Surfaces */
-  --bg-deep: #ffffff;
-  --bg-surface: #ffffff;
-  --bg-elevated: #f5f8fb;
-  --bg-subtle: #f7f9fc;
-  --bg-inset: #eef3f7;
-  --bg-tint: #e1eef4;
+  /* Surfaces — Stitch-skin: purple-tinted layered surfaces */
+  --bg-deep: #ffffff;        /* surface-container-lowest (cards/panels) */
+  --bg-surface: #fdf7ff;     /* surface (base) */
+  --bg-elevated: #eee4ff;    /* surface-container-high (hover/active) */
+  --bg-subtle: #f8f1ff;      /* surface-container-low (page bg) */
+  --bg-inset: #f3eaff;       /* surface-container (nested) */
+  --bg-tint: #e1eef4;        /* unchanged — Manex accent tint stays cool */
 
-  /* Ink */
-  --ink-primary: #160042;
+  /* Ink — slightly deeper Stitch on-background to match purple surfaces */
+  --ink-primary: #210d4c;
   --ink-secondary: #3a3f55;
   --ink-muted: #6b7080;
   --ink-faint: #9aa0b0;
@@ -65,7 +65,7 @@
 
   /* Typography */
   --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
-  --sans: "DM Sans", ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --sans: "Plus Jakarta Sans", ui-sans-serif, system-ui, -apple-system, sans-serif;
 
   /* Legacy Tailwind compat — keep pointing to prototype tokens */
 
@@ -81,8 +81,8 @@
 
   --popover-foreground: oklch(0.145 0 0);
 
-  /* Brand blue — Linear / Cal.com register */
-  --primary: oklch(0.45 0.18 260);
+  /* Brand blue — Stitch primary (#001f9d), deeper than prior Linear/Cal blue */
+  --primary: oklch(0.30 0.20 268);
 
   --primary-foreground: oklch(0.985 0 0);
 
@@ -90,7 +90,7 @@
 
   --secondary-foreground: oklch(0.205 0 0);
 
-  --muted: oklch(0.97 0 0);
+  --muted: oklch(0.96 0.015 295);
 
   --muted-foreground: oklch(0.556 0 0);
 

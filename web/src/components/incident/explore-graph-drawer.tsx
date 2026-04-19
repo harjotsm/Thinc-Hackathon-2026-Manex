@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import type { HypothesisView } from "@/server/incident/loaders";
+import { displayIncidentId } from "@/lib/display";
 
 export type GraphVariant = "radial" | "tree" | "stack";
 type Variant = GraphVariant;
@@ -176,10 +177,31 @@ export function GraphRadial({
         preserveAspectRatio="none"
         viewBox="0 0 100 100"
       >
-        <line x1="38" y1="30" x2="50" y2="50" stroke="rgba(99,159,196,0.35)" strokeWidth="0.25" />
-        <line x1="38" y1="70" x2="50" y2="50" stroke="rgba(99,159,196,0.35)" strokeWidth="0.25" />
-        <line x1="62" y1="30" x2="50" y2="50" stroke="rgba(99,159,196,0.35)" strokeWidth="0.25" />
-        <line x1="62" y1="70" x2="50" y2="50" stroke="rgba(99,159,196,0.35)" strokeWidth="0.25" />
+        {/* One stroke per hypothesis, anchored at the same vertical position
+            the CSS grid places the card at — keeps line count == hypothesis
+            count and lets the line actually point at its node. */}
+        {left.map((h, i) => (
+          <line
+            key={`l-${h.id}`}
+            x1={28}
+            y1={((i + 0.5) / rows) * 100}
+            x2={50}
+            y2={50}
+            stroke="rgba(99,159,196,0.35)"
+            strokeWidth="0.25"
+          />
+        ))}
+        {right.map((h, i) => (
+          <line
+            key={`r-${h.id}`}
+            x1={72}
+            y1={((i + 0.5) / rows) * 100}
+            x2={50}
+            y2={50}
+            stroke="rgba(99,159,196,0.35)"
+            strokeWidth="0.25"
+          />
+        ))}
       </svg>
 
       {left.map((h, i) => (
@@ -230,8 +252,12 @@ export function GraphRadial({
           >
             Incident
           </div>
-          <div style={{ fontSize: 11, fontWeight: 600, lineHeight: 1.2, marginTop: 3 }}>
-            {incidentId}
+          <div
+            className="mono"
+            style={{ fontSize: 11, fontWeight: 600, lineHeight: 1.2, marginTop: 3 }}
+            title={incidentId}
+          >
+            {displayIncidentId(incidentId)}
           </div>
           <div
             className="muted tt mono"
@@ -338,8 +364,12 @@ export function GraphTree({
           >
             Incident · root
           </div>
-          <div style={{ fontSize: 13, fontWeight: 600, lineHeight: 1.3, marginTop: 4 }}>
-            {incidentId}
+          <div
+            className="mono"
+            style={{ fontSize: 13, fontWeight: 600, lineHeight: 1.3, marginTop: 4 }}
+            title={incidentId}
+          >
+            {displayIncidentId(incidentId)}
           </div>
           <div className="muted tt mono" style={{ marginTop: 4, color: "var(--ink-muted, #94a3b8)" }}>
             {hypotheses.length} hypotheses
@@ -384,7 +414,13 @@ export function GraphStack({
         <div className="eyebrow" style={{ color: "var(--accent, #639fc4)", fontSize: 10 }}>
           Incident · root
         </div>
-        <div style={{ fontSize: 14, fontWeight: 600, marginTop: 2 }}>{incidentId}</div>
+        <div
+          className="mono"
+          style={{ fontSize: 14, fontWeight: 600, marginTop: 2 }}
+          title={incidentId}
+        >
+          {displayIncidentId(incidentId)}
+        </div>
       </div>
       {hypotheses.map((h) => (
         <div key={h.id} style={{ marginLeft: 24 }}>

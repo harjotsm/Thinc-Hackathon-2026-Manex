@@ -1,5 +1,5 @@
-import { PrototypeLessonsScreen } from "@/components/prototype/workspace-screens";
+import { LessonsScreen } from "@/components/lessons/lessons-screen";
 
 export default function LessonsPage() {
-  return <PrototypeLessonsScreen />;
+  return <LessonsScreen />;
 }

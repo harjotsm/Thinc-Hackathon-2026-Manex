@@ -8,7 +8,6 @@ import {
   isUnknownArchetype,
   prettifyIncidentTitle,
 } from "@/lib/display";
-import { Badge } from "@/components/ui/badge";
 import {
   Table,
   TableBody,
@@ -18,19 +17,21 @@ import {
   TableRow,
 } from "@/components/ui/table";
 
-const ARCHETYPE_BADGE: Record<string, string> = {
-  supplier: "bg-orange-100 text-orange-800 border-orange-200",
-  drift:    "bg-amber-100 text-amber-800 border-amber-200",
-  design:   "bg-pink-100 text-pink-800 border-pink-200",
-  operator: "bg-violet-100 text-violet-800 border-violet-200",
-  unknown:  "bg-muted text-muted-foreground border-border/60",
+// Stitch palette — matches ThemeCard so the two surfaces share one visual
+// language. Tint = ~10% alpha of the same hex; indicator dot is 100% opaque.
+const ARCHETYPE_HEX: Record<string, string> = {
+  supplier: "#f48a5c",
+  drift:    "#f3c969",
+  design:   "#f472b6",
+  operator: "#a78bfa",
+  unknown:  "#6b7080",
 };
 
 const SEVERITY_DOT: Record<string, string> = {
-  critical: "#fb923c",
-  high:     "#fb923c",
-  medium:   "#fcd34d",
-  low:      "#86efac",
+  critical: "#eb5e55",
+  high:     "#f48a5c",
+  medium:   "#f3c969",
+  low:      "#5fc2a3",
 };
 const dotColor = (sev: string | null | undefined): string =>
   (sev && SEVERITY_DOT[sev]) ?? "#cbd5e1";
@@ -48,18 +49,41 @@ const timeAgo = (iso: string | null): string => {
 };
 
 const confidenceClass = (conf: number): string => {
-  if (conf >= 80) return "text-emerald-700";
-  if (conf >= 60) return "text-amber-700";
+  if (conf >= 80) return "text-[color:var(--cta)]";
+  if (conf >= 60) return "text-[color:var(--amber)]";
   return "text-muted-foreground";
+};
+
+const ConfidenceBar = ({ conf }: { conf: number }) => {
+  const pct = Math.max(2, Math.min(100, conf));
+  const colour =
+    conf >= 80
+      ? "var(--cta)"
+      : conf >= 60
+        ? "var(--amber)"
+        : "var(--ink-muted)";
+  return (
+    <div className="flex items-center gap-2 justify-end">
+      <div className="h-1.5 w-16 rounded-full bg-muted overflow-hidden">
+        <div
+          className="h-full rounded-full"
+          style={{ width: `${pct}%`, backgroundColor: colour }}
+        />
+      </div>
+      <span
+        className={cn(
+          "text-xs font-mono font-bold tabular-nums shrink-0",
+          confidenceClass(conf),
+        )}
+      >
+        {conf}%
+      </span>
+    </div>
+  );
 };
 
 type Props = { incidents: IncidentListItem[] };
 
-/**
- * Sortable data Table for the /incidents page. Rows with a product are
- * surfaced first; unknown-product rows sink to a secondary section so the
- * primary content doesn't read as "half-empty".
- */
 export const IncidentsTable = ({ incidents }: Props) => {
   const withProduct = incidents.filter((i) => !!i.primary_product_id);
   const withoutProduct = incidents.filter((i) => !i.primary_product_id);
@@ -68,30 +92,30 @@ export const IncidentsTable = ({ incidents }: Props) => {
     <div className="px-6 py-5">
       <div
         data-testid="incidents-table-wrapper"
-        className="overflow-hidden rounded-lg bg-card ring-1 ring-border/50 shadow-[0_1px_2px_0_rgb(0_0_0/0.03)]"
+        className="overflow-hidden rounded-xl bg-card ring-1 ring-border/50 shadow-[0_1px_2px_0_rgb(0_0_0/0.03)]"
       >
         <Table className="text-sm">
           <TableHeader>
             <TableRow className="bg-muted/40 hover:bg-muted/40 border-b-border/50">
-              <TableHead className="w-8 pl-4 text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
+              <TableHead className="w-8 pl-4 text-[10px] font-mono uppercase tracking-widest text-muted-foreground/80 font-bold">
                 Sev
               </TableHead>
-              <TableHead className="w-[88px] text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
+              <TableHead className="w-[100px] text-[10px] font-mono uppercase tracking-widest text-muted-foreground/80 font-bold">
                 Archetype
               </TableHead>
-              <TableHead className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
+              <TableHead className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground/80 font-bold">
                 Incident
               </TableHead>
-              <TableHead className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
+              <TableHead className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground/80 font-bold">
                 Product
               </TableHead>
-              <TableHead className="text-right text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
+              <TableHead className="text-right text-[10px] font-mono uppercase tracking-widest text-muted-foreground/80 font-bold">
                 Signals
               </TableHead>
-              <TableHead className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
+              <TableHead className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground/80 font-bold">
                 Last activity
               </TableHead>
-              <TableHead className="text-right text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
+              <TableHead className="text-right text-[10px] font-mono uppercase tracking-widest text-muted-foreground/80 font-bold">
                 Confidence
               </TableHead>
               <TableHead className="w-8 pr-4" />
@@ -107,7 +131,7 @@ export const IncidentsTable = ({ incidents }: Props) => {
                 >
                   <TableCell
                     colSpan={8}
-                    className="px-4 py-1.5 text-[10px] uppercase tracking-wider text-muted-foreground font-semibold"
+                    className="px-4 py-1.5 text-[10px] font-mono uppercase tracking-widest text-muted-foreground/80 font-bold"
                   >
                     No product assigned · {withoutProduct.length}
                   </TableCell>
@@ -126,8 +150,7 @@ const renderIncidentRows = (incidents: IncidentListItem[]) =>
   incidents.map((incident) => {
     const archetype =
       incident.report_archetype ?? incident.archetype ?? "unknown";
-    const archetypeBadge =
-      ARCHETYPE_BADGE[archetype] ?? ARCHETYPE_BADGE.unknown;
+    const archetypeHex = ARCHETYPE_HEX[archetype] ?? ARCHETYPE_HEX.unknown;
     const conf =
       incident.confidence !== null
         ? Math.round(incident.confidence * 100)
@@ -140,29 +163,38 @@ const renderIncidentRows = (incidents: IncidentListItem[]) =>
       <TableRow
         key={incident.incident_id}
         data-testid="incidents-table-row"
-        className="relative cursor-pointer group border-b-border/40"
+        className="relative cursor-pointer group border-b-border/40 hover:bg-muted/20"
       >
         <TableCell className="pl-4">
           <span
             aria-label={`Severity: ${incident.severity ?? "unknown"}`}
-            className="inline-block size-2 rounded-full"
+            className="inline-block size-2.5 rounded-full"
             style={{ background: dotColor(incident.severity) }}
           />
         </TableCell>
         <TableCell>
-          <Badge
+          <span
             className={cn(
-              "uppercase tracking-wider text-[10px] font-semibold rounded-md px-1.5",
-              archetypeBadge,
+              "inline-flex items-center gap-1.5 rounded-full px-2 py-0.5",
+              "font-mono text-[10px] font-bold uppercase tracking-wider",
               isUnknownArchetype(archetype) && "font-medium",
             )}
+            style={{
+              backgroundColor: `${archetypeHex}1a`,
+              color: archetypeHex,
+            }}
           >
+            <span
+              className="size-1.5 rounded-full"
+              style={{ backgroundColor: archetypeHex }}
+              aria-hidden
+            />
             {archetypeLabel(archetype)}
-          </Badge>
+          </span>
         </TableCell>
         <TableCell>
           <div
-            className="text-xs font-mono text-muted-foreground leading-tight"
+            className="text-[10px] font-mono text-muted-foreground/80 leading-tight"
             title={incident.incident_id}
           >
             {displayIncidentId(incident.incident_id)}
@@ -179,7 +211,7 @@ const renderIncidentRows = (incidents: IncidentListItem[]) =>
             <span className="text-muted-foreground/50">—</span>
           )}
         </TableCell>
-        <TableCell className="text-right tabular-nums text-sm">
+        <TableCell className="text-right tabular-nums text-sm font-mono font-semibold">
           {incident.signal_count}
         </TableCell>
         <TableCell className="text-xs text-muted-foreground">
@@ -187,14 +219,7 @@ const renderIncidentRows = (incidents: IncidentListItem[]) =>
         </TableCell>
         <TableCell className="text-right">
           {conf !== null ? (
-            <span
-              className={cn(
-                "text-xs font-semibold tabular-nums",
-                confidenceClass(conf),
-              )}
-            >
-              {conf}%
-            </span>
+            <ConfidenceBar conf={conf} />
           ) : (
             <span className="text-xs text-muted-foreground/60">—</span>
           )}
