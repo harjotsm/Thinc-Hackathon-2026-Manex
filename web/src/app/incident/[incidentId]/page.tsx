@@ -167,6 +167,9 @@ export default async function IncidentCanvasPage({
       archetype={bundle.report.archetype}
       lessons={lessons}
       composedAt={bundle.report.composed_at}
+      toolCalls={bundle.report.tool_calls}
+      claims={bundle.report.draft_8d.claims}
+      composedByModel={bundle.report.composed_by_model}
     />
   );
 }

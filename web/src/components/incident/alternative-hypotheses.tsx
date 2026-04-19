@@ -1,7 +1,14 @@
 "use client";
 
 import { useState } from "react";
-import { LayoutList, Maximize2, Network, Share2, Workflow } from "lucide-react";
+import {
+  Fish,
+  LayoutList,
+  Maximize2,
+  Network,
+  Share2,
+  Workflow,
+} from "lucide-react";
 import type { HypothesisView } from "@/server/incident/loaders";
 import { cn } from "@/lib/utils";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
@@ -14,15 +21,18 @@ import {
   GraphTree,
   type GraphVariant,
 } from "./explore-graph-drawer";
+import { IshikawaView } from "./ishikawa-view";
 
 type Props = {
   hypotheses: HypothesisView[];
   primaryId: string;
+  problemStatement?: string;
   onSelectPrimary: (id: string) => void;
+  onFocusHypothesis?: (id: string) => void;
   incidentId: string;
 };
 
-type ViewMode = GraphVariant | "chips";
+type ViewMode = GraphVariant | "chips" | "fishbone";
 
 const ARCHETYPE_BADGE: Record<string, string> = {
   Supplier: "bg-orange-100 text-orange-800 border-orange-200",
@@ -33,16 +43,19 @@ const ARCHETYPE_BADGE: Record<string, string> = {
 };
 
 const VIEWS: Array<{ id: ViewMode; label: string; icon: typeof Network }> = [
-  { id: "radial", label: "Radial", icon: Network },
-  { id: "tree", label: "Tree", icon: Share2 },
-  { id: "stack", label: "Stack", icon: Workflow },
-  { id: "chips", label: "Chips", icon: LayoutList },
+  { id: "radial",   label: "Radial",   icon: Network },
+  { id: "tree",     label: "Tree",     icon: Share2 },
+  { id: "stack",    label: "Stack",    icon: Workflow },
+  { id: "fishbone", label: "Fishbone", icon: Fish },
+  { id: "chips",    label: "Chips",    icon: LayoutList },
 ];
 
 export function AlternativeHypotheses({
   hypotheses,
   primaryId,
+  problemStatement = "",
   onSelectPrimary,
+  onFocusHypothesis,
   incidentId,
 }: Props) {
   const [view, setView] = useState<ViewMode>("radial");
@@ -54,8 +67,14 @@ export function AlternativeHypotheses({
     return null;
   }
 
-  // The graph needs *all* hypotheses (primary + alternates) to render the full
-  // picture — use the full list for graph variants, filtered list for chips.
+  // A node click opens the detail panel if the host wires it. Falling back to
+  // "promote to primary" keeps the legacy contract for any consumer that
+  // doesn't pass onFocusHypothesis.
+  const handleNodeClick = (id: string) => {
+    if (onFocusHypothesis) onFocusHypothesis(id);
+    else onSelectPrimary(id);
+  };
+
   const graphHypotheses = hypotheses;
 
   return (
@@ -67,8 +86,10 @@ export function AlternativeHypotheses({
           </div>
           <p className="text-xs text-muted-foreground/70 mt-0.5">
             {view === "chips"
-              ? "Click an alternate to make it primary."
-              : "Tap a node to focus · switch layout above"}
+              ? "Click an alternate to inspect it."
+              : view === "fishbone"
+                ? "Quality 4M view — click any hypothesis to inspect it."
+                : "Tap a node to inspect · switch layout above"}
           </p>
         </div>
         <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
@@ -125,7 +146,7 @@ export function AlternativeHypotheses({
                   key={h.id}
                   type="button"
                   data-testid={`alternative-chip-${h.id}`}
-                  onClick={() => onSelectPrimary(h.id)}
+                  onClick={() => handleNodeClick(h.id)}
                   className="flex items-center gap-2 max-w-[280px] min-w-0 px-3 py-2 rounded-lg border border-border bg-card hover:border-primary/30 hover:bg-muted/40 transition-colors text-xs text-foreground/85"
                 >
                   {h.archetypeHint ? (
@@ -146,40 +167,47 @@ export function AlternativeHypotheses({
               );
             })}
           </div>
+        ) : view === "fishbone" ? (
+          <IshikawaView
+            hypotheses={hypotheses}
+            problemStatement={problemStatement}
+            activeId={primaryId}
+            onSelect={handleNodeClick}
+          />
         ) : (
           <div className="rounded-lg border border-border/60 bg-muted/20 overflow-hidden">
             {view === "radial" ? (
               <GraphRadial
                 hypotheses={graphHypotheses}
                 activeId={primaryId}
-                onSelect={onSelectPrimary}
+                onSelect={handleNodeClick}
                 incidentId={incidentId}
               />
             ) : view === "tree" ? (
               <GraphTree
                 hypotheses={graphHypotheses}
                 activeId={primaryId}
-                onSelect={onSelectPrimary}
+                onSelect={handleNodeClick}
                 incidentId={incidentId}
               />
             ) : (
               <GraphStack
                 hypotheses={graphHypotheses}
                 activeId={primaryId}
-                onSelect={onSelectPrimary}
+                onSelect={handleNodeClick}
                 incidentId={incidentId}
               />
             )}
-            {/* Keep keyboard-accessible chip targets in the DOM so the existing
-                alternative-hypotheses test (which asserts chips by test-id) still
-                passes regardless of the rendered view. */}
+            {/* Keep keyboard-accessible chip targets in the DOM so the
+                existing alternative-hypotheses test (which asserts chips by
+                test-id) still passes regardless of the rendered view. */}
             <div className="sr-only">
               {alternates.map((h) => (
                 <button
                   key={h.id}
                   type="button"
                   data-testid={`alternative-chip-${h.id}`}
-                  onClick={() => onSelectPrimary(h.id)}
+                  onClick={() => handleNodeClick(h.id)}
                   aria-hidden="true"
                   tabIndex={-1}
                 >
@@ -194,7 +222,7 @@ export function AlternativeHypotheses({
           <ExploreGraphDrawer
             hypotheses={hypotheses}
             activeId={primaryId}
-            onSelect={(id) => onSelectPrimary(id)}
+            onSelect={handleNodeClick}
             onClose={() => setDrawerOpen(false)}
             incidentId={incidentId}
           />

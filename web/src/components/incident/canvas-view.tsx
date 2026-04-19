@@ -4,11 +4,13 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import { FileText } from "lucide-react";
 import type {
+  Claim,
   ContributionRow,
   HypothesisView,
   IncidentRow,
   ReportArchetype,
   ReportInitiative,
+  ReportToolCall,
   SignalRow,
 } from "@/server/incident/loaders";
 import { Button } from "@/components/ui/button";
@@ -18,6 +20,10 @@ import { AlternativeHypotheses } from "./alternative-hypotheses";
 import { InitiativesPreview } from "./initiatives-preview";
 import { ContributionsSection } from "./contributions-section";
 import { SimilarLessons, type LessonView } from "./similar-lessons";
+import { SignalTimeline } from "./signal-timeline";
+import { ReasoningTimeline } from "./reasoning-timeline";
+import { ToolCallDrawer } from "./tool-call-drawer";
+import { HypothesisDetailPanel } from "./hypothesis-detail-panel";
 
 type Props = {
   incident: IncidentRow;
@@ -29,6 +35,9 @@ type Props = {
   archetype: ReportArchetype;
   lessons: LessonView[];
   composedAt: string | null;
+  toolCalls: ReportToolCall[];
+  claims: Claim[];
+  composedByModel?: string | null;
 };
 
 const lastActivityFromBundle = (
@@ -61,13 +70,34 @@ export function CanvasView({
   archetype,
   lessons,
   composedAt,
+  toolCalls,
+  claims,
+  composedByModel = null,
 }: Props) {
   const [primaryId, setPrimaryId] = useState<string>(hypotheses[0]?.id ?? "");
+  // Separate from primary selection: which hypothesis is in focus in the
+  // detail panel (null = panel closed). Clicking a node opens the panel
+  // without promoting that hypothesis to primary.
+  const [focusedHypId, setFocusedHypId] = useState<string | null>(null);
+  const [openToolCallId, setOpenToolCallId] = useState<string | null>(null);
 
   const primary = useMemo(
     () => hypotheses.find((h) => h.id === primaryId) ?? hypotheses[0],
     [hypotheses, primaryId],
   );
+
+  const focusedHyp = useMemo(
+    () => hypotheses.find((h) => h.id === focusedHypId) ?? null,
+    [hypotheses, focusedHypId],
+  );
+
+  const toolCallMap = useMemo(() => {
+    const m = new Map<string, ReportToolCall>();
+    for (const t of toolCalls) m.set(t.tool_call_id, t);
+    return m;
+  }, [toolCalls]);
+
+  const openToolCall = openToolCallId ? toolCallMap.get(openToolCallId) ?? null : null;
 
   const lastActivity = useMemo(
     () => lastActivityFromBundle(signals, contributions) ?? composedAt,
@@ -93,12 +123,16 @@ export function CanvasView({
         lastActivityAt={lastActivity}
       />
 
+      {signals.length > 0 ? <SignalTimeline signals={signals} /> : null}
+
       <div className="px-6 py-6 max-w-[1100px] mx-auto w-full space-y-5">
         {primary ? (
           <PrimaryHypothesisCard
             hypothesis={primary}
             problemStatement={problemStatement}
             signals={signals}
+            toolCalls={toolCalls}
+            onOpenToolCall={(id) => setOpenToolCallId(id)}
           />
         ) : (
           <div
@@ -115,8 +149,23 @@ export function CanvasView({
           <AlternativeHypotheses
             hypotheses={hypotheses}
             primaryId={primary.id}
+            problemStatement={problemStatement}
             onSelectPrimary={(id) => setPrimaryId(id)}
+            onFocusHypothesis={(id) => setFocusedHypId(id)}
             incidentId={incident.incident_id}
+          />
+        ) : null}
+
+        {toolCalls.length > 0 || claims.length > 0 ? (
+          <ReasoningTimeline
+            archetype={archetype}
+            toolCalls={toolCalls}
+            claims={claims}
+            initiatives={initiatives}
+            problemStatement={problemStatement}
+            composedAt={composedAt}
+            composedByModel={composedByModel}
+            onOpenToolCall={(id) => setOpenToolCallId(id)}
           />
         ) : null}
 
@@ -155,6 +204,20 @@ export function CanvasView({
           </Button>
         </div>
       </div>
+
+      <ToolCallDrawer
+        toolCall={openToolCall}
+        onClose={() => setOpenToolCallId(null)}
+      />
+      <HypothesisDetailPanel
+        hypothesis={focusedHyp}
+        primary={primary ?? null}
+        claims={claims}
+        toolCalls={toolCalls}
+        onClose={() => setFocusedHypId(null)}
+        onMakePrimary={(id) => setPrimaryId(id)}
+        onOpenToolCall={(id) => setOpenToolCallId(id)}
+      />
     </div>
   );
 }
