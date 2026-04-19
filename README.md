@@ -12,12 +12,18 @@ Turns any signal — internal anomaly or external customer voice — into a rout
 
 <br />
 
+Built by **Team De.Constructors** · Thinc! × Manex AI Hackathon · April 2026
+
+<br />
+
 [![Hackathon](https://img.shields.io/badge/Hackathon-Thinc!_×_Manex_2026-ff4d6d?style=flat-square)](https://github.com/harjotsm/Thinc-Hackathon-2026-Manex)
 [![Next.js](https://img.shields.io/badge/Next.js-16.2-000?style=flat-square&logo=next.js)](https://nextjs.org)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5-3178c6?style=flat-square&logo=typescript&logoColor=white)](https://www.typescriptlang.org)
 [![Anthropic](https://img.shields.io/badge/Anthropic-Claude_4.5_+_4.6-d97757?style=flat-square)](https://www.anthropic.com)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-pgvector-336791?style=flat-square&logo=postgresql&logoColor=white)](https://github.com/pgvector/pgvector)
 [![shadcn/ui](https://img.shields.io/badge/shadcn/ui-latest-000?style=flat-square)](https://ui.shadcn.com)
+
+### 🚀 [**Live Demo →**](https://de-constructors-j5hm7scrk-joschas-projects-62a3c34d.vercel.app)
 
 [**Architecture**](#-architecture) · [**The moat**](#-the-moat) · [**Quick start**](#-quick-start) · [**Team**](#-team)
 
@@ -28,17 +34,6 @@ Turns any signal — internal anomaly or external customer voice — into a rout
 <sub><b>End-to-end walkthrough:</b> a worker reports a defect by voice → the signal lands in the Inbox → an engineer opens the Canvas → clicks <i>Run AI</i> → the agent investigates, proposes a hypothesis tree, and dispatches an initiative.</sub>
 
 </div>
-
-## Voice pipeline setup (web)
-
-- `OPENAI_API_KEY` must be set in `web/.env.local` before starting the web app (`npm run dev` in `web/`), otherwise voice server paths fail fast on startup/import.
-- Run the live voice smoke test from `web/` with an audio fixture path:
-
-```bash
-VOICE_SMOKE_AUDIO_PATH=/absolute/path/to/sample.wav npm run test:voice-smoke
-```
-
----
 
 ## ⚡ Why Resolve?
 
@@ -315,14 +310,16 @@ git clone https://github.com/harjotsm/Thinc-Hackathon-2026-Manex.git
 cd Thinc-Hackathon-2026-Manex/web
 pnpm install
 
-# 2. env — copy and fill (see web/.env.example)
-#   DATABASE_URL=...          Manex stack from your handout
-#   ANTHROPIC_API_KEY=...
-#   OPENAI_API_KEY=...        (Whisper + embeddings only)
+# 2. env — copy and fill (see .env.local.example at repo root)
+#   MANEX_*           Manex stack from your team handout
+#   ANTHROPIC_API_KEY Claude Haiku 4.5 + Sonnet 4.6
+#   OPENAI_API_KEY    Whisper + embeddings (required — voice paths fail fast)
 
 # 3. dev
 pnpm dev                      # http://localhost:3000
 ```
+
+Voice smoke test (optional): `VOICE_SMOKE_AUDIO_PATH=/path/to/sample.wav pnpm test:voice-smoke`
 
 Full Manex scaffold, schema, and access details live in [docs/SCAFFOLD.md](docs/SCAFFOLD.md).
 
@@ -341,7 +338,7 @@ Full Manex scaffold, schema, and access details live in [docs/SCAFFOLD.md](docs/
 
 ---
 
-## 👥 Team
+## 👥 Team · De.Constructors
 
 | | | |
 |---|---|---|
@@ -356,8 +353,6 @@ Full Manex scaffold, schema, and access details live in [docs/SCAFFOLD.md](docs/
 
 <div align="center">
 
-Built in 24 hours at **Thinc! × Manex AI Hackathon · April 2026.**
-
-*De.Constructors*
+Built in 24 hours by **De.Constructors** · Thinc! × Manex AI Hackathon · April 2026
 
 </div>
