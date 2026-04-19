@@ -167,6 +167,26 @@ export const runOrchestratorWithSession = async (
         .eq("id", report_id);
     }
 
+    // Write archetype back to incident so drilldown filters stay in sync.
+    // Non-fatal: a failure here must not abort the orchestrator result.
+    try {
+      const supabase = getSupabaseServerClient();
+      const { error: archetypeWriteErr } = await supabase
+        .from("incident")
+        .update({ archetype: classified.archetype })
+        .eq("incident_id", p.incident_id);
+      if (archetypeWriteErr) {
+        console.warn(
+          `[orchestrator] archetype writeback failed for ${p.incident_id}: ${archetypeWriteErr.message}`,
+        );
+      }
+    } catch (archetypeErr) {
+      console.warn(
+        `[orchestrator] archetype writeback threw for ${p.incident_id}:`,
+        archetypeErr,
+      );
+    }
+
     await updateSessionStatus(p.session_id, {
       status: "succeeded",
       phase: "complete",

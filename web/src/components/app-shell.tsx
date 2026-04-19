@@ -15,12 +15,74 @@ type NavItem = {
   badgeHot?: boolean;
 };
 
+// ─── Live nav counts ──────────────────────────────────────────────────────────
+
+type LiveCounts = {
+  inbox: number | null;
+  incidents: number | null;
+  initiatives: number | null;
+};
+
+function useLiveNavCounts(): LiveCounts {
+  const [counts, setCounts] = useState<LiveCounts>({
+    inbox: null,
+    incidents: null,
+    initiatives: null,
+  });
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function fetchCounts() {
+      try {
+        const [themesRes, incidentsRes, initiativesRes] = await Promise.all([
+          fetch("/api/themes?lens=engineer&window=7d").then((r) =>
+            r.ok ? r.json() : null,
+          ),
+          fetch("/api/incidents?page_size=1").then((r) =>
+            r.ok ? r.json() : null,
+          ),
+          fetch("/api/initiatives?page_size=1").then((r) =>
+            r.ok ? r.json() : null,
+          ),
+        ]);
+
+        if (cancelled) return;
+
+        const inbox =
+          Array.isArray(themesRes?.themes)
+            ? (themesRes.themes as unknown[]).length
+            : null;
+        const incidents =
+          typeof incidentsRes?.pagination?.total === "number"
+            ? incidentsRes.pagination.total
+            : null;
+        const initiatives =
+          typeof initiativesRes?.pagination?.total === "number"
+            ? initiativesRes.pagination.total
+            : null;
+
+        setCounts({ inbox, incidents, initiatives });
+      } catch {
+        // silently keep showing "—" on any network error
+      }
+    }
+
+    void fetchCounts();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  return counts;
+}
+
 const navItems: NavItem[] = [
   {
     href: "/inbox",
     label: "Inbox",
     section: "workspace",
-    badge: PROTOTYPE_DATA.counts.openIncidents,
+    // badge injected dynamically from useLiveNavCounts — see AppShell
     badgeHot: true,
     icon: (
       <path d="M4 6.5A1.5 1.5 0 0 1 5.5 5h13A1.5 1.5 0 0 1 20 6.5v11a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 17.5zm0 6.5h4l1.6 2h4.8L16 13h4" />
@@ -30,7 +92,7 @@ const navItems: NavItem[] = [
     href: "/incidents",
     label: "Incidents",
     section: "workspace",
-    badge: "127",
+    // badge injected dynamically from useLiveNavCounts — see AppShell
     icon: (
       <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0zM12 9v4M12 17h.01" />
     ),
@@ -39,7 +101,7 @@ const navItems: NavItem[] = [
     href: "/initiatives",
     label: "Initiatives",
     section: "workspace",
-    badge: PROTOTYPE_DATA.counts.activeInitiatives,
+    // badge injected dynamically from useLiveNavCounts — see AppShell
     icon: (
       <path d="M5 6h14M5 12h9M5 18h14M16 9l3 3-3 3" />
     ),
@@ -221,6 +283,31 @@ export function AppShell({ children }: { children: ReactNode }) {
     return window.localStorage.getItem("resolve.nav.collapsed") === "true";
   });
   const meta = useMemo(() => routeMeta(pathname), [pathname]);
+  const liveCounts = useLiveNavCounts();
+
+  // Merge live counts into navItems for rendering
+  const resolvedNavItems = useMemo(
+    () =>
+      navItems.map((item) => {
+        if (item.href === "/inbox") {
+          const badge =
+            liveCounts.inbox !== null ? liveCounts.inbox : "—";
+          return { ...item, badge };
+        }
+        if (item.href === "/incidents") {
+          const badge =
+            liveCounts.incidents !== null ? liveCounts.incidents : "—";
+          return { ...item, badge };
+        }
+        if (item.href === "/initiatives") {
+          const badge =
+            liveCounts.initiatives !== null ? liveCounts.initiatives : "—";
+          return { ...item, badge };
+        }
+        return item;
+      }),
+    [liveCounts],
+  );
 
   useEffect(() => {
     window.localStorage.setItem("resolve.nav.collapsed", String(collapsed));
@@ -263,7 +350,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               </div>
             )}
             {collapsed && <div className="nav-sep" />}
-            {navItems
+            {resolvedNavItems
               .filter((item) => item.section === section)
               .map((item) => (
                 <Link
