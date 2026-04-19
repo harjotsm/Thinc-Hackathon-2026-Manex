@@ -29,7 +29,7 @@ export const themeSchema = z.object({
   incidents: z.array(themeIncidentSummarySchema),
   stats: themeStatsSchema,
   confidence_avg: z.number().min(0).max(1),
-  severity_max: z.enum(["low", "medium", "high", "critical"]),
+  severity_max: incidentSeverityEnum,
   last_seen: z.string(),
   related_signatures: z.array(z.string()),
   signal_buckets_7d: z.array(z.number().int()).length(7),
