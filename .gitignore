@@ -14,3 +14,8 @@ data-generation/*.pyc
 # macOS
 .DS_Store
 .superpowers/
+.worktrees/
+
+# Tooling artifacts (Claude Code + Playwright MCP)
+.claude/
+.playwright-mcp/
