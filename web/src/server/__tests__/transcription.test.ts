@@ -5,14 +5,15 @@ vi.mock("server-only", () => ({}));
 
 // Mock the OpenAI client singleton
 const mockCreate = vi.fn();
-vi.mock("@/lib/openai", () => ({
-  getOpenAIClient: () => ({
-    audio: {
-      transcriptions: {
-        create: mockCreate,
-      },
+const mockGetOpenAIClient = vi.fn(() => ({
+  audio: {
+    transcriptions: {
+      create: mockCreate,
     },
-  }),
+  },
+}));
+vi.mock("@/lib/openai", () => ({
+  getOpenAIClient: mockGetOpenAIClient,
 }));
 
 describe("transcribeAudio", () => {
@@ -80,15 +81,33 @@ describe("transcribeAudio", () => {
     expect(result.text).toBe("Short clip.");
   });
 
-  it("throws when OpenAI client is not configured", async () => {
-    vi.doMock("@/lib/openai", () => ({
-      getOpenAIClient: () => null,
-    }));
+  it("uses a configured OpenAI client", async () => {
+    mockCreate.mockResolvedValue({ text: "Configured client.", language: "en", duration: 1.2 });
 
-    // Reset module cache so the mock takes effect
-    const { transcribeAudio: fresh } = await import("../transcription?fresh=" + Date.now());
-    await expect(fresh(Buffer.from("x"), "clip.webm")).rejects.toThrow(
-      /OpenAI client is not configured/,
-    );
+    const { transcribeAudio } = await import("../transcription");
+    await transcribeAudio(Buffer.from("x"), "clip.webm");
+
+    expect(mockGetOpenAIClient).toHaveBeenCalledOnce();
+    expect(mockCreate).toHaveBeenCalledOnce();
+  });
+});
+
+describe("env", () => {
+  it("requires OPENAI_API_KEY at startup", async () => {
+    const previous = process.env.OPENAI_API_KEY;
+    delete process.env.OPENAI_API_KEY;
+    vi.resetModules();
+
+    try {
+      await expect(import("@/lib/env?fresh=" + Date.now())).rejects.toThrow(
+        /Missing environment variable: OPENAI_API_KEY/,
+      );
+    } finally {
+      if (previous === undefined) {
+        delete process.env.OPENAI_API_KEY;
+      } else {
+        process.env.OPENAI_API_KEY = previous;
+      }
+    }
   });
 });

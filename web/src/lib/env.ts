@@ -20,6 +20,6 @@ export const env = {
   serverSupabaseServiceKey:
     process.env.MANEX_SERVICE_ROLE_KEY ?? process.env.SUPABASE_SERVICE_ROLE_KEY,
   anthropicApiKey: optional("ANTHROPIC_API_KEY"),
-  openAiApiKey: optional("OPENAI_API_KEY"),
+  openAiApiKey: required("OPENAI_API_KEY"),
   required,
 };
