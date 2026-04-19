@@ -134,19 +134,17 @@ export async function GET(request: NextRequest) {
     // TODO: enrich per-theme from incident_contribution data once the contributions fetch lands.
     const themes = aggregateThemes(incidents);
 
-    // Enrich unknown-archetype clusters with LLM-generated titles
+    // LLM-title any theme where deterministic template failed (dominant_entity is null).
+    // This covers archetype=unknown AND non-unknown archetypes whose seed rows happen
+    // to be missing product_id and part_number.
     await Promise.all(
       themes
-        .filter((t) => t.archetype === "unknown")
+        .filter((t) => t.dominant_entity === null)
         .map(async (t) => {
           const signalTexts = t.incidents
             .map((i) => i.title)
             .filter((s): s is string => Boolean(s));
-          const r = await themeTitle({
-            archetype: "unknown",
-            dominantEntity: t.dominant_entity,
-            signalTexts,
-          });
+          const r = await themeTitle({ archetype: t.archetype, dominantEntity: null, signalTexts });
           t.title = r.title;
           t.title_source = r.source;
         }),

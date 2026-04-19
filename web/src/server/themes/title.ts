@@ -51,9 +51,11 @@ const llmTitle = async (signalTexts: string[]): Promise<string | null> => {
 };
 
 export const themeTitle = async (input: ThemeTitleInput): Promise<ThemeTitleResult> => {
-  if (input.archetype !== "unknown") {
+  // If we have a deterministic dominant entity, use the template — fast and cheap.
+  if (input.dominantEntity !== null) {
     return { title: template(input.archetype, input.dominantEntity), source: "template" };
   }
+  // Otherwise (any archetype, no entity) try the LLM, fall back to "Untriaged".
   const key = cacheKey(input);
   const cached = cache.get(key);
   if (cached) return cached;

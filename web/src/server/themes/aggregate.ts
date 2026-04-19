@@ -27,6 +27,8 @@ export const deriveDominantEntity = (i: AggregatorIncidentInput): string | null 
     case "operator":
       return i.primary_product_id ?? null;
     case "unknown":
+      // Prefer part_number then product_id; if both null, signature stays "unknown:—"
+      return i.primary_part_number ?? i.primary_product_id ?? null;
     default:
       return null;
   }
@@ -103,7 +105,9 @@ export const aggregateThemes = (
       archetype,
       dominant_entity: dominant,
       title: titleFor(archetype, dominant),
-      title_source: archetype === "unknown" ? "fallback" : "template",
+      // "Untriaged" is the fallback, regardless of archetype. Real templates
+      // (e.g. "Supplier · PM-00008") get title_source: "template".
+      title_source: dominant ? "template" : "fallback",
       incidents: summaries,
       stats: {
         n_incidents: members.length,

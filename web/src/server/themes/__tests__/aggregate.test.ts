@@ -86,4 +86,12 @@ describe("aggregateThemes", () => {
     expect(theme.signature).toBe("unknown:—");
     expect(theme.dominant_entity).toBeNull();
   });
+
+  it("derives dominant entity for unknown archetype when part_number present", () => {
+    const themes = aggregateThemes([
+      inc({ incident_id: "U1", archetype: "unknown", primary_part_number: "PM-00008", primary_product_id: null }),
+      inc({ incident_id: "U2", archetype: "unknown", primary_part_number: null, primary_product_id: null }),
+    ]);
+    expect(themes.map((t) => t.signature).sort()).toEqual(["unknown:PM-00008", "unknown:—"]);
+  });
 });

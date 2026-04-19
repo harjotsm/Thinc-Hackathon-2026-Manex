@@ -15,7 +15,10 @@ type Props = { theme: Theme; variant?: "compact" | "expanded" };
 export const ThemeCard = ({ theme, variant = "compact" }: Props) => {
   const tint = ARCHETYPE_TINT[theme.archetype] ?? ARCHETYPE_TINT.unknown;
   const conf = Math.round(theme.confidence_avg * 100);
-  const drilldownHref = `/incidents?theme=${theme.signature}`;
+  // Drill into the first member incident's canvas. The /incidents list view
+  // is post-hackathon; canvas is the natural next surface for a clicked theme.
+  const firstIncident = theme.incidents[0]?.incident_id;
+  const drilldownHref = firstIncident ? `/incident/${firstIncident}` : "#";
 
   return (
     <Link

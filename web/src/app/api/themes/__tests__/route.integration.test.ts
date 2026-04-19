@@ -45,5 +45,10 @@ describe("GET /api/themes (integration)", () => {
     // Soft expectation: the supplier story should always be present in the seed
     const sigs = body.themes.map((t: { signature: string }) => t.signature);
     expect(sigs.some((s: string) => s.startsWith("supplier:"))).toBe(true);
+    // Demo-blocker guard: at least one theme should have a non-empty dominant_entity
+    // (i.e. signature isn't just "supplier:—"). If every theme collapses to the
+    // catch-all signature, the inbox shows N rows of "Untriaged" — bad demo UX.
+    const meaningful = body.themes.filter((t: { signature: string }) => !t.signature.endsWith(":—"));
+    expect(meaningful.length).toBeGreaterThan(0);
   });
 });
