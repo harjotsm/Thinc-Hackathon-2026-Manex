@@ -14,11 +14,37 @@ type Props = {
 
 const getAudioExtensionFromMime = (mimeType: string): string => {
   const normalized = mimeType.toLowerCase();
+  if (normalized.includes("mpeg") || normalized.includes("mp3")) return "mp3";
   if (normalized.includes("mp4")) return "mp4";
   if (normalized.includes("ogg")) return "ogg";
   if (normalized.includes("wav")) return "wav";
   if (normalized.includes("webm")) return "webm";
   return "bin";
+};
+
+const resolveRecorderMimeType = (): string | null => {
+  if (typeof MediaRecorder === "undefined" || typeof MediaRecorder.isTypeSupported !== "function") {
+    return null;
+  }
+
+  const candidates = [
+    "audio/webm;codecs=opus",
+    "audio/webm",
+    "audio/mp4;codecs=mp4a.40.2",
+    "audio/mp4",
+    "audio/ogg;codecs=opus",
+    "audio/ogg",
+    "audio/wav",
+    "audio/mpeg",
+  ];
+
+  for (const candidate of candidates) {
+    if (MediaRecorder.isTypeSupported(candidate)) {
+      return candidate;
+    }
+  }
+
+  return null;
 };
 
 export const VoiceRecorder = ({
@@ -52,10 +78,17 @@ export const VoiceRecorder = ({
       setState("recording");
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       streamRef.current = stream;
-      const mime = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
-        ? "audio/webm;codecs=opus"
-        : "audio/webm";
-      const rec = new MediaRecorder(stream, { mimeType: mime });
+      const mimeType = resolveRecorderMimeType();
+      let rec: MediaRecorder;
+      if (mimeType) {
+        try {
+          rec = new MediaRecorder(stream, { mimeType });
+        } catch {
+          rec = new MediaRecorder(stream);
+        }
+      } else {
+        rec = new MediaRecorder(stream);
+      }
       mediaRecorderRef.current = rec;
       chunksRef.current = [];
       rec.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data); };
@@ -79,7 +112,11 @@ export const VoiceRecorder = ({
     rec.stop();
     // Wait for the final dataavailable event
     await new Promise<void>((resolve) => { rec.onstop = () => resolve(); });
-    const blob = new Blob(chunksRef.current, { type: rec.mimeType });
+    const chunkType = chunksRef.current.find((chunk) => chunk.type)?.type ?? "";
+    const resolvedType = rec.mimeType || chunkType;
+    const blob = resolvedType
+      ? new Blob(chunksRef.current, { type: resolvedType })
+      : new Blob(chunksRef.current);
     cleanup();
     if (blob.size === 0) {
       setErrorMsg("No audio captured");
@@ -88,7 +125,7 @@ export const VoiceRecorder = ({
     }
     setState("uploading");
     const fd = new FormData();
-    const extension = getAudioExtensionFromMime(blob.type || rec.mimeType || "");
+    const extension = getAudioExtensionFromMime(blob.type || rec.mimeType || chunkType);
     fd.append("audio", blob, `voice-${Date.now()}.${extension}`);
     fd.append("source_system", sourceSystem);
     if (actorUserId) fd.append("actor_user_id", actorUserId);
