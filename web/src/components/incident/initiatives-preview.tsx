@@ -7,6 +7,7 @@ import type { ReportInitiative } from "@/server/incident/loaders";
 type Props = {
   initiatives: ReportInitiative[];
   incidentId: string;
+  productId?: string | null;
 };
 
 type DispatchState = "idle" | "dispatching" | "done" | "error";
@@ -35,7 +36,7 @@ const formatTarget = (target: string): string => {
 };
 
 /** Map a ReportInitiative to the body expected by POST /api/initiative/approve */
-function buildApprovePayload(init: ReportInitiative, incidentId: string) {
+function buildApprovePayload(init: ReportInitiative, incidentId: string, productId?: string | null) {
   // Derive agentDomain: must be one of the enum values
   const domainMap: Record<string, string> = {
     production: "production",
@@ -60,10 +61,11 @@ function buildApprovePayload(init: ReportInitiative, incidentId: string) {
     comments: init.rationale,
     closure_predicate,
     status: "proposed",
+    ...(productId && { product_id: productId }),
   };
 }
 
-export function InitiativesPreview({ initiatives, incidentId }: Props) {
+export function InitiativesPreview({ initiatives, incidentId, productId }: Props) {
   const [approved, setApproved] = useState<Record<number, boolean>>(() =>
     Object.fromEntries(initiatives.map((_, i) => [i, true])),
   );
@@ -90,7 +92,7 @@ export function InitiativesPreview({ initiatives, incidentId }: Props) {
     try {
       let successCount = 0;
       for (const { init } of toDispatch) {
-        const payload = buildApprovePayload(init, incidentId);
+        const payload = buildApprovePayload(init, incidentId, productId);
         const res = await fetch("/api/initiative/approve", {
           method: "POST",
           headers: { "Content-Type": "application/json" },

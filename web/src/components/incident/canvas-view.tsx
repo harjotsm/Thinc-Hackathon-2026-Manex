@@ -129,7 +129,11 @@ export function CanvasView({
           />
         ) : null}
 
-        <InitiativesPreview initiatives={initiatives} incidentId={incident.incident_id} />
+        <InitiativesPreview
+          initiatives={initiatives}
+          incidentId={incident.incident_id}
+          productId={incident.primary_product_id ?? null}
+        />
 
         <ContributionsSection contributions={contributions} />
 
