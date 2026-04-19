@@ -26,10 +26,8 @@ type Props = { theme: Theme; variant?: "compact" | "expanded" };
 export const ThemeCard = ({ theme, variant = "compact" }: Props) => {
   const tint = ARCHETYPE_TINT[theme.archetype] ?? ARCHETYPE_TINT.unknown;
   const conf = Math.round(theme.confidence_avg * 100);
-  // Drill into the first member incident's canvas. The /incidents list view
-  // is post-hackathon; canvas is the natural next surface for a clicked theme.
-  const firstIncident = theme.incidents[0]?.incident_id;
-  const drilldownHref = firstIncident ? `/incident/${firstIncident}` : "#";
+  // Drill into the /incidents list filtered by this theme's signature.
+  const drilldownHref = `/incidents?theme=${theme.signature}`;
   // Hide the confidence bar when there's nothing useful to show AND the
   // severity dot already conveys urgency (high/critical/unknown). For
   // low/medium with conf=0 we still hide it — an empty bar always reads as

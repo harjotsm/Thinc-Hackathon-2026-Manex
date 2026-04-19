@@ -29,7 +29,7 @@ describe("ThemeCard", () => {
     expect(screen.getByText("Supplier · PM-00008")).toBeTruthy();
     expect(screen.getByText(/2 incidents/)).toBeTruthy();
     const link = screen.getByRole("link");
-    expect(link.getAttribute("href")).toBe("/incident/INC-00001");
+    expect(link.getAttribute("href")).toBe("/incidents?theme=supplier:PM-00008");
   });
 
   it("renders expanded variant with incident chips and sparkline", () => {

@@ -27,7 +27,7 @@ const navItems: NavItem[] = [
     ),
   },
   {
-    href: "/incident/INC-00001",
+    href: "/incidents",
     label: "Incidents",
     section: "workspace",
     badge: "127",
@@ -165,6 +165,12 @@ function routeMeta(pathname: string) {
       subtitle: "Report unusual behavior on the line",
       lens: "Floor",
     },
+    "/incidents": {
+      crumbs: ["Engineer Lens", "Incidents"],
+      title: "Incident list",
+      subtitle: "All active and recent incidents",
+      lens: "Engineer",
+    },
     "/initiatives": {
       crumbs: ["Engineer Lens", "Initiatives"],
       title: "Initiative tracker",
@@ -203,7 +209,7 @@ function routeMeta(pathname: string) {
 
 function isActive(pathname: string, href: string) {
   if (href === "/inbox") return pathname === "/inbox" || pathname.startsWith("/investigate/");
-  if (href === "/incident/INC-00001") return pathname.startsWith("/incident/");
+  if (href === "/incidents") return pathname === "/incidents" || pathname.startsWith("/incident/");
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
