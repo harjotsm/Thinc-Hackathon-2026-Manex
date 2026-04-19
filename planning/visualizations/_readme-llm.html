@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Resolve · Data + LLM Architecture</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<style>
+  :root {
+    --bg: #0a0f1f;
+    --panel: #111a30;
+    --text: #e8ecf8;
+    --muted: #9aa6c7;
+    --accent: #7dd3fc;
+    --border: #263356;
+  }
+  html, body {
+    margin: 0;
+    background: radial-gradient(ellipse at top, #162045 0%, var(--bg) 60%) fixed;
+    color: var(--text);
+    font-family: -apple-system, "Inter", "Segoe UI", system-ui, sans-serif;
+    line-height: 1.45;
+  }
+  .wrap { max-width: 1500px; margin: 0 auto; padding: 40px 48px 48px; }
+  header { margin-bottom: 28px; }
+  .kicker { text-transform: uppercase; letter-spacing: 0.18em; font-size: 12px; color: var(--accent); font-weight: 700; }
+  h1 { font-size: 36px; margin: 8px 0 10px; font-weight: 700; letter-spacing: -0.02em; }
+  .sub { color: var(--muted); margin: 0; max-width: 1100px; font-size: 16px; }
+
+  .grid { display: grid; grid-template-columns: 1.6fr 1fr; gap: 18px; margin-top: 18px; }
+
+  .diagram, .sidecard {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 26px;
+  }
+  .diagram .mermaid { display: flex; justify-content: center; }
+  .diagram svg { width: 100%; height: auto; max-width: 900px; }
+  .diagram .nodeLabel, .diagram .edgeLabel,
+  .diagram foreignObject span, .diagram foreignObject div {
+    font-size: 15px !important;
+    font-weight: 600 !important;
+    line-height: 1.35 !important;
+  }
+  .diagram .cluster-label span, .diagram .cluster text { font-size: 16px !important; font-weight: 700 !important; }
+
+  .sidecard h3 { font-size: 13px; margin: 0 0 14px; text-transform: uppercase; letter-spacing: 0.18em; color: var(--accent); font-weight: 700; }
+
+  .stack { display: flex; flex-direction: column; gap: 10px; }
+  .row { display: flex; align-items: flex-start; gap: 12px; padding: 10px 12px; background: #0f172a; border: 1px solid var(--border); border-radius: 12px; }
+  .row .chip { flex-shrink: 0; font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; font-weight: 700; padding: 2px 8px; border-radius: 6px; }
+  .row.cache .chip { background: #422006; color: #fef3c7; border: 1px solid #f59e0b; }
+  .row.data .chip  { background: #164e63; color: #cffafe; border: 1px solid #06b6d4; }
+  .row.guard .chip { background: #4a044e; color: #fae8ff; border: 1px solid #d946ef; }
+  .row.tool .chip  { background: #172554; color: #dbeafe; border: 1px solid #3b82f6; }
+  .row .body { font-size: 13.5px; color: var(--text); }
+  .row .body b { color: var(--text); font-weight: 700; }
+  .row .body .mono { font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace; font-size: 12px; color: var(--muted); display: block; margin-top: 2px; }
+
+  .legend { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 18px; font-size: 12.5px; color: var(--muted); }
+  .chip-legend { background: #1a2544; border: 1px solid var(--border); border-radius: 999px; padding: 5px 14px; }
+  .chip-legend b { color: var(--text); font-weight: 700; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="kicker">Resolve · Data + LLM Architecture</div>
+    <h1>The orchestrator — evidence-grounded, cached, bounded</h1>
+    <p class="sub">Four orchestrated phases with dedicated models. Typed Zod tool layer — no free-form SQL. Evidence-cite post-validator blocks hallucinations. pgvector lesson retrieval biases classification. Anthropic prompt cache re-uses ~90% of tokens across turns.</p>
+  </header>
+
+  <div class="grid">
+    <div class="diagram">
+      <pre class="mermaid">
+%%{init: {"flowchart": {"nodeSpacing": 36, "rankSpacing": 52, "padding": 10}, "themeVariables": {"fontSize": "15px"}}}%%
+flowchart TB
+  IN["📥 Incident<br/>seed signals + BOM"]:::io
+
+  IN --> CLS
+
+  subgraph CLASSIFY["🟢 PHASE 1 · Classify · Haiku 4.5"]
+    LES_GET["retrieve_lessons(top=3)<br/>cosine · pgvector"]:::classify
+    CLS["archetype + confidence<br/>+ playbook"]:::classify
+  end
+  LES_GET -.prior.-> CLS
+
+  CLS --> INV_LOOP
+
+  subgraph INVESTIGATE["🟠 PHASE 2 · Investigate · Sonnet 4.6 · max 8 turns"]
+    direction TB
+    INV_LOOP{"Agent loop<br/>think → tool_use → observe"}:::investigate
+    TOOLS["🔧 Typed Tool Layer (Zod)<br/>retrieval · semantic · vision"]:::investigate
+    EV[("evidence cache<br/>hash(args) → result")]:::investigate
+    CONF{"confidence ≥ 0.75<br/>or max turns?"}:::investigate
+  end
+
+  INV_LOOP <--> TOOLS
+  TOOLS --> EV --> INV_LOOP
+  INV_LOOP --> CONF
+  CONF -- "no" --> STALL["stall → request_hint"]:::investigate
+  STALL --> INV_LOOP
+  CONF -- "yes" --> CM
+
+  subgraph COMPOSE["🔵 PHASE 3 · Compose · Sonnet 4.6"]
+    CM["Evidence bundler<br/>cited-only"]:::compose
+    D8["8D filler · D1..D8<br/>evidence[] per claim"]:::compose
+  end
+  CM --> D8 --> PR
+
+  subgraph PROPOSE["🟣 PHASE 4 · Propose · Sonnet 4.6"]
+    PR["Initiative composer<br/>1..N candidates"]:::propose
+    PRED["Closure predicate<br/>typed discriminated union"]:::propose
+  end
+  PR --> PRED --> VAL
+
+  VAL["🛡 Evidence-cite validator<br/>every tool_call_id must exist"]:::guard
+  VAL -- "ok" --> DONE["✅ Engineer Review"]:::io
+  VAL -- "missing id · 1 retry" --> PR
+
+  classDef classify fill:#14532d,stroke:#10b981,color:#bbf7d0,stroke-width:1.5px
+  classDef investigate fill:#7c2d12,stroke:#f97316,color:#fed7aa,stroke-width:1.5px
+  classDef compose fill:#1e40af,stroke:#3b82f6,color:#dbeafe,stroke-width:1.5px
+  classDef propose fill:#581c87,stroke:#a855f7,color:#e9d5ff,stroke-width:1.5px
+  classDef io fill:#1f2937,stroke:#6b7280,color:#e5e7eb
+  classDef guard fill:#4a044e,stroke:#d946ef,color:#fae8ff,stroke-width:1.5px
+      </pre>
+    </div>
+
+    <div class="sidecard">
+      <h3>The moat — what makes this hard</h3>
+      <div class="stack">
+        <div class="row cache">
+          <span class="chip">CACHE</span>
+          <div class="body"><b>Anthropic prompt cache</b> on static system prompt tier (domain vocab, tool specs, playbook).
+            <span class="mono">~90% token reuse · 5× cost reduction</span></div>
+        </div>
+        <div class="row tool">
+          <span class="chip">TOOLS</span>
+          <div class="body"><b>Typed Zod tool layer</b> — 12 read tools, 3 write tools. Write tools gated, invoked post-approval only.
+            <span class="mono">no free-form SQL · bounded at 8 turns</span></div>
+        </div>
+        <div class="row data">
+          <span class="chip">DATA</span>
+          <div class="body"><b>pgvector</b> for free-text signatures · deterministic SQL for structured queries.
+            <span class="mono">embeddings FLOAT8[] · 1536-dim · cosine</span></div>
+        </div>
+        <div class="row data">
+          <span class="chip">DATA</span>
+          <div class="body"><b>Lessons</b> embed resolved incidents; retrieved on Classify → biases archetype prior.
+            <span class="mono">cross-plant network effect</span></div>
+        </div>
+        <div class="row guard">
+          <span class="chip">GUARD</span>
+          <div class="body"><b>Evidence-cite contract</b>: every claim cites a <code>tool_call_id</code>. Validator blocks output with orphaned refs.
+            <span class="mono">one retry · second failure = hard error</span></div>
+        </div>
+        <div class="row guard">
+          <span class="chip">GUARD</span>
+          <div class="body"><b>Closure predicates</b> — typed JSON, evaluated by cron. A resolution is not stampable; it has to measurably close.
+            <span class="mono">no humans marking tickets "done"</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="legend">
+    <span class="chip-legend"><b>Phase 1</b> Haiku 4.5 — fast classify + lesson prior</span>
+    <span class="chip-legend"><b>Phases 2-4</b> Sonnet 4.6 — ReAct · 8D · initiatives</span>
+    <span class="chip-legend"><b>Stack</b> Next.js · TypeScript · Postgres + pgvector · Anthropic SDK</span>
+  </div>
+</div>
+<script>
+  mermaid.initialize({
+    startOnLoad: true,
+    theme: 'dark',
+    themeVariables: {
+      fontFamily: "-apple-system, Inter, Segoe UI, system-ui, sans-serif",
+      fontSize: "15px",
+      primaryColor: "#1e293b",
+      primaryTextColor: "#e8ecf8",
+      primaryBorderColor: "#334155",
+      lineColor: "#64748b",
+      edgeLabelBackground: "#111a30",
+      clusterBkg: "#0f172a",
+      clusterBorder: "#334155",
+    }
+  });
+</script>
+</body>
+</html>

@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Resolve · System Architecture</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<style>
+  :root {
+    --bg: #0a0f1f;
+    --panel: #111a30;
+    --text: #e8ecf8;
+    --muted: #9aa6c7;
+    --accent: #7dd3fc;
+    --border: #263356;
+  }
+  html, body {
+    margin: 0;
+    background: radial-gradient(ellipse at top, #162045 0%, var(--bg) 60%) fixed;
+    color: var(--text);
+    font-family: -apple-system, "Inter", "Segoe UI", system-ui, sans-serif;
+    line-height: 1.45;
+  }
+  .wrap { max-width: 1500px; margin: 0 auto; padding: 40px 48px 48px; }
+  header { margin-bottom: 32px; }
+  .kicker { text-transform: uppercase; letter-spacing: 0.18em; font-size: 12px; color: var(--accent); font-weight: 700; }
+  h1 { font-size: 36px; margin: 8px 0 10px; font-weight: 700; letter-spacing: -0.02em; }
+  .sub { color: var(--muted); margin: 0; max-width: 1000px; font-size: 16px; }
+  .diagram {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 28px 28px 20px;
+    margin-top: 18px;
+  }
+  .diagram .mermaid { display: flex; justify-content: center; }
+  .diagram svg { width: 100%; height: auto; max-width: 1400px; }
+  /* Font boost inside mermaid nodes */
+  .diagram .nodeLabel, .diagram .edgeLabel,
+  .diagram foreignObject span, .diagram foreignObject div {
+    font-size: 15px !important;
+    font-weight: 600 !important;
+    line-height: 1.35 !important;
+  }
+  .diagram .cluster-label span, .diagram .cluster text { font-size: 16px !important; font-weight: 700 !important; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="kicker">Resolve · System Architecture</div>
+    <h1>End-to-end pipeline — Listen · Reason · Resolve</h1>
+    <p class="sub">Every box is a typed implementation unit. Colour groups = acts. Incidents are durable between acts; lessons feed back into classification.</p>
+  </header>
+  <div class="diagram">
+    <pre class="mermaid">
+%%{init: {"flowchart": {"nodeSpacing": 40, "rankSpacing": 70, "padding": 10}, "themeVariables": {"fontSize": "16px"}}}%%
+flowchart TB
+  %% ======== ACT I: LISTEN ========
+  subgraph LISTEN["🟦 ACT I — LISTEN"]
+    direction TB
+    subgraph SRC_INT["Internal sources"]
+      S_VOICE["🎤 Worker voice<br/>(Whisper)"]
+      S_EOL["🧪 EOL test<br/>FAIL / MARGINAL"]
+      S_SPC["📉 SPC drift<br/>Cpk erosion"]
+      S_SUPP["📦 Supplier<br/>inbound anomaly"]
+      S_REWORK["🔧 Rework<br/>concentration"]
+      S_MAINT["🛠️ Maintenance<br/>FMEA"]
+    end
+    subgraph SRC_EXT["External sources"]
+      S_FC["📞 Field claim"]
+      S_WAR["🎫 Warranty / RMA"]
+      S_NPS["⭐ NPS · reviews · social"]
+      S_IOT["📡 IoT telemetry"]
+    end
+    IN1["Intake Normalizer (Zod)<br/>→ canonical signal row"]
+    COR["🧲 Signal Correlator<br/>deterministic joins + pgvector cosine"]
+    INC[("incident row")]
+  end
+
+  %% ======== ACT II: REASON ========
+  subgraph REASON["🟧 ACT II — REASON"]
+    direction TB
+    CLS["🟢 Classify · Haiku 4.5<br/>→ archetype + playbook"]
+    INV["🟠 Investigate · Sonnet 4.6<br/>bounded ReAct · max 8 turns"]
+    TOOLS["🔧 Typed Tool Layer (Zod)<br/>retrieval · cross-boundary · semantic · vision"]
+    EV[("evidence cache")]
+    STALL{"Confidence<br/>≥ 0.75?"}
+    HINT["⚠️ Stall → request_hint<br/>engineer injects constraint"]
+    CM["🔵 Compose · Sonnet 4.6<br/>8D projection + render_hints"]
+    PR["🟣 Propose · Sonnet 4.6<br/>N initiatives + closure predicates"]
+  end
+
+  %% ======== ACT III: RESOLVE ========
+  subgraph RESOLVE["🟪 ACT III — RESOLVE"]
+    direction TB
+    SIM["💡 Impact Simulator<br/>€ avoided · claims · confidence"]
+    HITL["🔴 Engineer Review<br/>Accept / Amend / Reject"]
+    subgraph AGENTS["Domain agents · parallel dispatch"]
+      AG_PROD["🏭 Production"]
+      AG_SUPP["📦 Supplier"]
+      AG_RND["🔬 R&amp;D"]
+      AG_LOG["🚚 Logistics"]
+      AG_CX["💬 CX response"]
+    end
+    WRITE[("initiative + product_action")]
+    MON["🔁 Closure Monitor<br/>cron · typed predicates"]
+    LESSON[("lesson embedding")]
+  end
+
+  S_VOICE & S_EOL & S_SPC & S_SUPP & S_REWORK & S_MAINT --> IN1
+  S_FC & S_WAR & S_NPS & S_IOT --> IN1
+  IN1 --> COR --> INC
+
+  INC --> CLS --> INV
+  INV <--> TOOLS
+  TOOLS --> EV
+  EV --> INV
+  INV --> STALL
+  STALL -- "no · max turns" --> HINT --> INV
+  STALL -- "yes" --> CM
+  CM --> PR
+
+  PR --> SIM --> HITL
+  HITL -- "approve" --> AGENTS
+  AG_PROD & AG_SUPP & AG_RND & AG_LOG & AG_CX --> WRITE
+  WRITE --> MON
+  MON -- "satisfied" --> LESSON
+  MON -- "deadline exceeded" --> INV
+  LESSON -.retrieved on next incident.-> CLS
+
+  classDef listen fill:#164e63,stroke:#06b6d4,color:#cffafe
+  classDef reason fill:#7c2d12,stroke:#f97316,color:#fed7aa
+  classDef resolve fill:#581c87,stroke:#a855f7,color:#e9d5ff
+
+  class S_VOICE,S_EOL,S_SPC,S_SUPP,S_REWORK,S_MAINT,S_FC,S_WAR,S_NPS,S_IOT,IN1,COR,INC listen
+  class CLS,INV,TOOLS,EV,STALL,HINT,CM,PR reason
+  class SIM,HITL,AG_PROD,AG_SUPP,AG_RND,AG_LOG,AG_CX,WRITE,MON,LESSON resolve
+    </pre>
+  </div>
+</div>
+<script>
+  mermaid.initialize({
+    startOnLoad: true,
+    theme: 'dark',
+    themeVariables: {
+      fontFamily: "-apple-system, Inter, Segoe UI, system-ui, sans-serif",
+      fontSize: "16px",
+      primaryColor: "#1e293b",
+      primaryTextColor: "#e8ecf8",
+      primaryBorderColor: "#334155",
+      lineColor: "#64748b",
+      edgeLabelBackground: "#111a30",
+      clusterBkg: "#0f172a",
+      clusterBorder: "#334155",
+    }
+  });
+</script>
+</body>
+</html>
