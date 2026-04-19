@@ -9,6 +9,8 @@ type Props = {
   incidentId: string;
 };
 
+type DispatchState = "idle" | "dispatching" | "done" | "error";
+
 const DOMAIN_TINT: Record<string, { bg: string; fg: string }> = {
   production: { bg: "#dbeafe", fg: "#1e40af" },
   supplier: { bg: "#fed7aa", fg: "#9a3412" },
@@ -32,15 +34,90 @@ const formatTarget = (target: string): string => {
   return target;
 };
 
+/** Map a ReportInitiative to the body expected by POST /api/initiative/approve */
+function buildApprovePayload(init: ReportInitiative, incidentId: string) {
+  // Derive agentDomain: must be one of the enum values
+  const domainMap: Record<string, string> = {
+    production: "production",
+    supplier: "supplier",
+    rnd: "rnd",
+    logistics: "logistics",
+    customer_response: "customer_response",
+  };
+  const agent_domain =
+    domainMap[init.domain.toLowerCase()] ?? "production";
+
+  // Build a closure_predicate in legacyClosurePredicateSchema shape
+  const closure_predicate = init.closure_predicate ?? {
+    type: "manual_confirmation",
+    params: {},
+  };
+
+  return {
+    incident_id: incidentId,
+    agent_domain,
+    target_system: init.target_system,
+    comments: init.rationale,
+    closure_predicate,
+    status: "proposed",
+  };
+}
+
 export function InitiativesPreview({ initiatives, incidentId }: Props) {
   const [approved, setApproved] = useState<Record<number, boolean>>(() =>
     Object.fromEntries(initiatives.map((_, i) => [i, true])),
   );
 
+  const [dispatchState, setDispatchState] = useState<DispatchState>("idle");
+  const [dispatchError, setDispatchError] = useState<string | null>(null);
+  const [createdCount, setCreatedCount] = useState(0);
+
   const approvedCount = useMemo(
     () => Object.values(approved).filter(Boolean).length,
     [approved],
   );
+
+  const handleDispatch = async () => {
+    if (dispatchState === "dispatching" || approvedCount === 0) return;
+
+    const toDispatch = initiatives
+      .map((init, i) => ({ init, i }))
+      .filter(({ i }) => approved[i]);
+
+    setDispatchState("dispatching");
+    setDispatchError(null);
+
+    try {
+      let successCount = 0;
+      for (const { init } of toDispatch) {
+        const payload = buildApprovePayload(init, incidentId);
+        const res = await fetch("/api/initiative/approve", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        if (res.ok) {
+          successCount += 1;
+        } else {
+          let msg = `HTTP ${res.status}`;
+          try {
+            const body = await res.json();
+            if (body?.error) msg = body.error;
+          } catch {
+            // ignore
+          }
+          throw new Error(msg);
+        }
+      }
+      setCreatedCount(successCount);
+      setDispatchState("done");
+    } catch (err) {
+      setDispatchState("error");
+      setDispatchError(
+        err instanceof Error ? err.message : "Dispatch failed",
+      );
+    }
+  };
 
   if (initiatives.length === 0) {
     return (
@@ -266,21 +343,70 @@ export function InitiativesPreview({ initiatives, incidentId }: Props) {
         <span className="muted tt" style={{ fontSize: 11 }}>
           {approvedCount} of {initiatives.length} approved
         </span>
+
+        {/* Dispatch success state */}
+        {dispatchState === "done" && (
+          <span
+            data-testid="dispatch-success"
+            style={{ fontSize: 12, color: "#16a34a", fontWeight: 600 }}
+          >
+            ✓ {createdCount} initiative{createdCount === 1 ? "" : "s"} created
+          </span>
+        )}
+
+        {/* Dispatch error state */}
+        {dispatchState === "error" && dispatchError && (
+          <span
+            data-testid="dispatch-error"
+            style={{ fontSize: 11, color: "#dc2626" }}
+          >
+            {dispatchError}
+          </span>
+        )}
+
         <div className="spacer" style={{ flex: 1 }} />
-        <Link
-          href={`/initiatives?incident=${encodeURIComponent(incidentId)}`}
-          className="btn ghost sm"
-          style={{ textDecoration: "none" }}
-        >
-          Track in Kanban →
-        </Link>
-        <Link
-          href={`/incident/${incidentId}/resolve`}
+
+        {/* View kanban link — shown after success */}
+        {dispatchState === "done" ? (
+          <Link
+            href={`/initiatives?incident=${encodeURIComponent(incidentId)}`}
+            className="btn ghost sm"
+            style={{ textDecoration: "none" }}
+            data-testid="view-kanban-link"
+          >
+            View kanban →
+          </Link>
+        ) : (
+          <Link
+            href={`/initiatives?incident=${encodeURIComponent(incidentId)}`}
+            className="btn ghost sm"
+            style={{ textDecoration: "none" }}
+          >
+            Track in Kanban →
+          </Link>
+        )}
+
+        <button
+          type="button"
+          data-testid="dispatch-button"
           className="btn primary sm"
+          disabled={
+            dispatchState === "dispatching" ||
+            dispatchState === "done" ||
+            approvedCount === 0
+          }
+          aria-busy={dispatchState === "dispatching"}
+          onClick={handleDispatch}
           style={{ textDecoration: "none" }}
         >
-          Dispatch selected ({approvedCount})
-        </Link>
+          {dispatchState === "dispatching"
+            ? "Dispatching…"
+            : dispatchState === "done"
+              ? "Dispatched ✓"
+              : dispatchState === "error"
+                ? "Retry dispatch"
+                : `Dispatch selected (${approvedCount})`}
+        </button>
       </div>
     </section>
   );
