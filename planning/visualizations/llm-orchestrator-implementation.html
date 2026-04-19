@@ -1,0 +1,299 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>LLM Orchestrator Implementation Architecture · De.Constructors</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<style>
+  :root {
+    --bg: #0a0f1f;
+    --panel: #111a30;
+    --panel-soft: #17223f;
+    --text: #e8ecf8;
+    --muted: #9aa6c7;
+    --subtle: #6b7aa0;
+    --accent: #7dd3fc;
+    --border: #263356;
+    --green: #10b981;
+    --orange: #f97316;
+    --violet: #a855f7;
+    --cyan: #06b6d4;
+    --rose: #f43f5e;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    background: radial-gradient(ellipse at top, #162045 0%, var(--bg) 60%) fixed;
+    color: var(--text);
+    font-family: -apple-system, "Inter", "Segoe UI", system-ui, sans-serif;
+    line-height: 1.55;
+  }
+  code, pre, .mono { font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace; }
+  header { padding: 56px 48px 24px; max-width: 1440px; margin: 0 auto; }
+  header .kicker { text-transform: uppercase; letter-spacing: 0.18em; font-size: 11px; color: var(--accent); font-weight: 600; }
+  header h1 { font-size: 40px; margin: 12px 0 8px; font-weight: 700; letter-spacing: -0.02em; line-height: 1.1; }
+  header p.lead { color: var(--muted); max-width: 980px; font-size: 16px; margin: 0; }
+  main { max-width: 1440px; margin: 0 auto; padding: 0 48px 96px; }
+  section { margin-top: 56px; }
+  section > h2 { font-size: 13px; text-transform: uppercase; letter-spacing: 0.2em; color: var(--muted); margin: 0 0 6px; font-weight: 600; }
+  section > h3 { font-size: 26px; margin: 0 0 12px; font-weight: 700; letter-spacing: -0.015em; }
+  section > .sub { color: var(--muted); margin: 0 0 24px; max-width: 980px; }
+
+  .cards { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 14px; }
+  .card { background: var(--panel); border: 1px solid var(--border); border-top: 4px solid; border-radius: 12px; padding: 18px; }
+  .card.entry { border-top-color: var(--cyan); }
+  .card.reason { border-top-color: var(--orange); }
+  .card.resolve { border-top-color: var(--violet); }
+  .card.ops { border-top-color: var(--green); }
+  .card h4 { margin: 4px 0 8px; font-size: 16px; }
+  .card .meta { color: var(--muted); font-size: 12px; margin-bottom: 8px; }
+  .card ul { margin: 0; padding-left: 16px; color: var(--muted); font-size: 12.5px; }
+
+  .diagram { background: var(--panel); border: 1px solid var(--border); border-radius: 16px; padding: 28px; overflow: auto; }
+  .diagram .note { color: var(--muted); font-size: 13px; margin-top: 14px; padding-top: 14px; border-top: 1px dashed var(--border); }
+
+  .checks { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 14px; }
+  .check { background: var(--panel); border: 1px solid var(--border); border-left: 4px solid var(--green); border-radius: 12px; padding: 16px 18px; }
+  .check.warn { border-left-color: #f59e0b; }
+  .check.err { border-left-color: var(--rose); }
+  .check .head { font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); font-weight: 700; }
+  .check h4 { margin: 6px 0; font-size: 15px; }
+  .check p { margin: 0; color: var(--muted); font-size: 13px; }
+
+  .callout {
+    background: linear-gradient(180deg, rgba(249,115,22,0.12), rgba(168,85,247,0.08));
+    border: 1px solid rgba(249,115,22,0.3);
+    border-radius: 14px;
+    padding: 18px 22px;
+    margin-top: 14px;
+    font-size: 14px;
+  }
+  .callout strong { color: #fdba74; }
+
+  footer { color: var(--muted); text-align: center; padding: 36px 20px; font-size: 12px; border-top: 1px solid var(--border); margin-top: 60px; }
+
+  @media (max-width: 1200px) {
+    .cards, .checks { grid-template-columns: repeat(2, minmax(0,1fr)); }
+    header { padding: 32px 24px 16px; }
+    main { padding: 0 24px 60px; }
+    header h1 { font-size: 28px; }
+  }
+
+  @media (max-width: 760px) {
+    .cards, .checks { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="kicker">Resolve · Implementation Architecture · planning/plans</div>
+  <h1>LLM Orchestrator Implementation Architecture</h1>
+  <p class="lead">
+    Visualized from <code>planning/plans/2026-04-18-llm-orchestrator-implementation.md</code> and aligned against
+    <code>planning/specs/2026-04-18-llm-data-pipeline-design.md</code> + <code>planning/ARCHITECTURE.md</code>.
+    Focus: end-to-end control-flow from signal ingestion through 4-phase reasoning, engineer approval,
+    dispatch, and closure monitoring.
+  </p>
+</header>
+
+<main>
+  <section>
+    <h2>Section 1</h2>
+    <h3>Execution layers in scope</h3>
+    <p class="sub">Same decomposition style as existing architecture views: entry, reasoning core, resolve path, operational control.</p>
+    <div class="cards">
+      <div class="card entry">
+        <h4>Entry &amp; Ingestion</h4>
+        <div class="meta mono">Path A/B/C + backfill</div>
+        <ul>
+          <li><code>POST /api/signal/ingest</code> (operator)</li>
+          <li><code>POST /api/detector/scan</code> (manual trigger)</li>
+          <li><code>scripts/backfill-signals.ts</code> (one-shot seed)</li>
+          <li>Correlator creates/attaches incidents</li>
+        </ul>
+      </div>
+      <div class="card reason">
+        <h4>Reason Core (Act II)</h4>
+        <div class="meta mono">Classify → Investigate → Compose → Propose</div>
+        <ul>
+          <li>Anthropic Sonnet 4.6 + Haiku 4.5</li>
+          <li>Typed Zod tool layer + evidence ledger</li>
+          <li>Prompt build + cache strategy + playbooks</li>
+          <li>Post-validators for cite integrity</li>
+        </ul>
+      </div>
+      <div class="card resolve">
+        <h4>Resolve Path (Act III)</h4>
+        <div class="meta mono">Engineer decision + dispatch</div>
+        <ul>
+          <li><code>POST /api/initiative/:id/approve</code></li>
+          <li><code>manex_native</code> adapter to <code>product_action</code></li>
+          <li>Dispatch attempts + idempotency key</li>
+          <li>Closure monitor interface point</li>
+        </ul>
+      </div>
+      <div class="card ops">
+        <h4>Ops &amp; Streaming</h4>
+        <div class="meta mono">Durable worker + SSE</div>
+        <ul>
+          <li>Session event bus + replay stream</li>
+          <li>Worker queue for investigate sessions</li>
+          <li>Health endpoint + auth guards</li>
+          <li>Golden tests for Story 1 + Story 3</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Section 2</h2>
+    <h3>End-to-end implementation flow</h3>
+    <p class="sub">Typed boundaries, retry loops, and ownership boundaries from the implementation plan.</p>
+    <div class="diagram">
+      <pre class="mermaid">
+flowchart TB
+  subgraph ENTRY["🟦 Entry &amp; Listen"]
+    OP["Operator push<br/>POST /api/signal/ingest"]
+    DET["Detector scan cron/manual<br/>POST /api/detector/scan"]
+    BF["Backfill seed<br/>scripts/backfill-signals.ts"]
+    NORM["Signal normalizer + embed"]
+    COR["Correlator<br/>deterministic + semantic (degraded fallback)"]
+    INC[(incident + incident_signal)]
+  end
+
+  subgraph ORCH["🟧 Orchestrator Worker (Act II)"]
+    SES["Create session + emit phase events"]
+    CLS["Classify (Haiku)<br/>archetype + signature_text"]
+    RET["retrieve_lessons(top=3)"]
+    INV["Investigate (Sonnet)<br/>bounded ReAct + stall detector"]
+    TOLS["Typed tools registry (MVP+stubs)"]
+    EVC[(evidence_ledger cache)]
+    CMP["Compose (Sonnet)<br/>8D + render_hints"]
+    PRP["Propose (Sonnet)<br/>initiative candidates + predicates"]
+    VAL{"Evidence-cite validator\n(pass?)"}
+    RETRY["single retry with validator feedback"]
+  end
+
+  subgraph HUMAN["🟪 Engineer Lens"]
+    SSE["SSE stream + replay<br/>/api/session/:id/stream"]
+    REV["Review / amend / approve"]
+  end
+
+  subgraph RESOLVE["🟫 Resolve &amp; Act III"]
+    APP["POST /api/initiative/:id/approve"]
+    COS{"cosign required?"}
+    GATE["await leadership cosign"]
+    DSP["Dispatcher\nmanex_native adapter"]
+    ACT[(product_action)]
+    CLSW["Closure sweep cron\n(predicate eval interface)"]
+    LES[(lesson + embedding)]
+  end
+
+  OP --> NORM
+  DET --> NORM
+  BF --> NORM --> COR --> INC --> SES
+
+  SES --> CLS --> RET --> INV
+  INV <--> TOLS
+  TOLS --> EVC --> INV
+  INV --> CMP --> PRP --> VAL
+  VAL -- yes --> SSE
+  VAL -- no --> RETRY --> PRP
+
+  SSE --> REV --> APP --> COS
+  COS -- yes --> GATE
+  COS -- no --> DSP
+  GATE --> DSP
+  DSP --> ACT --> CLSW --> LES
+  LES -.retrieval prior.-> CLS
+
+  classDef entry fill:#164e63,stroke:#06b6d4,color:#cffafe
+  classDef orch fill:#7c2d12,stroke:#f97316,color:#fed7aa
+  classDef human fill:#581c87,stroke:#a855f7,color:#e9d5ff
+  classDef resolve fill:#3f2f12,stroke:#f59e0b,color:#fde68a
+
+  class OP,DET,BF,NORM,COR,INC entry
+  class SES,CLS,RET,INV,TOLS,EVC,CMP,PRP,VAL,RETRY orch
+  class SSE,REV human
+  class APP,COS,GATE,DSP,ACT,CLSW,LES resolve
+      </pre>
+      <div class="note">
+        <strong>Implementation-specific emphasis:</strong> this flow keeps the plan's worker-centric execution,
+        explicit validator retry loop, and current M6 scope where closure evaluation is wired but still partially stubbed.
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Section 3</h2>
+    <h3>Architecture verification snapshot</h3>
+    <p class="sub">Quick completeness/correctness status of the implementation plan against current spec+architecture baseline.</p>
+
+    <div class="checks">
+      <div class="check">
+        <div class="head">Aligned</div>
+        <h4>4-phase orchestrator and SSE event model</h4>
+        <p>Classify/Investigate/Compose/Propose, bounded tool loop, cite validation, and session streaming are represented consistently.</p>
+      </div>
+      <div class="check">
+        <div class="head">Aligned</div>
+        <h4>Core data objects and dispatch path</h4>
+        <p><code>signal</code>, <code>incident</code>, <code>session</code>, <code>initiative</code>, and Manex-native dispatch flow are present with typed contracts.</p>
+      </div>
+      <div class="check warn">
+        <div class="head">Gap</div>
+        <h4>Contribution pipeline is under-modeled in plan execution</h4>
+        <p>Spec requires full 9-domain contribution stream (3 functional + 6 stub); plan mainly focuses tool/core orchestration and does not implement this flow end-to-end.</p>
+      </div>
+      <div class="check warn">
+        <div class="head">Gap</div>
+        <h4>Backfill mode 2, closure-evaluator, and external-state checks</h4>
+        <p>Plan ships one-shot backfill and closure stub; incremental watermark cron and full predicate evaluation are deferred, so E2E production behavior is incomplete.</p>
+      </div>
+      <div class="check err">
+        <div class="head">Mismatch Risk</div>
+        <h4>Leadership co-sign endpoints and governance path</h4>
+        <p>Approve-path gate is mentioned, but the explicit leadership co-sign endpoint and pending-cosign queue are not fully planned as first-class API routes.</p>
+      </div>
+      <div class="check warn">
+        <div class="head">Scope Constraint</div>
+        <h4>Team-split dependencies block standalone completeness</h4>
+        <p>Plan explicitly defers migrations/tools/UI/cron slices to teammates, so this document alone is not a fully independent blueprint for complete challenge delivery.</p>
+      </div>
+    </div>
+
+    <div class="callout">
+      <strong>Verdict:</strong> the architecture is structurally correct for the orchestrator slice and demo-critical path,
+      but not fully complete for the whole challenge-application without the deferred contribution, cron-backfill,
+      closure, and governance slices.
+    </div>
+  </section>
+</main>
+
+<footer>
+  De.Constructors — Manex Hackathon 2026 · LLM orchestrator implementation visualization (plan-aligned)
+</footer>
+
+<script>
+  mermaid.initialize({
+    startOnLoad: true,
+    theme: 'dark',
+    themeVariables: {
+      background: '#111a30',
+      primaryColor: '#1e293b',
+      primaryTextColor: '#e8ecf8',
+      primaryBorderColor: '#475569',
+      lineColor: '#64748b',
+      secondaryColor: '#334155',
+      tertiaryColor: '#1e293b',
+      fontFamily: "-apple-system, Inter, system-ui, sans-serif",
+      fontSize: '13px'
+    },
+    flowchart: { htmlLabels: true, curve: 'basis', padding: 16 },
+  });
+</script>
+
+</body>
+</html>

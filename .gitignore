@@ -1,9 +1,21 @@
 .env
 .env.*
 !.env.example
+!.env.local.example
+/node_modules/
+/web/node_modules/
 handouts/team-*.txt
 volumes/
 data-generation/.venv/
 data-generation/__pycache__/
 data-generation/*.pyc
 .DS_Store
+
+# macOS
+.DS_Store
+.superpowers/
+.worktrees/
+
+# Tooling artifacts (Claude Code + Playwright MCP)
+.claude/
+.playwright-mcp/

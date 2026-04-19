@@ -1,0 +1,336 @@
+// ============ FLOOR ============
+function FloorScreen() {
+  const { setLens, showAnno } = useApp();
+  const [recording, setRecording] = React.useState(false);
+  const [submitted, setSubmitted] = React.useState(false);
+  const [photos, setPhotos] = React.useState([]);
+  const [selectedIssue, setSelectedIssue] = React.useState(null);
+  const [variant, setVariant] = React.useState(() => localStorage.getItem("floor.var") || "classic");
+  const fileRef = React.useRef(null);
+  React.useEffect(() => { localStorage.setItem("floor.var", variant); }, [variant]);
+
+  const submit = () => {
+    setRecording(false);
+    setSubmitted(true);
+    setTimeout(() => {
+      setSubmitted(false);
+      setPhotos([]);
+      setSelectedIssue(null);
+    }, 4000);
+  };
+
+  const addPhoto = () => {
+    // Simulated capture — add a placeholder tile
+    setPhotos(p => [...p, { id: Date.now(), label: "Photo " + (p.length + 1) }]);
+  };
+
+  const ISSUES = [
+    { id:"scratch", label:"Scratch / dent",     icon:"✦", color:"var(--sev-high)" },
+    { id:"noise",   label:"Strange noise",      icon:"~", color:"var(--accent)" },
+    { id:"batch",   label:"Batch looks off",    icon:"◆", color:"var(--cta)" },
+    { id:"label",   label:"Wrong label",        icon:"▤", color:"var(--sev-med)" },
+    { id:"heat",    label:"Heat warning",       icon:"△", color:"var(--sev-crit)" },
+    { id:"other",   label:"Something else",     icon:"?", color:"var(--ink-muted)" },
+  ];
+
+  // Shared photo strip component
+  const PhotoStrip = ({ small }) => (
+    <div style={{display:"flex", gap:8, flexWrap:"wrap"}}>
+      {photos.map(p => (
+        <div key={p.id} style={{
+          width: small ? 56 : 72, height: small ? 56 : 72, borderRadius: 10,
+          background: "linear-gradient(135deg, #c4d4e2, #8fa8bf)",
+          border: "1px solid var(--line)",
+          position:"relative", flexShrink:0,
+          display:"flex", alignItems:"flex-end", padding:6,
+          fontSize:9, color:"#fff", fontWeight:600,
+          boxShadow:"inset 0 0 0 1px rgba(255,255,255,0.2)"
+        }}>
+          <span style={{textShadow:"0 1px 2px rgba(0,0,0,0.4)"}}>{p.label}</span>
+          <button onClick={() => setPhotos(ph => ph.filter(x => x.id !== p.id))}
+            style={{position:"absolute", top:3, right:3, width:18, height:18, borderRadius:"50%",
+              background:"rgba(0,0,0,0.5)", color:"#fff", fontSize:10, border:"none",
+              display:"flex", alignItems:"center", justifyContent:"center"}}>×</button>
+        </div>
+      ))}
+      <button onClick={addPhoto}
+        style={{
+          width: small ? 56 : 72, height: small ? 56 : 72, borderRadius: 10,
+          background: "#fff", border: "1.5px dashed var(--accent)", color:"var(--accent)",
+          display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center",
+          gap:2, flexShrink:0, cursor:"pointer", fontSize: small ? 9 : 10
+        }}>
+        <div style={{fontSize: small ? 18 : 22, lineHeight:1}}>+</div>
+        <div>Photo</div>
+      </button>
+    </div>
+  );
+
+  return (
+    <div style={{width:"100%", height:"100%", display:"flex", alignItems:"center", justifyContent:"center",
+      background:"#eef3f7", position:"relative"}}>
+
+      {/* Floating controls */}
+      <div style={{position:"absolute", top:16, right:16, display:"flex", gap:6, zIndex:10}}>
+        <VarTabs options={[{id:"classic", label:"Tiles"},{id:"minimal", label:"Minimal"},{id:"chat", label:"Chat"}]}
+          value={variant} onChange={setVariant}/>
+        <button className="btn ghost sm" onClick={() => setLens("engineer")}>← exit floor lens</button>
+      </div>
+
+      {/* Phone frame */}
+      <div style={{width:390, height:844, background:"#ffffff", borderRadius:40,
+        border:"10px solid #1a1a1a", overflow:"hidden", position:"relative",
+        boxShadow:"0 40px 80px rgba(16,50,207,0.25)"}}>
+
+        {/* Status bar */}
+        <div style={{height:44, padding:"0 22px", display:"flex", alignItems:"center", justifyContent:"space-between", fontSize:13, fontWeight:600, color:"var(--ink-primary)"}}>
+          <span className="mono">{DATA.now}</span>
+          <div style={{width:100, height:28, background:"#1a1a1a", borderRadius:20}}/>
+          <span className="mono" style={{fontSize:11, letterSpacing:"0.04em"}}>●●● 82%</span>
+        </div>
+
+        {variant === "classic" && (
+          <div style={{padding:"8px 20px 20px", overflow:"auto", height:"calc(100% - 44px)"}}>
+            {/* Greeting */}
+            <div className="row" style={{gap:10, marginBottom:18}}>
+              <div style={{width:32, height:32, borderRadius:"50%", background:"var(--accent)", color:"#fff",
+                display:"flex", alignItems:"center", justifyContent:"center", fontSize:12, fontWeight:700}}>M</div>
+              <div>
+                <div style={{fontSize:14, fontWeight:600}}>Hi Markus</div>
+                <div className="muted tt">Montage Linie 1 · {DATA.shift}</div>
+              </div>
+            </div>
+
+            <div style={{fontSize:20, fontWeight:700, letterSpacing:"-0.01em", marginBottom:4, color:"var(--ink-primary)"}}>
+              What did you notice?
+            </div>
+            <div className="muted" style={{fontSize:13, marginBottom:16}}>Tap what fits, or hold the mic.</div>
+
+            {/* Issue tiles — 2 cols of rounded squares */}
+            <div style={{display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:18}}>
+              {ISSUES.map(iss => {
+                const on = selectedIssue === iss.id;
+                return (
+                  <button key={iss.id} onClick={() => setSelectedIssue(on ? null : iss.id)}
+                    style={{
+                      height: 60,
+                      background: on ? "var(--accent-bg)" : "#ffffff",
+                      border: on ? "2px solid var(--accent)" : "1px solid var(--line)",
+                      borderRadius: 12,
+                      padding: "0 10px",
+                      display:"flex", flexDirection:"row", alignItems:"center", gap:10,
+                      textAlign:"left", cursor:"pointer",
+                      boxShadow: on ? "0 3px 12px rgba(99,159,196,0.18)" : "0 1px 2px rgba(22,0,66,0.04)",
+                      transition:"all 180ms"
+                    }}>
+                    <div style={{
+                      width:32, height:32, borderRadius:8,
+                      background: on ? iss.color : "var(--bg-subtle)",
+                      color: on ? "#fff" : iss.color,
+                      display:"flex", alignItems:"center", justifyContent:"center",
+                      fontSize:16, fontWeight:700, flexShrink:0
+                    }}>{iss.icon}</div>
+                    <div style={{fontSize:12, fontWeight:600, color:"var(--ink-primary)", lineHeight:1.2}}>{iss.label}</div>
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Photo capture */}
+            <div style={{marginBottom:16}}>
+              <div className="muted" style={{fontSize:10, letterSpacing:"0.1em", textTransform:"uppercase", fontWeight:600, marginBottom:8}}>
+                Add a photo (optional)
+              </div>
+              <PhotoStrip />
+            </div>
+
+            {/* Mic row */}
+            <div style={{display:"flex", gap:10, alignItems:"center", marginBottom:14,
+              padding:12, background:"var(--bg-subtle)", borderRadius:14, border:"1px solid var(--line)"}}>
+              <button
+                onMouseDown={() => setRecording(true)}
+                onMouseUp={() => setRecording(false)}
+                onTouchStart={() => setRecording(true)}
+                onTouchEnd={() => setRecording(false)}
+                style={{width:52, height:52, borderRadius:"50%",
+                  background: recording ? "var(--cta)" : "var(--accent)",
+                  color:"#fff", display:"flex", alignItems:"center", justifyContent:"center",
+                  border:"none", flexShrink:0, transition:"all 150ms",
+                  boxShadow: recording ? "0 0 0 6px rgba(16,50,207,0.15)" : "0 4px 12px rgba(99,159,196,0.35)"}}>
+                <I.mic size={22}/>
+              </button>
+              <div style={{flex:1}}>
+                <div style={{fontSize:13, fontWeight:600}}>
+                  {recording ? "Listening…" : "Hold to add voice note"}
+                </div>
+                <div className="muted tt" style={{marginTop:2}}>
+                  {recording ? "…der dritte Kratzer in dieser Schicht…" : "Or type a quick note below"}
+                </div>
+              </div>
+            </div>
+
+            {/* Submit */}
+            <button onClick={submit}
+              disabled={!selectedIssue && photos.length === 0}
+              style={{
+                width:"100%", padding:"14px", borderRadius:12,
+                background: (selectedIssue || photos.length) ? "var(--cta)" : "var(--bg-inset)",
+                color: (selectedIssue || photos.length) ? "#fff" : "var(--ink-muted)",
+                fontWeight:600, fontSize:14, border:"none",
+                cursor: (selectedIssue || photos.length) ? "pointer" : "not-allowed"
+              }}>
+              Send report
+            </button>
+
+            {/* My reports */}
+            <div style={{marginTop:22}}>
+              <div className="muted" style={{fontSize:10, letterSpacing:"0.1em", textTransform:"uppercase", fontWeight:600, marginBottom:8}}>
+                My reports today
+              </div>
+              {DATA.floorReports.map((r,i) => {
+                const color = r.status === "Resolved" ? "var(--sev-low)" : r.status === "Investigating" ? "var(--accent)" : "var(--ink-muted)";
+                return (
+                  <div key={i} className="card" style={{padding:10, marginBottom:6, borderRadius:10}}>
+                    <div className="row" style={{justifyContent:"space-between"}}>
+                      <div className="row" style={{gap:8}}>
+                        <span style={{width:8, height:8, borderRadius:4, background:color}}/>
+                        <span style={{fontSize:12, fontWeight:500}}>{r.text}</span>
+                      </div>
+                      <span className="muted tt">{r.time}</span>
+                    </div>
+                    <div className="muted tt" style={{marginLeft:16, marginTop:2, color}}>{r.status}</div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {variant === "minimal" && (
+          <div style={{padding:"50px 22px", display:"flex", flexDirection:"column", alignItems:"center", height:"calc(100% - 44px)", overflow:"auto"}}>
+            <div style={{fontSize:24, fontWeight:700, textAlign:"center", marginBottom:6, lineHeight:1.2, color:"var(--ink-primary)"}}>
+              What did you notice?
+            </div>
+            <div className="muted" style={{textAlign:"center", marginBottom:36, fontSize:13}}>
+              Just tell us. We'll handle the rest.
+            </div>
+            <button
+              onMouseDown={() => setRecording(true)}
+              onMouseUp={() => setRecording(false)}
+              style={{width:200, height:200, borderRadius:"50%",
+                background: recording ? "var(--cta)" : "var(--accent)", color:"#fff",
+                display:"flex", alignItems:"center", justifyContent:"center",
+                border:"none",
+                boxShadow: recording ? "0 0 0 10px rgba(16,50,207,0.15)" : "0 10px 40px rgba(99,159,196,0.40)",
+                animation: recording ? "none" : "pulse 2.5s infinite",
+                transition:"all 200ms"}}>
+              <I.mic size={76}/>
+            </button>
+            <div className="muted" style={{marginTop:22, fontSize:12}}>
+              {recording ? "Listening…" : "Tap & hold to talk"}
+            </div>
+
+            {/* Photo button, small */}
+            <div style={{marginTop:28, width:"100%"}}>
+              <div className="muted" style={{fontSize:10, letterSpacing:"0.1em", textTransform:"uppercase", fontWeight:600, marginBottom:8, textAlign:"center"}}>
+                or add a photo
+              </div>
+              <div style={{display:"flex", justifyContent:"center"}}>
+                <PhotoStrip small />
+              </div>
+            </div>
+
+            <div style={{marginTop:"auto", paddingTop:20, fontSize:12, color:"var(--ink-muted)"}}>
+              Markus · Linie 1 · Shift 2
+            </div>
+          </div>
+        )}
+
+        {variant === "chat" && (
+          <div style={{padding:"16px 16px", display:"flex", flexDirection:"column", height:"calc(100% - 44px)"}}>
+            <div style={{fontSize:15, fontWeight:700, marginBottom:12}}>Report</div>
+            <div className="card" style={{padding:11, marginBottom:10, maxWidth:"82%", borderRadius:12, background:"var(--bg-subtle)"}}>
+              <div className="muted tt" style={{marginBottom:2}}>Just now</div>
+              <div style={{fontSize:13}}>What did you notice on the line?</div>
+            </div>
+
+            {/* Tile options */}
+            <div style={{display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginBottom:10}}>
+              {ISSUES.slice(0,4).map(iss => {
+                const on = selectedIssue === iss.id;
+                return (
+                  <button key={iss.id} onClick={() => setSelectedIssue(on ? null : iss.id)}
+                    style={{
+                      padding:"14px 12px", borderRadius:12,
+                      background: on ? "var(--accent-bg)" : "#fff",
+                      border: on ? "2px solid var(--accent)" : "1px solid var(--line)",
+                      textAlign:"left", cursor:"pointer",
+                      display:"flex", gap:10, alignItems:"center"
+                    }}>
+                    <div style={{width:28, height:28, borderRadius:8,
+                      background: on ? iss.color : "var(--bg-subtle)", color: on ? "#fff" : iss.color,
+                      display:"flex", alignItems:"center", justifyContent:"center", fontWeight:700}}>{iss.icon}</div>
+                    <div style={{fontSize:12, fontWeight:600, lineHeight:1.2}}>{iss.label}</div>
+                  </button>
+                );
+              })}
+            </div>
+
+            {photos.length > 0 && (
+              <div style={{marginBottom:10}}>
+                <PhotoStrip small />
+              </div>
+            )}
+
+            <div style={{flex:1}}/>
+
+            <div className="card" style={{padding:8, display:"flex", gap:6, alignItems:"center", borderRadius:24}}>
+              <button onClick={addPhoto}
+                style={{width:36, height:36, borderRadius:"50%", background:"var(--bg-subtle)", color:"var(--ink-secondary)",
+                  display:"flex", alignItems:"center", justifyContent:"center", border:"1px solid var(--line)", fontSize:18}}>
+                📷
+              </button>
+              <span className="muted" style={{fontSize:12, flex:1}}>Type or hold mic…</span>
+              <button
+                onMouseDown={() => setRecording(true)}
+                onMouseUp={() => setRecording(false)}
+                style={{width:36, height:36, borderRadius:"50%",
+                  background: recording ? "var(--cta)" : "var(--accent)",
+                  color:"#fff", display:"flex", alignItems:"center", justifyContent:"center", border:"none"}}>
+                <I.mic size={16}/>
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Submitted toast */}
+        {submitted && (
+          <div style={{position:"absolute", bottom:30, left:20, right:20,
+            background:"#ffffff", border:"1.5px solid var(--accent)", borderRadius:14, padding:14,
+            boxShadow:"0 10px 30px rgba(16,50,207,0.20)"}}>
+            <div style={{fontSize:13, fontWeight:600, color:"var(--ink-primary)"}}>Thanks — we're looking into it.</div>
+            <div className="muted" style={{fontSize:12, marginTop:4}}>3 similar reports this shift. Tap to see what we're checking.</div>
+          </div>
+        )}
+      </div>
+
+      {showAnno && (
+        <>
+          <Anno tag="F1 · No jargon" style={{left:30, top:80}}>
+            Zero instances of "AI", "LLM", "incident", "hypothesis", "8D", "agent", "initiative" on this screen. Only "what we noticed / we're checking".
+          </Anno>
+          <Anno tag="F2 · Issue tiles" style={{right:30, top:180, maxWidth:240}}>
+            Square rounded tiles with colored glyphs. One tap picks a category; selected tile gets blue ring + filled glyph. Multi-select disabled — keep it one-thumb.
+          </Anno>
+          <Anno tag="F3 · Photo capture" style={{right:30, top:360, maxWidth:240}}>
+            Dashed blue "+" tile opens camera / file picker. Captured photos stack as thumbnails; tap × to remove. Voice note sits alongside — a report can be tile-only, photo-only, voice-only, or any combination.
+          </Anno>
+          <Anno tag="F4 · Re-entry" style={{right:30, bottom:80, maxWidth:240}}>
+            After submission the toast shows "N similar reports" — the one moment the foreman sees the signal is being correlated with others.
+          </Anno>
+        </>
+      )}
+    </div>
+  );
+}
+window.FloorScreen = FloorScreen;
