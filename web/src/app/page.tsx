@@ -1,5 +1,5 @@
-import { redirect } from "next/navigation";
+import { PrototypeLandingScreen } from "@/components/prototype/landing-inbox-screens";
 
-export default function Home() {
-  redirect("/inbox");
+export default function HomePage() {
+  return <PrototypeLandingScreen />;
 }
