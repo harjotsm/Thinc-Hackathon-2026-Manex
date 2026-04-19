@@ -1,4 +1,5 @@
 import { headers } from "next/headers";
+import { Inbox as InboxIcon } from "lucide-react";
 import { themesResponseSchema } from "@/server/schemas/theme";
 import { FilterStrip } from "@/components/themes/filter-strip";
 import { ThemeInbox } from "@/components/themes/theme-inbox";
@@ -34,50 +35,32 @@ export default async function InboxPage({
   const data = await fetchThemes(params);
 
   return (
-    <div style={{ background: "var(--bg, #fafbfc)", minHeight: "100vh" }}>
-      <header
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 16,
-          padding: "14px 24px",
-          borderBottom: "1px solid #f1f5f9",
-          background: "white",
-        }}
-      >
-        <span style={{ fontWeight: 600, color: "#0f172a", fontSize: 14 }}>Inbox</span>
-        <span style={{ color: "#64748b", fontSize: 12 }}>
-          {data.themes.length} themes · window {data.window_days}d · last sync{" "}
-          {new Date(data.generated_at).toLocaleTimeString()}
-        </span>
-        <div
-          style={{
-            flex: 1,
-            maxWidth: 380,
-            margin: "0 auto",
-            background: "#f8fafc",
-            border: "1px solid #e2e8f0",
-            borderRadius: 6,
-            padding: "6px 12px",
-            fontSize: 12,
-            color: "#94a3b8",
-          }}
-        >
-          ⌘K Search themes, incidents, lessons…
+    <div className="min-h-screen">
+      <header className="bg-card border-b border-border">
+        <div className="px-6 py-4 flex items-baseline gap-3">
+          <h1 className="text-lg font-semibold tracking-tight text-foreground">
+            Inbox
+          </h1>
+          <p className="text-xs text-muted-foreground">
+            {data.themes.length} theme{data.themes.length === 1 ? "" : "s"} ·
+            window {data.window_days}d · last sync{" "}
+            {new Date(data.generated_at).toLocaleTimeString([], {
+              hour: "2-digit",
+              minute: "2-digit",
+            })}
+          </p>
         </div>
       </header>
       <FilterStrip />
       {data.themes.length === 0 ? (
-        <div
-          style={{
-            margin: "60px auto",
-            maxWidth: 360,
-            textAlign: "center",
-            color: "#64748b",
-            fontSize: 13,
-          }}
-        >
-          All clear — no open themes in the last {data.window_days}d.
+        <div className="flex flex-col items-center justify-center py-24 text-center">
+          <div className="mb-3 flex size-12 items-center justify-center rounded-full bg-muted text-muted-foreground">
+            <InboxIcon size={20} />
+          </div>
+          <p className="text-sm font-medium text-foreground">All clear</p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            No open themes in the last {data.window_days} days.
+          </p>
         </div>
       ) : (
         <ThemeInbox themes={data.themes} />

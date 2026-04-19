@@ -1,6 +1,7 @@
+import { AlertCircle } from "lucide-react";
 import { getIncidents } from "@/server/incidents/loaders";
 import { IncidentsFilterStrip } from "@/components/incidents/incidents-filter-strip";
-import { IncidentRow } from "@/components/incidents/incident-row";
+import { IncidentsTable } from "@/components/incidents/incidents-table";
 import { ThemeBreadcrumb } from "@/components/incidents/theme-breadcrumb";
 
 export const revalidate = 30;
@@ -33,51 +34,42 @@ export default async function IncidentsPage({
   });
 
   const themeParam = typeof sp.theme === "string" ? sp.theme : null;
+  const lastSync = new Date().toLocaleTimeString([], {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 
   return (
-    <div style={{ background: "var(--bg, #fafbfc)", minHeight: "100vh" }}>
-      <header
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 16,
-          padding: "14px 24px",
-          borderBottom: "1px solid #f1f5f9",
-          background: "white",
-        }}
-      >
-        <span style={{ fontWeight: 600, color: "#0f172a", fontSize: 14 }}>
-          Incidents
-        </span>
-        <span style={{ color: "#64748b", fontSize: 12 }}>
-          {incidents.length} incidents · last sync{" "}
-          {new Date().toLocaleTimeString()}
-        </span>
+    <div className="min-h-screen">
+      <header className="bg-card border-b border-border">
+        <div className="px-6 py-4 flex items-baseline gap-3">
+          <h1 className="text-lg font-semibold tracking-tight text-foreground">
+            Incidents
+          </h1>
+          <p className="text-xs text-muted-foreground">
+            {incidents.length} incident{incidents.length === 1 ? "" : "s"} ·
+            last sync {lastSync}
+          </p>
+        </div>
       </header>
 
       <IncidentsFilterStrip />
 
       {themeParam ? <ThemeBreadcrumb signature={themeParam} /> : null}
 
-      <div style={{ padding: "20px 24px" }}>
-        {incidents.length === 0 ? (
-          <div
-            style={{
-              margin: "60px auto",
-              maxWidth: 360,
-              textAlign: "center",
-              color: "#64748b",
-              fontSize: 13,
-            }}
-          >
-            No incidents match the current filter.
+      {incidents.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-24 text-center">
+          <div className="mb-3 flex size-12 items-center justify-center rounded-full bg-muted text-muted-foreground">
+            <AlertCircle size={20} />
           </div>
-        ) : (
-          incidents.map((i) => (
-            <IncidentRow key={i.incident_id} incident={i} />
-          ))
-        )}
-      </div>
+          <p className="text-sm font-medium text-foreground">No incidents</p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            No incidents match the current filter.
+          </p>
+        </div>
+      ) : (
+        <IncidentsTable incidents={incidents} />
+      )}
     </div>
   );
 }

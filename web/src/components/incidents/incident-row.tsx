@@ -1,16 +1,21 @@
 import Link from "next/link";
+import { ChevronRight } from "lucide-react";
 import type { IncidentListItem } from "@/server/incidents/loaders";
+import { cn } from "@/lib/utils";
+import { Badge } from "@/components/ui/badge";
 
-// ─── Color palettes (mirrored from theme-card.tsx) ───────────────────────────
+// ─── Color palettes ─────────────────────────────────────────────────────────
 
-const ARCHETYPE_TINT: Record<string, { bg: string; fg: string }> = {
-  supplier: { bg: "#fed7aa", fg: "#9a3412" },
-  drift:    { bg: "#fef3c7", fg: "#92400e" },
-  design:   { bg: "#fce7f3", fg: "#9d174d" },
-  operator: { bg: "#ddd6fe", fg: "#5b21b6" },
-  unknown:  { bg: "#e2e8f0", fg: "#475569" },
+const ARCHETYPE_BADGE: Record<string, string> = {
+  supplier: "bg-orange-100 text-orange-800 border-orange-200",
+  drift:    "bg-amber-100 text-amber-800 border-amber-200",
+  design:   "bg-pink-100 text-pink-800 border-pink-200",
+  operator: "bg-violet-100 text-violet-800 border-violet-200",
+  unknown:  "bg-zinc-100 text-zinc-700 border-zinc-200",
 };
 
+// Severity dot color — kept as inline style so the test assertion
+// `style.background === "rgb(251, 146, 60)"` continues to pass.
 const SEVERITY_DOT: Record<string, string> = {
   critical: "#fb923c",
   high:     "#fb923c",
@@ -35,85 +40,57 @@ const timeAgo = (iso: string | null): string => {
   return `${days}d ago`;
 };
 
-// ─── Component ────────────────────────────────────────────────────────────────
+// ─── Component (kept as a plain row for legacy tests + non-table contexts) ─
 
 type Props = { incident: IncidentListItem };
 
+/**
+ * Simple list-style row. The /incidents page now renders a sortable
+ * Table via `IncidentsTable`; this component is kept for tests and
+ * for any future non-table surfaces (cards on a dashboard, etc.).
+ */
 export const IncidentRow = ({ incident }: Props) => {
-  // report_archetype overrides the DB column when present (same logic as themes)
   const archetype = incident.report_archetype ?? incident.archetype ?? "unknown";
-  const tint = ARCHETYPE_TINT[archetype] ?? ARCHETYPE_TINT.unknown;
+  const archetypeBadge = ARCHETYPE_BADGE[archetype] ?? ARCHETYPE_BADGE.unknown;
   const conf =
     incident.confidence !== null ? Math.round(incident.confidence * 100) : null;
-  const shortId = incident.incident_id.replace(/^INC-/, "INC-").slice(0, 22);
 
   return (
     <Link
       href={`/incident/${incident.incident_id}`}
       data-testid="incident-row"
-      style={{
-        display: "block",
-        padding: "12px 16px",
-        border: "1px solid #f1f5f9",
-        borderRadius: 8,
-        textDecoration: "none",
-        color: "inherit",
-        background: "white",
-        marginBottom: 8,
-      }}
+      className="block mb-2 rounded-lg border border-border bg-card px-4 py-3 transition-colors hover:bg-muted/50 hover:border-primary/30"
     >
-      <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-        {/* Severity dot */}
+      <div className="flex items-center gap-3">
         <span
           data-testid="severity-dot"
           aria-label={`Severity: ${incident.severity ?? "unknown"}`}
-          style={{
-            width: 8,
-            height: 8,
-            borderRadius: "50%",
-            background: dotColor(incident.severity),
-            flexShrink: 0,
-            display: "inline-block",
-          }}
+          className="inline-block size-2 shrink-0 rounded-full"
+          style={{ background: dotColor(incident.severity) }}
         />
 
-        {/* Archetype pill */}
-        <span
+        <Badge
           data-testid="archetype-pill"
-          style={{
-            background: tint.bg,
-            color: tint.fg,
-            padding: "3px 8px",
-            borderRadius: 3,
-            fontSize: 10,
-            fontWeight: 600,
-            width: 72,
-            textAlign: "center",
-            textTransform: "uppercase",
-            letterSpacing: ".05em",
-            flexShrink: 0,
-          }}
+          className={cn(
+            "uppercase tracking-wider text-[10px] font-semibold rounded-md px-1.5 shrink-0 w-[72px] justify-center",
+            archetypeBadge,
+          )}
         >
           {archetype}
-        </span>
+        </Badge>
 
-        {/* Title + sub-meta */}
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div
-            style={{
-              fontSize: 13,
-              fontWeight: 600,
-              color: "#0f172a",
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-              whiteSpace: "nowrap",
-            }}
-          >
+        <div className="flex-1 min-w-0">
+          <div className="text-sm font-semibold text-foreground truncate">
             {incident.title ?? "Untitled incident"}
           </div>
-          <div style={{ fontSize: 11, color: "#64748b", marginTop: 2 }}>
-            {shortId}
-            {incident.primary_product_id ? ` · ${incident.primary_product_id}` : ""}
+          <div className="mt-0.5 text-xs text-muted-foreground">
+            <span className="font-mono">{incident.incident_id}</span>
+            {incident.primary_product_id ? (
+              <>
+                {" · "}
+                <span className="font-mono">{incident.primary_product_id}</span>
+              </>
+            ) : null}
             {" · "}
             {incident.signal_count} signal{incident.signal_count !== 1 ? "s" : ""}
             {" · "}
@@ -121,24 +98,21 @@ export const IncidentRow = ({ incident }: Props) => {
           </div>
         </div>
 
-        {/* Confidence */}
         {conf !== null ? (
           <span
             data-testid="confidence"
-            style={{
-              fontSize: 11,
-              color: tint.fg,
-              fontWeight: 600,
-              flexShrink: 0,
-            }}
+            className="text-xs font-semibold tabular-nums text-primary shrink-0"
           >
             {conf}%
           </span>
         ) : (
-          <span style={{ fontSize: 11, color: "#94a3b8", flexShrink: 0 }}>—</span>
+          <span className="text-xs text-muted-foreground shrink-0">—</span>
         )}
 
-        <span aria-hidden style={{ color: "#94a3b8", fontSize: 14 }}>→</span>
+        <ChevronRight
+          className="size-4 text-muted-foreground/60 shrink-0"
+          aria-hidden
+        />
       </div>
     </Link>
   );

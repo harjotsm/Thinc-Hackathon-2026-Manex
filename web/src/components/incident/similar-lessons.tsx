@@ -1,4 +1,8 @@
 import Link from "next/link";
+import { TrendingDown, TrendingUp, Minus } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 
 export type LessonView = {
   lesson_id: string;
@@ -24,15 +28,28 @@ const trendGlyph = (trend: LessonView["trend"]): string => {
   }
 };
 
-const trendColor = (trend: LessonView["trend"]): string => {
-  // For lessons, "down" recurrence is GOOD (color green); "up" is BAD (red).
+const TrendIcon = ({ trend }: { trend: LessonView["trend"] }) => {
+  switch (trend) {
+    case "up":
+      return <TrendingUp className="size-3" aria-hidden />;
+    case "down":
+      return <TrendingDown className="size-3" aria-hidden />;
+    case "flat":
+      return <Minus className="size-3" aria-hidden />;
+    default:
+      return null;
+  }
+};
+
+// For lessons, "down" recurrence is GOOD (color green); "up" is BAD.
+const trendClass = (trend: LessonView["trend"]): string => {
   switch (trend) {
     case "down":
-      return "var(--sev-low, #2f8a6f)";
+      return "text-emerald-700";
     case "up":
-      return "var(--sev-high, #d97236)";
+      return "text-orange-700";
     default:
-      return "var(--ink-muted, #64748b)";
+      return "text-muted-foreground";
   }
 };
 
@@ -42,120 +59,52 @@ export function SimilarLessons({ lessons }: Props) {
   }
 
   return (
-    <section data-testid="similar-lessons" style={{ marginTop: 18 }}>
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 10,
-          marginBottom: 10,
-          flexWrap: "wrap",
-        }}
-      >
-        <span
-          className="eyebrow"
-          style={{
-            fontSize: 10,
-            letterSpacing: "0.08em",
-            textTransform: "uppercase",
-            fontWeight: 600,
-            color: "var(--ink-muted, #64748b)",
-          }}
-        >
-          Similar past lessons ({lessons.length})
-        </span>
+    <section data-testid="similar-lessons">
+      <div className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground mb-3">
+        Similar past lessons ({lessons.length})
       </div>
 
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-          gap: 10,
-        }}
-      >
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2.5">
         {lessons.slice(0, 3).map((l) => (
           <Link
             key={l.lesson_id}
             href={`/lessons?id=${encodeURIComponent(l.lesson_id)}`}
             data-testid={`lesson-card-${l.lesson_id}`}
-            style={{
-              padding: "12px 14px",
-              border: "1px solid var(--line, #e2e8f0)",
-              borderRadius: 8,
-              background: "var(--bg-surface, white)",
-              textDecoration: "none",
-              color: "inherit",
-              display: "flex",
-              flexDirection: "column",
-              gap: 6,
-            }}
+            className="block group"
           >
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 6,
-              }}
-            >
-              <span
-                className="mono"
-                style={{
-                  fontSize: 10,
-                  color: "var(--accent, #639fc4)",
-                  fontWeight: 600,
-                }}
-              >
-                {l.lesson_id}
-              </span>
-              <div className="spacer" style={{ flex: 1 }} />
-              <span
-                className="chip sev-low"
-                style={{
-                  background: "rgba(95,194,163,0.10)",
-                  color: "var(--sev-low, #2f8a6f)",
-                  borderColor: "rgba(95,194,163,0.25)",
-                  padding: "2px 7px",
-                  borderRadius: 4,
-                  fontSize: 10,
-                  fontWeight: 600,
-                  textTransform: "uppercase",
-                  letterSpacing: "0.04em",
-                }}
-              >
-                resolved
-              </span>
-            </div>
-            <div
-              style={{
-                fontSize: 12.5,
-                fontWeight: 500,
-                lineHeight: 1.35,
-                color: "var(--ink-primary, #0f172a)",
-                overflowWrap: "anywhere",
-              }}
-            >
-              {l.signature}
-            </div>
-            <div
-              className="muted tt"
-              style={{
-                fontSize: 11,
-                color: "var(--ink-muted, #64748b)",
-                display: "flex",
-                alignItems: "center",
-                gap: 6,
-              }}
-            >
-              <span>Applied {l.applied_count}×</span>
-              {l.trend ? (
-                <>
-                  <span style={{ color: "var(--ink-muted, #cbd5e1)" }}>·</span>
-                  <span style={{ color: trendColor(l.trend), fontWeight: 600 }}>
-                    {trendGlyph(l.trend)} recurrence
-                  </span>
-                </>
-              ) : null}
-            </div>
+            <Card size="sm" className="transition-colors hover:border-primary/30 hover:bg-muted/40 h-full">
+              <CardHeader className="pb-0 flex flex-row items-center gap-2">
+                <span className="font-mono text-[10px] font-semibold text-primary">
+                  {l.lesson_id}
+                </span>
+                <div className="flex-1" />
+                <Badge className="bg-emerald-100 text-emerald-800 border-emerald-200 uppercase tracking-wider text-[9px] font-semibold rounded-md px-1.5">
+                  resolved
+                </Badge>
+              </CardHeader>
+              <CardContent className="flex flex-col gap-1.5">
+                <div className="text-xs font-medium text-foreground leading-snug break-words">
+                  {l.signature}
+                </div>
+                <div className="text-[11px] text-muted-foreground flex items-center gap-1.5">
+                  <span>Applied {l.applied_count}×</span>
+                  {l.trend ? (
+                    <>
+                      <span className="text-muted-foreground/40">·</span>
+                      <span
+                        className={cn(
+                          "inline-flex items-center gap-0.5 font-semibold",
+                          trendClass(l.trend),
+                        )}
+                      >
+                        <TrendIcon trend={l.trend} />
+                        <span>{trendGlyph(l.trend)} recurrence</span>
+                      </span>
+                    </>
+                  ) : null}
+                </div>
+              </CardContent>
+            </Card>
           </Link>
         ))}
       </div>

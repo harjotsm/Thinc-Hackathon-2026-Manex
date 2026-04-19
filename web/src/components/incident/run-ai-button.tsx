@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { Loader2, RotateCw } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 type State = "idle" | "dispatching" | "done" | "error";
 
@@ -50,12 +52,13 @@ export function RunAiButton({ incidentId }: { incidentId: string }) {
         ? "Dispatched ✓"
         : state === "error"
           ? "Error — retry?"
-          : "Run AI ↻";
+          : "Run AI";
 
   return (
-    <button
-      className="btn ghost sm"
+    <Button
       type="button"
+      variant="outline"
+      size="sm"
       title={
         state === "error" && errorMsg
           ? errorMsg
@@ -66,24 +69,11 @@ export function RunAiButton({ incidentId }: { incidentId: string }) {
       aria-busy={state === "dispatching"}
     >
       {state === "dispatching" ? (
-        <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
-          <span
-            aria-hidden
-            style={{
-              display: "inline-block",
-              width: 10,
-              height: 10,
-              border: "2px solid currentColor",
-              borderTopColor: "transparent",
-              borderRadius: "50%",
-              animation: "spin 0.7s linear infinite",
-            }}
-          />
-          {label}
-        </span>
+        <Loader2 className="size-3.5 animate-spin" aria-hidden />
       ) : (
-        label
+        <RotateCw className="size-3.5" aria-hidden />
       )}
-    </button>
+      {label}
+    </Button>
   );
 }

@@ -2,7 +2,13 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { RotateCw } from "lucide-react";
 import type { InitiativeRow } from "@/server/schemas/initiative";
+import { cn } from "@/lib/utils";
+import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 
 // ─── Column config ────────────────────────────────────────────────────────────
 
@@ -22,13 +28,13 @@ type ColumnId =
   | "reopen"
   | "rejected";
 
-const COLUMNS: { id: ColumnId; label: string }[] = [
-  { id: "proposed", label: "Proposed" },
-  { id: "approved", label: "Approved" },
-  { id: "in_progress", label: "In Progress" },
-  { id: "blocked", label: "Blocked" },
-  { id: "verifying", label: "Verifying" },
-  { id: "done", label: "Done" },
+const COLUMNS: { id: ColumnId; label: string; tint?: string }[] = [
+  { id: "proposed",    label: "Proposed",    tint: "text-primary" },
+  { id: "approved",    label: "Approved",    tint: "text-blue-700" },
+  { id: "in_progress", label: "In Progress", tint: "text-amber-700" },
+  { id: "blocked",     label: "Blocked",     tint: "text-orange-700" },
+  { id: "verifying",   label: "Verifying",   tint: "text-violet-700" },
+  { id: "done",        label: "Done",        tint: "text-emerald-700" },
 ];
 
 const SYSTEM_LABEL: Record<string, string> = {
@@ -40,21 +46,21 @@ const SYSTEM_LABEL: Record<string, string> = {
   manex: "Manex",
 };
 
-const SYSTEM_COLOR: Record<string, { bg: string; fg: string }> = {
-  MES: { bg: "#dbeafe", fg: "#1e40af" },
-  SRM: { bg: "#fed7aa", fg: "#9a3412" },
-  JIRA: { bg: "#ede9fe", fg: "#6d28d9" },
-  ERP: { bg: "#d1fae5", fg: "#065f46" },
-  CRM: { bg: "#fce7f3", fg: "#9d174d" },
-  Manex: { bg: "#f1f5f9", fg: "#475569" },
+const SYSTEM_BADGE: Record<string, string> = {
+  MES:   "bg-blue-100 text-blue-800 border-blue-200",
+  SRM:   "bg-orange-100 text-orange-800 border-orange-200",
+  JIRA:  "bg-violet-100 text-violet-800 border-violet-200",
+  ERP:   "bg-emerald-100 text-emerald-800 border-emerald-200",
+  CRM:   "bg-pink-100 text-pink-800 border-pink-200",
+  Manex: "bg-zinc-100 text-zinc-700 border-zinc-200",
 };
 
-const DOMAIN_TINT: Record<string, { bg: string; fg: string }> = {
-  production: { bg: "#dbeafe", fg: "#1e40af" },
-  supplier: { bg: "#fed7aa", fg: "#9a3412" },
-  rnd: { bg: "#fce7f3", fg: "#9d174d" },
-  logistics: { bg: "#d1fae5", fg: "#065f46" },
-  customer_response: { bg: "#ede9fe", fg: "#6d28d9" },
+const DOMAIN_BADGE: Record<string, string> = {
+  production:        "bg-blue-100 text-blue-800 border-blue-200",
+  supplier:          "bg-orange-100 text-orange-800 border-orange-200",
+  rnd:               "bg-pink-100 text-pink-800 border-pink-200",
+  logistics:         "bg-emerald-100 text-emerald-800 border-emerald-200",
+  customer_response: "bg-violet-100 text-violet-800 border-violet-200",
 };
 
 function formatSystem(raw: string | null | undefined): string {
@@ -78,21 +84,21 @@ function formatDate(ts: string | null | undefined): string {
   }
 }
 
-// Derive a human-readable title from whatever fields are available.
-// The initiative table has no `comments` or `title` column directly —
-// the description lives in the linked product_action.comments.
-// We show: external_ref (PA-xxxxx) if present, else initiative_id.
 function initiativeLabel(row: InitiativeRow): string {
   const ref = (row as Record<string, unknown>).external_ref as string | null | undefined;
   if (ref) return ref;
   return row.initiative_id;
 }
 
-// Try created_ts (real DB column), fall back to created_at (schema field).
 function initiativeCreatedTs(row: InitiativeRow): string | null | undefined {
   const ts = (row as Record<string, unknown>).created_ts as string | null | undefined;
   if (ts) return ts;
   return row.created_at;
+}
+
+function ownerInitials(id: string | null | undefined): string {
+  if (!id) return "?";
+  return id.slice(0, 2).toUpperCase();
 }
 
 // ─── Refresh island (client) ──────────────────────────────────────────────────
@@ -100,22 +106,15 @@ function initiativeCreatedTs(row: InitiativeRow): string | null | undefined {
 function RefreshButton() {
   const router = useRouter();
   return (
-    <button
+    <Button
       type="button"
+      variant="outline"
+      size="sm"
       onClick={() => router.refresh()}
-      style={{
-        background: "none",
-        border: "1px solid var(--line, #e2e8f0)",
-        borderRadius: 6,
-        padding: "4px 10px",
-        fontSize: 11,
-        color: "var(--ink-muted, #64748b)",
-        cursor: "pointer",
-        fontWeight: 500,
-      }}
     >
+      <RotateCw className="size-3" />
       Refresh
-    </button>
+    </Button>
   );
 }
 
@@ -123,160 +122,78 @@ function RefreshButton() {
 
 function InitiativeCard({ initiative }: { initiative: InitiativeRow }) {
   const sys = formatSystem(initiative.target_system);
-  const sysColor = SYSTEM_COLOR[sys] ?? { bg: "#f1f5f9", fg: "#475569" };
-  const domainTint =
-    DOMAIN_TINT[initiative.agent_domain] ?? DOMAIN_TINT.production;
+  const sysBadge = SYSTEM_BADGE[sys] ?? SYSTEM_BADGE.Manex;
+  const domainBadge =
+    DOMAIN_BADGE[initiative.agent_domain] ?? DOMAIN_BADGE.production;
 
   return (
-    <div
+    <Card
       data-testid={`kanban-card-${initiative.initiative_id}`}
-      style={{
-        padding: "10px 12px",
-        marginBottom: 8,
-        background: "var(--bg-surface, white)",
-        border: "1px solid var(--line, #e2e8f0)",
-        borderRadius: 8,
-        display: "flex",
-        flexDirection: "column",
-        gap: 7,
-      }}
+      size="sm"
+      className="mb-2 transition-colors hover:border-primary/30"
     >
-      {/* Top row: initiative_id + incident link */}
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          gap: 6,
-        }}
-      >
-        <span
-          style={{
-            fontFamily: "monospace",
-            fontSize: 10,
-            color: "var(--ink-muted, #94a3b8)",
-            fontWeight: 500,
-            textTransform: "uppercase",
-          }}
-        >
+      <CardHeader className="flex flex-row items-center justify-between gap-2 pb-0">
+        <span className="font-mono text-[10px] font-medium uppercase text-muted-foreground">
           {initiative.initiative_id}
         </span>
         {initiative.incident_id && (
           <Link
             href={`/incident/${encodeURIComponent(initiative.incident_id)}`}
-            style={{
-              fontFamily: "monospace",
-              fontSize: 10,
-              color: "var(--accent, #639fc4)",
-              fontWeight: 600,
-              textDecoration: "none",
-              whiteSpace: "nowrap",
-            }}
+            className="font-mono text-[10px] font-semibold text-primary hover:underline whitespace-nowrap"
           >
-            &larr; {initiative.incident_id}
+            ← {initiative.incident_id}
           </Link>
         )}
-      </div>
+      </CardHeader>
 
-      {/* Label / description */}
-      <div
-        style={{
-          fontSize: 12,
-          fontWeight: 500,
-          lineHeight: 1.4,
-          color: "var(--ink-primary, #0f172a)",
-          overflowWrap: "anywhere",
-        }}
-      >
-        {initiative.agent_domain} → {formatSystem(initiative.target_system)}
-      </div>
-      <div
-        style={{
-          fontSize: 10,
-          fontFamily: "monospace",
-          color: "var(--ink-muted, #94a3b8)",
-        }}
-      >
-        {initiativeLabel(initiative)}
-      </div>
+      <CardContent className="flex flex-col gap-1.5">
+        <div className="text-xs font-medium leading-snug text-foreground break-words">
+          {initiative.agent_domain} → {formatSystem(initiative.target_system)}
+        </div>
+        <div className="text-[10px] font-mono text-muted-foreground">
+          {initiativeLabel(initiative)}
+        </div>
 
-      {/* Pills row: system + domain */}
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 6,
-          flexWrap: "wrap",
-        }}
-      >
-        <span
-          style={{
-            background: sysColor.bg,
-            color: sysColor.fg,
-            padding: "2px 6px",
-            borderRadius: 3,
-            fontSize: 9,
-            fontWeight: 700,
-            textTransform: "uppercase",
-            letterSpacing: "0.04em",
-          }}
-        >
-          {sys}
-        </span>
-        <span
-          style={{
-            background: domainTint.bg,
-            color: domainTint.fg,
-            padding: "2px 6px",
-            borderRadius: 3,
-            fontSize: 9,
-            fontWeight: 700,
-            textTransform: "uppercase",
-            letterSpacing: "0.04em",
-          }}
-        >
-          {initiative.agent_domain}
-        </span>
-      </div>
+        <div className="flex items-center gap-1.5 flex-wrap pt-1">
+          <Badge
+            className={cn(
+              "uppercase tracking-wider text-[9px] font-semibold rounded-md px-1.5",
+              sysBadge,
+            )}
+          >
+            {sys}
+          </Badge>
+          <Badge
+            className={cn(
+              "uppercase tracking-wider text-[9px] font-semibold rounded-md px-1.5",
+              domainBadge,
+            )}
+          >
+            {initiative.agent_domain}
+          </Badge>
+        </div>
+      </CardContent>
 
-      {/* Footer: owner + date */}
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          fontSize: 10,
-          color: "var(--ink-muted, #94a3b8)",
-          marginTop: 2,
-        }}
-      >
-        <span>
-          {initiative.owner_user_id ? (
-            <span
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                justifyContent: "center",
-                width: 18,
-                height: 18,
-                borderRadius: "50%",
-                background: "var(--bg-inset, #f1f5f9)",
-                fontSize: 8,
-                fontWeight: 700,
-                color: "var(--ink-secondary, #475569)",
-              }}
-            >
-              {initiative.owner_user_id.slice(0, 2).toUpperCase()}
+      <CardFooter className="px-3 py-2 flex items-center justify-between gap-2 bg-muted/30 border-t-border">
+        {initiative.owner_user_id ? (
+          <div className="flex items-center gap-1.5 min-w-0">
+            <Avatar size="sm" className="shrink-0 size-5">
+              <AvatarFallback className="text-[8px] font-bold bg-muted text-muted-foreground">
+                {ownerInitials(initiative.owner_user_id)}
+              </AvatarFallback>
+            </Avatar>
+            <span className="text-[10px] text-muted-foreground truncate">
+              {initiative.owner_user_id}
             </span>
-          ) : (
-            <span style={{ color: "var(--ink-muted, #94a3b8)" }}>unassigned</span>
-          )}
-        </span>
-        <span style={{ fontFamily: "monospace" }}>
+          </div>
+        ) : (
+          <span className="text-[10px] text-muted-foreground">unassigned</span>
+        )}
+        <span className="text-[10px] font-mono text-muted-foreground">
           {formatDate(initiativeCreatedTs(initiative))}
         </span>
-      </div>
-    </div>
+      </CardFooter>
+    </Card>
   );
 }
 
@@ -287,7 +204,6 @@ type Props = {
 };
 
 export function InitiativesKanban({ initiatives }: Props) {
-  // Group by status; statuses not in COLUMNS are shown in the closest matching column
   const byStatus = new Map<string, InitiativeRow[]>();
   for (const col of COLUMNS) {
     byStatus.set(col.id, []);
@@ -297,38 +213,21 @@ export function InitiativesKanban({ initiatives }: Props) {
     if (byStatus.has(status)) {
       byStatus.get(status)!.push(init);
     } else {
-      // Bucket unknown statuses into "proposed"
       byStatus.get("proposed")!.push(init);
     }
   }
 
   return (
     <div data-testid="initiatives-kanban">
-      {/* Toolbar */}
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "flex-end",
-          padding: "10px 24px 4px",
-        }}
-      >
+      <div className="flex items-center justify-end px-6 pt-3 pb-1">
         <RefreshButton />
       </div>
 
-      {/* Board */}
-      <div
-        style={{
-          padding: "8px 16px 24px",
-          overflowX: "auto",
-        }}
-      >
+      <div className="px-4 pb-6 overflow-x-auto">
         <div
+          className="grid gap-3"
           style={{
-            display: "grid",
             gridTemplateColumns: `repeat(${COLUMNS.length}, minmax(230px, 1fr))`,
-            gap: 10,
-            minWidth: 0,
           }}
         >
           {COLUMNS.map((col) => {
@@ -337,72 +236,28 @@ export function InitiativesKanban({ initiatives }: Props) {
               <div
                 key={col.id}
                 data-testid={`kanban-col-${col.id}`}
-                style={{ display: "flex", flexDirection: "column" }}
+                className="flex flex-col"
               >
-                {/* Column header */}
-                <div
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 8,
-                    padding: "6px 10px",
-                    justifyContent: "space-between",
-                  }}
-                >
+                <div className="flex items-center justify-between px-2.5 py-2">
                   <span
-                    style={{
-                      fontSize: 10,
-                      fontWeight: 700,
-                      textTransform: "uppercase",
-                      letterSpacing: "0.07em",
-                      color:
-                        col.id === "proposed"
-                          ? "var(--accent, #639fc4)"
-                          : "var(--ink-muted, #64748b)",
-                    }}
+                    className={cn(
+                      "text-[10px] font-bold uppercase tracking-wider",
+                      col.tint ?? "text-muted-foreground",
+                    )}
                   >
                     {col.label}
                   </span>
-                  <span
-                    style={{
-                      display: "inline-flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      minWidth: 18,
-                      height: 18,
-                      borderRadius: 9,
-                      background: "var(--bg-inset, #f1f5f9)",
-                      fontSize: 10,
-                      fontWeight: 600,
-                      color: "var(--ink-secondary, #475569)",
-                      padding: "0 4px",
-                    }}
+                  <Badge
+                    variant="secondary"
+                    className="text-[10px] font-semibold tabular-nums h-5 min-w-5 justify-center px-1.5"
                   >
                     {cards.length}
-                  </span>
+                  </Badge>
                 </div>
 
-                {/* Column body */}
-                <div
-                  style={{
-                    flex: 1,
-                    background: "var(--bg-subtle, #f8fafc)",
-                    borderRadius: 8,
-                    padding: 8,
-                    border: "1px solid var(--line, #e2e8f0)",
-                    minHeight: 80,
-                  }}
-                >
+                <div className="flex-1 rounded-lg bg-muted/40 border border-border p-2 min-h-[80px]">
                   {cards.length === 0 ? (
-                    <p
-                      style={{
-                        margin: 0,
-                        padding: "12px 6px",
-                        fontSize: 11,
-                        color: "var(--ink-muted, #94a3b8)",
-                        textAlign: "center",
-                      }}
-                    >
+                    <p className="m-0 px-1.5 py-3 text-center text-[11px] text-muted-foreground">
                       No initiatives in this status.
                     </p>
                   ) : (

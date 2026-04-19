@@ -2,7 +2,19 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
+import { Send, Sparkles } from "lucide-react";
 import type { ReportInitiative } from "@/server/incident/loaders";
+import { cn } from "@/lib/utils";
+import {
+  Card,
+  CardContent,
+  CardFooter,
+  CardHeader,
+} from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Separator } from "@/components/ui/separator";
 
 type Props = {
   initiatives: ReportInitiative[];
@@ -12,10 +24,12 @@ type Props = {
 
 type DispatchState = "idle" | "dispatching" | "done" | "error";
 
-const DOMAIN_TINT: Record<string, { bg: string; fg: string }> = {
-  production: { bg: "#dbeafe", fg: "#1e40af" },
-  supplier: { bg: "#fed7aa", fg: "#9a3412" },
-  rnd: { bg: "#fce7f3", fg: "#9d174d" },
+const DOMAIN_BADGE: Record<string, string> = {
+  production:        "bg-blue-100 text-blue-800 border-blue-200",
+  supplier:          "bg-orange-100 text-orange-800 border-orange-200",
+  rnd:               "bg-pink-100 text-pink-800 border-pink-200",
+  logistics:         "bg-emerald-100 text-emerald-800 border-emerald-200",
+  customer_response: "bg-violet-100 text-violet-800 border-violet-200",
 };
 
 const SYSTEM_LABEL: Record<string, string> = {
@@ -37,8 +51,6 @@ const formatTarget = (target: string): string => {
 
 /** Map a ReportInitiative to the body expected by POST /api/initiative/approve */
 export function buildApprovePayload(init: ReportInitiative, incidentId: string, productId?: string | null) {
-  // Derive agent_domain: must be one of the agentDomainEnum values
-  // (production | supplier | rnd | logistics | customer_response)
   const domainMap: Record<string, string> = {
     production: "production",
     supplier: "supplier",
@@ -49,18 +61,11 @@ export function buildApprovePayload(init: ReportInitiative, incidentId: string, 
   const agent_domain =
     domainMap[(init.domain ?? "").toLowerCase()] ?? "production";
 
-  // Closure predicate must match legacyClosurePredicateSchema:
-  //   { type: "no_defect_code_in_window" | "manual_confirmation", params: {...} }
-  // Orchestrator output already conforms (see propose.ts ClosurePredicateSchema).
-  // If a draft initiative is missing one entirely, fall back to a manual gate
-  // so dispatch never fails on a missing field.
   const closure_predicate = init.closure_predicate ?? {
     type: "manual_confirmation" as const,
     params: {},
   };
 
-  // target_system is a free-form string downstream; orchestrator emits lowercase
-  // ("srm","mes","jira",…). Default to "mes" so the field is never empty.
   const target_system =
     typeof init.target_system === "string" && init.target_system.trim().length > 0
       ? init.target_system
@@ -72,13 +77,17 @@ export function buildApprovePayload(init: ReportInitiative, incidentId: string, 
     target_system,
     comments: init.rationale,
     closure_predicate,
-    // DB check constraint allows: draft|approved|dispatched|failed|done|cancelled|
-    // reopen|rejected|in_progress|closed (NOT "proposed"). Approving from the
-    // canvas means the user has accepted the draft, so "approved" is correct.
     status: "approved" as const,
     ...(productId && { product_id: productId }),
   };
 }
+
+const ownerInitials = (name: string): string => {
+  const parts = name.split(/[\s,·]+/).filter(Boolean);
+  if (parts.length === 0) return "?";
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + (parts[1]?.[0] ?? "")).toUpperCase();
+};
 
 export function InitiativesPreview({ initiatives, incidentId, productId }: Props) {
   const [approved, setApproved] = useState<Record<number, boolean>>(() =>
@@ -138,198 +147,88 @@ export function InitiativesPreview({ initiatives, incidentId, productId }: Props
 
   if (initiatives.length === 0) {
     return (
-      <section
-        data-testid="initiatives-preview-empty"
-        style={{
-          marginTop: 18,
-          padding: "20px 22px",
-          border: "1px dashed var(--line, #e2e8f0)",
-          borderRadius: 10,
-          background: "var(--bg-subtle, #f8fafc)",
-          textAlign: "center",
-        }}
-      >
-        <div
-          className="eyebrow"
-          style={{
-            fontSize: 10,
-            letterSpacing: "0.08em",
-            textTransform: "uppercase",
-            fontWeight: 600,
-            color: "var(--ink-muted, #94a3b8)",
-            marginBottom: 6,
-          }}
-        >
-          Suggested initiatives
-        </div>
-        <p
-          style={{
-            margin: 0,
-            fontSize: 13,
-            color: "var(--ink-muted, #64748b)",
-          }}
-        >
-          ✦ AI will propose initiatives once reasoning completes.
-        </p>
-      </section>
+      <Card data-testid="initiatives-preview-empty" size="sm">
+        <CardContent className="text-center py-6">
+          <div className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground mb-1.5">
+            Suggested initiatives
+          </div>
+          <p className="text-sm text-muted-foreground inline-flex items-center gap-1.5">
+            <Sparkles className="size-3.5 text-primary" aria-hidden />
+            AI will propose initiatives once reasoning completes.
+          </p>
+        </CardContent>
+      </Card>
     );
   }
 
   return (
-    <section
-      data-testid="initiatives-preview"
-      style={{ marginTop: 18 }}
-    >
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 10,
-          marginBottom: 10,
-          flexWrap: "wrap",
-        }}
-      >
-        <span
-          className="eyebrow"
-          style={{
-            fontSize: 10,
-            letterSpacing: "0.08em",
-            textTransform: "uppercase",
-            fontWeight: 700,
-            color: "var(--accent, #639fc4)",
-          }}
-        >
-          ✦ Suggested initiatives ({initiatives.length})
+    <section data-testid="initiatives-preview">
+      <div className="flex items-center gap-2 flex-wrap mb-3">
+        <span className="text-[10px] uppercase tracking-wider font-semibold text-primary inline-flex items-center gap-1.5">
+          <Sparkles className="size-3" aria-hidden />
+          Suggested initiatives ({initiatives.length})
         </span>
-        <span className="muted tt" style={{ fontSize: 11 }}>
-          approve to dispatch
-        </span>
+        <span className="text-xs text-muted-foreground">approve to dispatch</span>
       </div>
 
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
-          gap: 12,
-        }}
-      >
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
         {initiatives.map((init, i) => {
-          const tint = DOMAIN_TINT[init.domain] ?? DOMAIN_TINT.production;
+          const tint = DOMAIN_BADGE[init.domain] ?? DOMAIN_BADGE.production;
           const isApproved = approved[i] ?? false;
+          const target = formatTarget(init.target_system);
           return (
-            <div
+            <Card
               key={`${init.title}-${i}`}
               data-testid={`initiative-card-${i}`}
-              className="card"
-              style={{
-                padding: 14,
-                border: isApproved
-                  ? "1px solid var(--accent-ring, rgba(99,159,196,0.35))"
-                  : "1px solid var(--line, #e2e8f0)",
-                borderRadius: 10,
-                background: "var(--bg-surface, white)",
-                opacity: isApproved ? 1 : 0.65,
-                transition: "all 180ms",
-                display: "flex",
-                flexDirection: "column",
-                gap: 8,
-              }}
+              size="sm"
+              className={cn(
+                "transition-all duration-150 flex flex-col",
+                isApproved
+                  ? "ring-emerald-500/30 ring-2"
+                  : "opacity-65",
+              )}
             >
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 8,
-                  flexWrap: "wrap",
-                }}
-              >
-                <span
-                  style={{
-                    background: tint.bg,
-                    color: tint.fg,
-                    padding: "2px 7px",
-                    borderRadius: 3,
-                    fontSize: 9,
-                    fontWeight: 700,
-                    textTransform: "uppercase",
-                    letterSpacing: "0.05em",
-                  }}
+              <CardHeader className="pb-0 flex flex-row items-center gap-1.5 flex-wrap">
+                <Badge
+                  className={cn(
+                    "uppercase tracking-wider text-[9px] font-semibold rounded-md px-1.5",
+                    tint,
+                  )}
                 >
                   {init.domain}
-                </span>
-                <span
-                  className="mono tt"
-                  style={{
-                    fontSize: 10,
-                    color: "var(--ink-muted, #64748b)",
-                  }}
+                </Badge>
+                <Badge
+                  variant="outline"
+                  className="text-[9px] font-mono font-semibold uppercase tracking-wider px-1.5"
                 >
-                  → {formatTarget(init.target_system)}
-                </span>
-                <div className="spacer" style={{ flex: 1 }} />
-                <span
-                  className="mono"
-                  style={{
-                    fontSize: 11,
-                    color: "var(--accent, #639fc4)",
-                    fontWeight: 600,
-                  }}
-                >
+                  → {target}
+                </Badge>
+                <div className="flex-1" />
+                <span className="text-[11px] font-mono font-semibold text-primary tabular-nums">
                   {Math.round(init.confidence * 100)}%
                 </span>
-              </div>
+              </CardHeader>
 
-              <h4
-                style={{
-                  fontSize: 13,
-                  fontWeight: 600,
-                  lineHeight: 1.35,
-                  margin: 0,
-                  color: "var(--ink-primary, #0f172a)",
-                }}
-              >
-                {init.title}
-              </h4>
+              <CardContent className="flex-1 flex flex-col gap-2 pt-2">
+                <h4 className="text-sm font-semibold leading-snug text-foreground m-0">
+                  {init.title}
+                </h4>
+                <p className="text-xs text-muted-foreground leading-relaxed line-clamp-3 m-0">
+                  {init.rationale}
+                </p>
+              </CardContent>
 
-              <p
-                style={{
-                  fontSize: 11.5,
-                  color: "var(--ink-secondary, #475569)",
-                  lineHeight: 1.5,
-                  margin: 0,
-                  display: "-webkit-box",
-                  WebkitLineClamp: 3,
-                  WebkitBoxOrient: "vertical",
-                  overflow: "hidden",
-                }}
-              >
-                {init.rationale}
-              </p>
-
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 10,
-                  marginTop: 4,
-                  fontSize: 11,
-                  color: "var(--ink-muted, #64748b)",
-                }}
-              >
-                <span className="muted tt">owner</span>
-                <span style={{ color: "var(--ink-secondary, #334155)", fontWeight: 500 }}>
+              <CardFooter className="bg-muted/30 border-t-border flex items-center gap-2 px-3 py-2">
+                <Avatar size="sm">
+                  <AvatarFallback className="text-[9px] font-semibold bg-primary/10 text-primary">
+                    {ownerInitials(init.owner_hint)}
+                  </AvatarFallback>
+                </Avatar>
+                <span className="text-[11px] text-muted-foreground truncate">
                   {init.owner_hint}
                 </span>
-                <div className="spacer" style={{ flex: 1 }} />
-                <label
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 5,
-                    cursor: "pointer",
-                    fontSize: 11,
-                  }}
-                >
+                <div className="flex-1" />
+                <label className="flex items-center gap-1.5 cursor-pointer text-[11px] select-none">
                   <input
                     type="checkbox"
                     checked={isApproved}
@@ -337,76 +236,75 @@ export function InitiativesPreview({ initiatives, incidentId, productId }: Props
                       setApproved((cur) => ({ ...cur, [i]: e.target.checked }))
                     }
                     aria-label={`Approve initiative ${init.title}`}
+                    className="size-3.5 accent-emerald-600 cursor-pointer"
                   />
-                  <span style={{ color: isApproved ? "var(--accent, #639fc4)" : "var(--ink-muted, #94a3b8)", fontWeight: 600 }}>
+                  <span
+                    className={cn(
+                      "font-semibold",
+                      isApproved ? "text-emerald-700" : "text-muted-foreground",
+                    )}
+                  >
                     {isApproved ? "Approved" : "Skip"}
                   </span>
                 </label>
-              </div>
-            </div>
+              </CardFooter>
+            </Card>
           );
         })}
       </div>
 
-      <div
-        style={{
-          marginTop: 12,
-          display: "flex",
-          alignItems: "center",
-          gap: 12,
-          flexWrap: "wrap",
-        }}
-      >
-        <span className="muted tt" style={{ fontSize: 11 }}>
+      <div className="mt-4 flex items-center gap-3 flex-wrap">
+        <span className="text-xs text-muted-foreground">
           {approvedCount} of {initiatives.length} approved
         </span>
 
-        {/* Dispatch success state */}
         {dispatchState === "done" && (
           <span
             data-testid="dispatch-success"
-            style={{ fontSize: 12, color: "#16a34a", fontWeight: 600 }}
+            className="text-xs font-semibold text-emerald-700"
           >
             ✓ {createdCount} initiative{createdCount === 1 ? "" : "s"} created
           </span>
         )}
 
-        {/* Dispatch error state */}
         {dispatchState === "error" && dispatchError && (
-          <span
-            data-testid="dispatch-error"
-            style={{ fontSize: 11, color: "#dc2626" }}
-          >
+          <span data-testid="dispatch-error" className="text-xs text-destructive">
             {dispatchError}
           </span>
         )}
 
-        <div className="spacer" style={{ flex: 1 }} />
+        <Separator orientation="vertical" className="h-4 hidden md:block" />
 
-        {/* View kanban link — shown after success */}
+        <div className="flex-1" />
+
         {dispatchState === "done" ? (
-          <Link
-            href={`/initiatives?incident=${encodeURIComponent(incidentId)}`}
-            className="btn ghost sm"
-            style={{ textDecoration: "none" }}
+          <Button
+            variant="ghost"
+            size="sm"
+            render={
+              <Link href={`/initiatives?incident=${encodeURIComponent(incidentId)}`} />
+            }
             data-testid="view-kanban-link"
           >
             View kanban →
-          </Link>
+          </Button>
         ) : (
-          <Link
-            href={`/initiatives?incident=${encodeURIComponent(incidentId)}`}
-            className="btn ghost sm"
-            style={{ textDecoration: "none" }}
+          <Button
+            variant="ghost"
+            size="sm"
+            render={
+              <Link href={`/initiatives?incident=${encodeURIComponent(incidentId)}`} />
+            }
           >
             Track in Kanban →
-          </Link>
+          </Button>
         )}
 
-        <button
+        <Button
           type="button"
           data-testid="dispatch-button"
-          className="btn primary sm"
+          variant="default"
+          size="sm"
           disabled={
             dispatchState === "dispatching" ||
             dispatchState === "done" ||
@@ -414,8 +312,8 @@ export function InitiativesPreview({ initiatives, incidentId, productId }: Props
           }
           aria-busy={dispatchState === "dispatching"}
           onClick={handleDispatch}
-          style={{ textDecoration: "none" }}
         >
+          <Send className="size-3" />
           {dispatchState === "dispatching"
             ? "Dispatching…"
             : dispatchState === "done"
@@ -423,7 +321,7 @@ export function InitiativesPreview({ initiatives, incidentId, productId }: Props
               : dispatchState === "error"
                 ? "Retry dispatch"
                 : `Dispatch selected (${approvedCount})`}
-        </button>
+        </Button>
       </div>
     </section>
   );

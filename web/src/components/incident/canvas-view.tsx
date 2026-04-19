@@ -1,6 +1,8 @@
 "use client";
 
+import Link from "next/link";
 import { useMemo, useState } from "react";
+import { FileText } from "lucide-react";
 import type {
   ContributionRow,
   HypothesisView,
@@ -9,6 +11,7 @@ import type {
   ReportInitiative,
   SignalRow,
 } from "@/server/incident/loaders";
+import { Button } from "@/components/ui/button";
 import { CanvasHeader } from "./canvas-header";
 import { PrimaryHypothesisCard } from "./primary-hypothesis-card";
 import { AlternativeHypotheses } from "./alternative-hypotheses";
@@ -59,7 +62,6 @@ export function CanvasView({
   lessons,
   composedAt,
 }: Props) {
-  // Default primary = the first hypothesis (rank 1).
   const [primaryId, setPrimaryId] = useState<string>(hypotheses[0]?.id ?? "");
 
   const primary = useMemo(
@@ -72,13 +74,12 @@ export function CanvasView({
     [signals, contributions, composedAt],
   );
 
-  // "Real" contributions = source !== "system" (or any human-authored)
   const realContribs = contributions.filter(
     (c) => c.source && c.source !== "system" && c.status !== "dismissed",
   );
 
   return (
-    <div data-testid="canvas-view" style={{ display: "flex", flexDirection: "column" }}>
+    <div data-testid="canvas-view" className="flex flex-col">
       <CanvasHeader
         incident={incident}
         signalCount={signals.length}
@@ -87,14 +88,12 @@ export function CanvasView({
         hasPrimaryHypothesis={!!primary}
         hasEvidenceTrail={(primary?.supportingEvidence.length ?? 0) > 0}
         hasRealContributions={realContribs.length > 0}
-        // We don't track per-initiative dispatch state on canvas; treat as
-        // pending until the Initiatives kanban is consulted.
         hasDispatchedInitiative={false}
         archetype={archetype}
         lastActivityAt={lastActivity}
       />
 
-      <div style={{ padding: "20px 24px", maxWidth: 1100, margin: "0 auto", width: "100%" }}>
+      <div className="px-6 py-6 max-w-[1100px] mx-auto w-full space-y-5">
         {primary ? (
           <PrimaryHypothesisCard
             hypothesis={primary}
@@ -104,18 +103,10 @@ export function CanvasView({
         ) : (
           <div
             data-testid="no-hypothesis"
-            style={{
-              padding: "20px 22px",
-              border: "1px dashed var(--line, #e2e8f0)",
-              borderRadius: 10,
-              background: "var(--bg-subtle, #f8fafc)",
-              textAlign: "center",
-              color: "var(--ink-muted, #64748b)",
-              fontSize: 13,
-            }}
+            className="rounded-lg border border-dashed border-border bg-muted/30 px-6 py-6 text-center text-sm text-muted-foreground"
           >
             ✦ AI couldn&apos;t identify a primary root cause yet. Try{" "}
-            <span style={{ color: "var(--accent, #639fc4)", fontWeight: 600 }}>Run AI ↻</span> to
+            <span className="text-primary font-semibold">Run AI ↻</span> to
             re-investigate.
           </div>
         )}
@@ -139,30 +130,21 @@ export function CanvasView({
 
         <SimilarLessons lessons={lessons} />
 
-        <div
-          style={{
-            marginTop: 24,
-            paddingTop: 14,
-            borderTop: "1px solid var(--line, #e2e8f0)",
-            display: "flex",
-            alignItems: "center",
-            gap: 10,
-            flexWrap: "wrap",
-          }}
-        >
-          <span className="muted tt" style={{ fontSize: 11 }}>
+        <div className="pt-4 border-t border-border flex items-center gap-3 flex-wrap">
+          <span className="text-[11px] text-muted-foreground">
             {composedAt
               ? `AI report v${composedAt ? "current" : "?"} · composed ${new Date(composedAt).toLocaleString()}`
               : "AI report not yet composed"}
           </span>
-          <div className="spacer" style={{ flex: 1 }} />
-          <a
-            href={`/incident/${incident.incident_id}/8d`}
-            className="btn ghost sm"
-            style={{ textDecoration: "none" }}
+          <div className="flex-1" />
+          <Button
+            variant="ghost"
+            size="sm"
+            render={<Link href={`/incident/${incident.incident_id}/8d`} />}
           >
+            <FileText className="size-3.5" />
             View 8D report →
-          </a>
+          </Button>
         </div>
       </div>
     </div>

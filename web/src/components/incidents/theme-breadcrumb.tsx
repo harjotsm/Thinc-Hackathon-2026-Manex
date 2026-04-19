@@ -1,6 +1,8 @@
 "use client";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
+import { X } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 
 type Props = { signature: string };
 
@@ -18,33 +20,22 @@ export const ThemeBreadcrumb = ({ signature }: Props) => {
   return (
     <div
       data-testid="theme-breadcrumb"
-      style={{
-        display: "flex",
-        alignItems: "center",
-        gap: 8,
-        padding: "8px 24px",
-        background: "#eff6ff",
-        borderBottom: "1px solid #bfdbfe",
-        fontSize: 12,
-        color: "#1e40af",
-      }}
+      className="flex items-center gap-2 px-6 py-2 bg-primary/5 border-b border-primary/10"
     >
-      <span>Filtered by theme:</span>
-      <span style={{ fontWeight: 600 }}>{signature}</span>
-      <Link
-        href={clearHref}
-        style={{
-          marginLeft: 4,
-          color: "#1e40af",
-          textDecoration: "none",
-          fontWeight: 700,
-          fontSize: 14,
-          lineHeight: 1,
-        }}
-        aria-label="Clear theme filter"
+      <span className="text-xs text-muted-foreground">Filtered by theme:</span>
+      <Badge
+        variant="secondary"
+        className="text-xs font-mono font-semibold gap-1 pr-1"
       >
-        ×
-      </Link>
+        {signature}
+        <Link
+          href={clearHref}
+          aria-label="Clear theme filter"
+          className="inline-flex items-center justify-center size-4 rounded hover:bg-foreground/10 transition-colors"
+        >
+          <X className="size-3" />
+        </Link>
+      </Badge>
     </div>
   );
 };

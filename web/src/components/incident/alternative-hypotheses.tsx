@@ -1,7 +1,12 @@
 "use client";
 
 import { useState } from "react";
+import { Network } from "lucide-react";
 import type { HypothesisView } from "@/server/incident/loaders";
+import { cn } from "@/lib/utils";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { ExploreGraphDrawer } from "./explore-graph-drawer";
 
 type Props = {
@@ -11,19 +16,12 @@ type Props = {
   incidentId: string;
 };
 
-const archetypeColor = (label: string | null) => {
-  switch (label) {
-    case "Supplier":
-      return { bg: "#fed7aa", fg: "#9a3412" };
-    case "Process":
-      return { bg: "#fef3c7", fg: "#92400e" };
-    case "Design":
-      return { bg: "#fce7f3", fg: "#9d174d" };
-    case "Operator":
-      return { bg: "#ddd6fe", fg: "#5b21b6" };
-    default:
-      return { bg: "#e2e8f0", fg: "#475569" };
-  }
+const ARCHETYPE_BADGE: Record<string, string> = {
+  Supplier: "bg-orange-100 text-orange-800 border-orange-200",
+  Process:  "bg-amber-100 text-amber-800 border-amber-200",
+  Design:   "bg-pink-100 text-pink-800 border-pink-200",
+  Operator: "bg-violet-100 text-violet-800 border-violet-200",
+  Unknown:  "bg-zinc-100 text-zinc-700 border-zinc-200",
 };
 
 export function AlternativeHypotheses({
@@ -34,7 +32,6 @@ export function AlternativeHypotheses({
 }: Props) {
   const [drawerOpen, setDrawerOpen] = useState(false);
 
-  // Show alternates: everything except the primary.
   const alternates = hypotheses.filter((h) => h.id !== primaryId);
 
   if (alternates.length === 0) {
@@ -42,139 +39,68 @@ export function AlternativeHypotheses({
   }
 
   return (
-    <section
-      data-testid="alternative-hypotheses"
-      style={{
-        marginTop: 16,
-        padding: "12px 18px",
-        background: "var(--bg-subtle, #f8fafc)",
-        border: "1px solid var(--line, #e2e8f0)",
-        borderRadius: 10,
-      }}
-    >
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 10,
-          marginBottom: 10,
-          flexWrap: "wrap",
-        }}
-      >
-        <span
-          className="eyebrow"
-          style={{
-            fontSize: 10,
-            letterSpacing: "0.08em",
-            textTransform: "uppercase",
-            fontWeight: 600,
-            color: "var(--ink-muted, #64748b)",
-          }}
-        >
-          Alternative hypotheses ({alternates.length})
-        </span>
-        <span className="muted tt" style={{ fontSize: 11 }}>
-          click a chip to focus
-        </span>
-        <div className="spacer" style={{ flex: 1 }} />
-        <button
-          type="button"
+    <Card data-testid="alternative-hypotheses" size="sm">
+      <CardHeader className="flex flex-row items-center justify-between gap-3 pb-0">
+        <div>
+          <div className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground">
+            Alternative hypotheses ({alternates.length})
+          </div>
+          <p className="text-xs text-muted-foreground/70 mt-0.5">
+            Click a chip to focus
+          </p>
+        </div>
+        <Button
+          variant="ghost"
+          size="sm"
           onClick={() => setDrawerOpen(true)}
-          className="btn ghost sm"
           aria-label="Explore hypotheses as graph"
         >
-          Explore as graph ↗
-        </button>
-      </div>
-
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-        {alternates.map((h) => {
-          const conf = Math.round(h.confidence * 100);
-          const tint = archetypeColor(h.archetypeHint);
-          return (
-            <button
-              key={h.id}
-              type="button"
-              data-testid={`alternative-chip-${h.id}`}
-              onClick={() => onSelectPrimary(h.id)}
-              style={{
-                background: "var(--bg-surface, white)",
-                border: "1px solid var(--line, #e2e8f0)",
-                borderRadius: 8,
-                padding: "8px 12px",
-                cursor: "pointer",
-                opacity: 0.85,
-                display: "flex",
-                alignItems: "center",
-                gap: 10,
-                minWidth: 0,
-                maxWidth: 280,
-                fontSize: 12,
-                color: "var(--ink-secondary, #334155)",
-                transition: "opacity 150ms, border-color 150ms",
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.opacity = "1";
-                e.currentTarget.style.borderColor = "var(--accent-ring, rgba(99,159,196,0.35))";
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.opacity = "0.85";
-                e.currentTarget.style.borderColor = "var(--line, #e2e8f0)";
-              }}
-            >
-              {h.archetypeHint ? (
-                <span
-                  style={{
-                    background: tint.bg,
-                    color: tint.fg,
-                    fontSize: 9,
-                    fontWeight: 700,
-                    textTransform: "uppercase",
-                    letterSpacing: "0.04em",
-                    padding: "2px 6px",
-                    borderRadius: 3,
-                    flexShrink: 0,
-                  }}
-                >
-                  {h.archetypeHint}
+          <Network className="size-3.5" />
+          Explore as graph
+        </Button>
+      </CardHeader>
+      <CardContent>
+        <div className="flex gap-2 flex-wrap">
+          {alternates.map((h) => {
+            const conf = Math.round(h.confidence * 100);
+            const tint = ARCHETYPE_BADGE[h.archetypeHint ?? "Unknown"] ?? ARCHETYPE_BADGE.Unknown;
+            return (
+              <button
+                key={h.id}
+                type="button"
+                data-testid={`alternative-chip-${h.id}`}
+                onClick={() => onSelectPrimary(h.id)}
+                className="flex items-center gap-2 max-w-[280px] min-w-0 px-3 py-2 rounded-lg border border-border bg-card hover:border-primary/30 hover:bg-muted/40 transition-colors text-xs text-foreground/85"
+              >
+                {h.archetypeHint ? (
+                  <Badge
+                    className={cn(
+                      "uppercase tracking-wider text-[9px] font-semibold rounded-md px-1.5 shrink-0",
+                      tint,
+                    )}
+                  >
+                    {h.archetypeHint}
+                  </Badge>
+                ) : null}
+                <span className="truncate flex-1">{h.title}</span>
+                <span className="font-mono font-semibold text-muted-foreground shrink-0 text-[11px] tabular-nums">
+                  {conf}%
                 </span>
-              ) : null}
-              <span
-                style={{
-                  overflow: "hidden",
-                  textOverflow: "ellipsis",
-                  whiteSpace: "nowrap",
-                  flex: 1,
-                  minWidth: 0,
-                }}
-              >
-                {h.title}
-              </span>
-              <span
-                className="mono"
-                style={{
-                  fontSize: 11,
-                  fontWeight: 600,
-                  color: "var(--ink-muted, #64748b)",
-                  flexShrink: 0,
-                }}
-              >
-                {conf}%
-              </span>
-            </button>
-          );
-        })}
-      </div>
+              </button>
+            );
+          })}
+        </div>
 
-      {drawerOpen ? (
-        <ExploreGraphDrawer
-          hypotheses={hypotheses}
-          activeId={primaryId}
-          onSelect={(id) => onSelectPrimary(id)}
-          onClose={() => setDrawerOpen(false)}
-          incidentId={incidentId}
-        />
-      ) : null}
-    </section>
+        {drawerOpen ? (
+          <ExploreGraphDrawer
+            hypotheses={hypotheses}
+            activeId={primaryId}
+            onSelect={(id) => onSelectPrimary(id)}
+            onClose={() => setDrawerOpen(false)}
+            incidentId={incidentId}
+          />
+        ) : null}
+      </CardContent>
+    </Card>
   );
 }

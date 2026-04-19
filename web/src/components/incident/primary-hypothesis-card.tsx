@@ -1,41 +1,110 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { ChevronDown, ChevronUp, Sparkles, X } from "lucide-react";
 import type { HypothesisView } from "@/server/incident/loaders";
 import type { SignalRow } from "@/server/incident/loaders";
+import { cn } from "@/lib/utils";
+import { Card, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 
 type Props = {
   hypothesis: HypothesisView;
   problemStatement: string;
   signals: SignalRow[];
-  /**
-   * If true, the evidence trail starts open. Per spec: default open if there
-   * are >=3 supporting signals. The page composes this decision.
-   */
   defaultEvidenceOpen?: boolean;
 };
 
-const confidenceTint = (conf: number): { bg: string; fg: string; bar: string; label: string } => {
-  if (conf >= 0.8)
+type ConfidenceTier = {
+  ringClass: string;
+  textClass: string;
+  trackClass: string;
+  label: string;
+};
+
+const confidenceTier = (conf: number): ConfidenceTier => {
+  if (conf >= 0.8) {
     return {
-      bg: "rgba(95, 194, 163, 0.10)",
-      fg: "var(--sev-low, #2f8a6f)",
-      bar: "var(--sev-low, #2f8a6f)",
+      ringClass: "stroke-emerald-600",
+      textClass: "text-emerald-700",
+      trackClass: "stroke-emerald-100",
       label: "high confidence",
     };
-  if (conf >= 0.6)
+  }
+  if (conf >= 0.6) {
     return {
-      bg: "rgba(217, 164, 32, 0.10)",
-      fg: "#a17c16",
-      bar: "#d9a420",
+      ringClass: "stroke-amber-500",
+      textClass: "text-amber-700",
+      trackClass: "stroke-amber-100",
       label: "moderate confidence",
     };
+  }
   return {
-    bg: "var(--bg-inset, #f1f5f9)",
-    fg: "var(--ink-muted, #64748b)",
-    bar: "var(--ink-muted, #94a3b8)",
+    ringClass: "stroke-zinc-400",
+    textClass: "text-muted-foreground",
+    trackClass: "stroke-zinc-100",
     label: "low confidence",
   };
+};
+
+const ConfidenceRing = ({
+  pct,
+  tier,
+}: {
+  pct: number;
+  tier: ConfidenceTier;
+}) => {
+  const r = 28;
+  const c = 2 * Math.PI * r;
+  const dash = (pct / 100) * c;
+  return (
+    <div data-testid="confidence-badge" className="relative size-20 shrink-0">
+      <svg
+        viewBox="0 0 72 72"
+        className="size-20 -rotate-90"
+        aria-hidden
+      >
+        <circle
+          cx="36"
+          cy="36"
+          r={r}
+          fill="none"
+          strokeWidth={6}
+          className={tier.trackClass}
+        />
+        <circle
+          cx="36"
+          cy="36"
+          r={r}
+          fill="none"
+          strokeWidth={6}
+          strokeLinecap="round"
+          strokeDasharray={`${dash} ${c - dash}`}
+          className={tier.ringClass}
+        />
+      </svg>
+      <div className="absolute inset-0 flex flex-col items-center justify-center">
+        <span
+          className={cn(
+            "text-2xl font-semibold tracking-tight tabular-nums leading-none",
+            tier.textClass,
+          )}
+        >
+          {pct}
+        </span>
+        <span
+          className={cn(
+            "text-[9px] font-semibold uppercase tracking-wider mt-0.5",
+            tier.textClass,
+          )}
+        >
+          {/* % keeps the test assertion `getByText(/82/)` valid */}
+          %
+        </span>
+      </div>
+    </div>
+  );
 };
 
 export function PrimaryHypothesisCard({
@@ -49,10 +118,9 @@ export function PrimaryHypothesisCard({
   );
   const [drawerSignal, setDrawerSignal] = useState<string | null>(null);
 
-  const tint = confidenceTint(hypothesis.confidence);
-  const conf = Math.round(hypothesis.confidence * 100);
+  const tier = confidenceTier(hypothesis.confidence);
+  const pct = Math.round(hypothesis.confidence * 100);
 
-  // Map evidence ids to signals; only signals (SIG-) lookup, others render plain.
   const signalById = useMemo(() => {
     const m = new Map<string, SignalRow>();
     for (const s of signals) m.set(s.signal_id, s);
@@ -62,343 +130,182 @@ export function PrimaryHypothesisCard({
   const focused = drawerSignal ? signalById.get(drawerSignal) ?? null : null;
 
   return (
-    <div
+    <Card
       data-testid="primary-hypothesis-card"
-      className="card"
-      style={{
-        padding: "20px 22px",
-        border: "1.5px solid var(--accent-ring, rgba(99,159,196,0.35))",
-        borderRadius: 12,
-        background: "var(--bg-surface, white)",
-        boxShadow: "0 1px 0 rgba(15,23,42,0.04), 0 12px 28px -16px rgba(99,159,196,0.32)",
-        position: "relative",
-      }}
+      className="ring-primary/20 shadow-[0_4px_20px_-12px_rgb(99_103_241/0.25)]"
     >
-      <div style={{ display: "flex", alignItems: "flex-start", gap: 18, flexWrap: "wrap" }}>
-        {/* Big confidence badge */}
-        <div
-          data-testid="confidence-badge"
-          style={{
-            flexShrink: 0,
-            width: 96,
-            height: 96,
-            borderRadius: 12,
-            background: tint.bg,
-            display: "flex",
-            flexDirection: "column",
-            alignItems: "center",
-            justifyContent: "center",
-            border: `1.5px solid ${tint.fg}`,
-          }}
-        >
-          <span
-            style={{
-              fontSize: 32,
-              fontWeight: 700,
-              color: tint.fg,
-              letterSpacing: "-0.02em",
-              lineHeight: 1,
-            }}
-          >
-            {conf}
-            <span style={{ fontSize: 14, marginLeft: 1 }}>%</span>
-          </span>
-          <span
-            className="muted tt"
-            style={{
-              marginTop: 4,
-              color: tint.fg,
-              fontWeight: 600,
-              textTransform: "uppercase",
-              letterSpacing: "0.05em",
-              fontSize: 9,
-            }}
-          >
-            confidence
-          </span>
+      <CardContent className="px-6 pt-5 pb-5">
+        <div className="flex items-start gap-5 flex-wrap">
+          <ConfidenceRing pct={pct} tier={tier} />
+
+          <div className="flex-1 min-w-[260px]">
+            <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-primary">
+              <Sparkles className="size-3" aria-hidden />
+              <span>Primary hypothesis</span>
+              {hypothesis.archetypeHint ? (
+                <>
+                  <span className="text-muted-foreground/40">·</span>
+                  <span className="text-muted-foreground normal-case font-medium tracking-normal text-xs">
+                    {hypothesis.archetypeHint}
+                  </span>
+                </>
+              ) : null}
+            </div>
+
+            <h2 className="mt-1.5 text-xl font-semibold tracking-tight text-foreground leading-snug">
+              {hypothesis.title}
+            </h2>
+
+            <p className="mt-2 text-sm text-muted-foreground leading-relaxed">
+              {problemStatement && problemStatement !== hypothesis.title
+                ? problemStatement
+                : hypothesis.oneLiner}
+            </p>
+
+            <div className="mt-3 flex items-center gap-3 flex-wrap text-xs">
+              <span
+                data-testid="evidence-count"
+                className={cn("font-mono font-semibold", tier.textClass)}
+              >
+                ✓ {hypothesis.supportingEvidence.length} supporting
+              </span>
+              <span className="font-mono text-muted-foreground">
+                ✗ {hypothesis.conflictingEvidence.length} conflicting
+              </span>
+              <span className="text-muted-foreground">{tier.label}</span>
+              <div className="flex-1" />
+              {hypothesis.supportingEvidence.length > 0 ? (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setTrailOpen((v) => !v)}
+                  aria-expanded={trailOpen}
+                  aria-controls="evidence-trail"
+                  className="h-7"
+                >
+                  {trailOpen ? (
+                    <>
+                      Hide evidence trail
+                      <ChevronUp className="size-3" />
+                    </>
+                  ) : (
+                    <>
+                      Show evidence trail
+                      <ChevronDown className="size-3" />
+                    </>
+                  )}
+                </Button>
+              ) : null}
+            </div>
+          </div>
         </div>
 
-        <div style={{ flex: "1 1 320px", minWidth: 240 }}>
+        {/* Evidence trail */}
+        {trailOpen && hypothesis.supportingEvidence.length > 0 ? (
           <div
-            className="eyebrow"
-            style={{
-              color: "var(--accent, #639fc4)",
-              fontSize: 10,
-              letterSpacing: "0.08em",
-              textTransform: "uppercase",
-              fontWeight: 700,
-            }}
+            id="evidence-trail"
+            data-testid="evidence-trail"
+            className="mt-5 pt-4 border-t border-border"
           >
-            ✦ Primary hypothesis
-            {hypothesis.archetypeHint ? (
-              <>
-                <span style={{ margin: "0 6px", color: "var(--ink-muted, #94a3b8)" }}>·</span>
-                <span style={{ color: "var(--ink-secondary, #475569)" }}>
-                  {hypothesis.archetypeHint}
+            <div className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground mb-2">
+              Evidence trail · {hypothesis.supportingEvidence.length} items
+            </div>
+            <ol className="flex flex-col gap-1.5 m-0 p-0 list-none">
+              {hypothesis.supportingEvidence.slice(0, 8).map((evId, i) => {
+                const sig = signalById.get(evId);
+                const isSignal = !!sig;
+                return (
+                  <li key={evId}>
+                    <button
+                      type="button"
+                      disabled={!isSignal}
+                      onClick={() => isSignal && setDrawerSignal(evId)}
+                      className={cn(
+                        "w-full text-left px-2.5 py-2 rounded-md border border-border bg-muted/30 flex items-center gap-2.5 text-xs text-foreground/80",
+                        isSignal && "hover:bg-muted/60 hover:border-primary/30 cursor-pointer transition-colors",
+                        !isSignal && "cursor-default",
+                      )}
+                    >
+                      <span className="font-mono font-semibold text-primary text-[10px] w-5 text-right shrink-0">
+                        {i + 1}.
+                      </span>
+                      <Badge
+                        variant="outline"
+                        className="font-mono text-[10px] font-medium px-1.5 py-0 h-5 shrink-0"
+                      >
+                        {evId}
+                      </Badge>
+                      {sig ? (
+                        <>
+                          <span className="text-muted-foreground/40">·</span>
+                          <span className="text-muted-foreground text-[11px] shrink-0">
+                            {sig.source_system ?? sig.signal_type ?? "—"}
+                          </span>
+                          <span className="text-muted-foreground/40">·</span>
+                          <span className="flex-1 truncate">
+                            {sig.text_payload ?? "(no payload)"}
+                          </span>
+                        </>
+                      ) : (
+                        <span className="text-muted-foreground/60">(reference)</span>
+                      )}
+                    </button>
+                  </li>
+                );
+              })}
+            </ol>
+            {hypothesis.supportingEvidence.length > 8 ? (
+              <div className="mt-2 text-[11px] text-muted-foreground/70">
+                and {hypothesis.supportingEvidence.length - 8} more →
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+
+        {/* Signal drawer */}
+        {focused ? (
+          <div
+            role="dialog"
+            aria-label={`Signal ${focused.signal_id}`}
+            onClick={() => setDrawerSignal(null)}
+            className="fixed inset-0 z-50 bg-foreground/40 flex justify-end"
+          >
+            <div
+              onClick={(e) => e.stopPropagation()}
+              className="w-[min(420px,100vw)] h-full bg-card border-l border-border p-6 overflow-auto shadow-xl"
+            >
+              <div className="flex items-center gap-2 mb-3">
+                <Badge
+                  variant="outline"
+                  className="font-mono text-[11px] font-semibold text-primary"
+                >
+                  {focused.signal_id}
+                </Badge>
+                <span className="text-xs text-muted-foreground">
+                  {focused.source_system ?? "—"} · {focused.signal_type ?? "—"}
                 </span>
-              </>
-            ) : null}
-          </div>
+                <div className="flex-1" />
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  onClick={() => setDrawerSignal(null)}
+                  aria-label="Close signal drawer"
+                >
+                  <X className="size-3.5" />
+                </Button>
+              </div>
 
-          <h2
-            style={{
-              fontSize: 18,
-              fontWeight: 600,
-              margin: "6px 0 8px",
-              lineHeight: 1.3,
-              color: "var(--ink-primary, #0f172a)",
-            }}
-          >
-            {hypothesis.title}
-          </h2>
+              <div className="text-xs text-muted-foreground font-mono mb-4">
+                {focused.captured_ts ?? "(no timestamp)"}
+              </div>
 
-          <p
-            style={{
-              fontSize: 13,
-              color: "var(--ink-secondary, #475569)",
-              lineHeight: 1.55,
-              margin: "0 0 10px",
-            }}
-          >
-            {problemStatement && problemStatement !== hypothesis.title
-              ? problemStatement
-              : hypothesis.oneLiner}
-          </p>
-
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 14,
-              marginTop: 6,
-              flexWrap: "wrap",
-            }}
-          >
-            <span
-              data-testid="evidence-count"
-              className="mono tt"
-              style={{ color: tint.fg, fontWeight: 600 }}
-            >
-              ✓ {hypothesis.supportingEvidence.length} supporting
-            </span>
-            <span className="mono tt muted">
-              ✗ {hypothesis.conflictingEvidence.length} conflicting
-            </span>
-            <span className="muted tt">{tint.label}</span>
-            <div className="spacer" style={{ flex: 1 }} />
-            {hypothesis.supportingEvidence.length > 0 ? (
-              <button
-                type="button"
-                onClick={() => setTrailOpen((v) => !v)}
-                className="btn ghost sm"
-                style={{ flexShrink: 0 }}
-                aria-expanded={trailOpen}
-                aria-controls="evidence-trail"
-              >
-                {trailOpen ? "Hide evidence trail ▴" : "Show evidence trail ▾"}
-              </button>
-            ) : null}
-          </div>
-        </div>
-      </div>
-
-      {/* Evidence trail */}
-      {trailOpen && hypothesis.supportingEvidence.length > 0 ? (
-        <div
-          id="evidence-trail"
-          data-testid="evidence-trail"
-          style={{
-            marginTop: 16,
-            paddingTop: 14,
-            borderTop: "1px solid var(--line, #e2e8f0)",
-          }}
-        >
-          <div
-            className="eyebrow"
-            style={{
-              fontSize: 10,
-              letterSpacing: "0.08em",
-              textTransform: "uppercase",
-              fontWeight: 600,
-              color: "var(--ink-muted, #64748b)",
-              marginBottom: 8,
-            }}
-          >
-            Evidence trail · {hypothesis.supportingEvidence.length} items
-          </div>
-          <ol
-            style={{
-              listStyle: "none",
-              padding: 0,
-              margin: 0,
-              display: "flex",
-              flexDirection: "column",
-              gap: 6,
-            }}
-          >
-            {hypothesis.supportingEvidence.slice(0, 8).map((evId, i) => {
-              const sig = signalById.get(evId);
-              const isSignal = !!sig;
-              return (
-                <li key={evId}>
-                  <button
-                    type="button"
-                    disabled={!isSignal}
-                    onClick={() => isSignal && setDrawerSignal(evId)}
-                    style={{
-                      width: "100%",
-                      textAlign: "left",
-                      padding: "8px 10px",
-                      borderRadius: 6,
-                      border: "1px solid var(--line, #e2e8f0)",
-                      background: "var(--bg-subtle, #f8fafc)",
-                      cursor: isSignal ? "pointer" : "default",
-                      display: "flex",
-                      gap: 10,
-                      alignItems: "center",
-                      fontSize: 12,
-                      color: "var(--ink-secondary, #334155)",
-                    }}
-                  >
-                    <span
-                      className="mono"
-                      style={{
-                        fontSize: 10,
-                        fontWeight: 600,
-                        color: "var(--accent, #639fc4)",
-                        flexShrink: 0,
-                        width: 18,
-                        textAlign: "right",
-                      }}
-                    >
-                      {i + 1}.
-                    </span>
-                    <span
-                      className="mono"
-                      style={{
-                        fontSize: 11,
-                        color: "var(--ink-muted, #64748b)",
-                        flexShrink: 0,
-                      }}
-                    >
-                      {evId}
-                    </span>
-                    {sig ? (
-                      <>
-                        <span style={{ color: "var(--ink-muted, #94a3b8)" }}>·</span>
-                        <span
-                          style={{
-                            color: "var(--ink-muted, #64748b)",
-                            fontSize: 11,
-                            flexShrink: 0,
-                          }}
-                        >
-                          {sig.source_system ?? sig.signal_type ?? "—"}
-                        </span>
-                        <span style={{ color: "var(--ink-muted, #94a3b8)" }}>·</span>
-                        <span
-                          style={{
-                            flex: 1,
-                            overflow: "hidden",
-                            textOverflow: "ellipsis",
-                            whiteSpace: "nowrap",
-                          }}
-                        >
-                          {sig.text_payload ?? "(no payload)"}
-                        </span>
-                        <span
-                          aria-hidden
-                          style={{ color: "var(--accent, #639fc4)", fontSize: 12 }}
-                        >
-                          →
-                        </span>
-                      </>
-                    ) : (
-                      <span style={{ color: "var(--ink-muted, #94a3b8)" }}>(reference)</span>
-                    )}
-                  </button>
-                </li>
-              );
-            })}
-          </ol>
-          {hypothesis.supportingEvidence.length > 8 ? (
-            <div
-              className="muted tt"
-              style={{ marginTop: 8, fontSize: 11, color: "var(--ink-muted, #94a3b8)" }}
-            >
-              and {hypothesis.supportingEvidence.length - 8} more →
-            </div>
-          ) : null}
-        </div>
-      ) : null}
-
-      {/* Signal drawer (inline overlay — no portals) */}
-      {focused ? (
-        <div
-          role="dialog"
-          aria-label={`Signal ${focused.signal_id}`}
-          onClick={() => setDrawerSignal(null)}
-          style={{
-            position: "fixed",
-            inset: 0,
-            background: "rgba(15, 23, 42, 0.35)",
-            zIndex: 50,
-            display: "flex",
-            justifyContent: "flex-end",
-          }}
-        >
-          <div
-            onClick={(e) => e.stopPropagation()}
-            style={{
-              width: "min(420px, 100vw)",
-              height: "100%",
-              background: "var(--bg-surface, white)",
-              borderLeft: "1px solid var(--line, #e2e8f0)",
-              padding: "20px 22px",
-              overflow: "auto",
-              boxShadow: "-8px 0 24px -12px rgba(15,23,42,0.18)",
-            }}
-          >
-            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
-              <span className="mono" style={{ fontSize: 11, color: "var(--accent, #639fc4)", fontWeight: 600 }}>
-                {focused.signal_id}
-              </span>
-              <span style={{ color: "var(--ink-muted, #94a3b8)" }}>·</span>
-              <span className="muted tt">
-                {focused.source_system ?? "—"} · {focused.signal_type ?? "—"}
-              </span>
-              <div className="spacer" style={{ flex: 1 }} />
-              <button
-                type="button"
-                onClick={() => setDrawerSignal(null)}
-                className="btn ghost sm"
-                aria-label="Close signal drawer"
-              >
-                ✕
-              </button>
-            </div>
-
-            <div className="muted tt mono" style={{ marginBottom: 14 }}>
-              {focused.captured_ts ?? "(no timestamp)"}
-            </div>
-
-            <div
-              style={{
-                fontSize: 13,
-                lineHeight: 1.55,
-                color: "var(--ink-primary, #0f172a)",
-                whiteSpace: "pre-wrap",
-                background: "var(--bg-subtle, #f8fafc)",
-                border: "1px solid var(--line, #e2e8f0)",
-                borderRadius: 8,
-                padding: 14,
-              }}
-            >
-              {focused.text_payload ?? "(empty payload)"}
+              <div className="text-sm text-foreground leading-relaxed whitespace-pre-wrap bg-muted/30 border border-border rounded-lg p-4">
+                {focused.text_payload ?? "(empty payload)"}
+              </div>
             </div>
           </div>
-        </div>
-      ) : null}
-    </div>
+        ) : null}
+      </CardContent>
+    </Card>
   );
 }

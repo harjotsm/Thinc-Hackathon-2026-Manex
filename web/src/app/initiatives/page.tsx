@@ -1,3 +1,5 @@
+import Link from "next/link";
+import { X } from "lucide-react";
 import { getInitiatives } from "@/server/initiatives/loaders";
 import { InitiativesKanban } from "@/components/initiatives/initiatives-kanban";
 
@@ -17,39 +19,26 @@ export default async function InitiativesPage({
   const initiatives = await getInitiatives({ incidentId });
 
   return (
-    <div style={{ background: "var(--bg, #fafbfc)", minHeight: "100vh" }}>
-      <header
-        style={{
-          padding: "14px 24px",
-          borderBottom: "1px solid #f1f5f9",
-          background: "white",
-          display: "flex",
-          alignItems: "center",
-          gap: 16,
-        }}
-      >
-        <span
-          style={{ fontWeight: 600, color: "#0f172a", fontSize: 14 }}
-        >
-          Initiatives
-        </span>
-        <span style={{ color: "#64748b", fontSize: 12 }}>
-          {initiatives.length} initiative{initiatives.length === 1 ? "" : "s"}
-          {incidentId ? ` for ${incidentId}` : ""}
-        </span>
-        {incidentId && (
-          <a
-            href="/initiatives"
-            style={{
-              fontSize: 11,
-              color: "var(--accent, #639fc4)",
-              textDecoration: "none",
-              fontWeight: 500,
-            }}
-          >
-            &times; clear filter
-          </a>
-        )}
+    <div className="min-h-screen">
+      <header className="bg-card border-b border-border">
+        <div className="px-6 py-4 flex items-baseline gap-3">
+          <h1 className="text-lg font-semibold tracking-tight text-foreground">
+            Initiatives
+          </h1>
+          <p className="text-xs text-muted-foreground">
+            {initiatives.length} initiative{initiatives.length === 1 ? "" : "s"}
+            {incidentId ? ` for ${incidentId}` : ""}
+          </p>
+          {incidentId && (
+            <Link
+              href="/initiatives"
+              className="inline-flex items-center gap-1 text-xs text-primary hover:underline font-medium"
+            >
+              <X className="size-3" />
+              Clear filter
+            </Link>
+          )}
+        </div>
       </header>
       <InitiativesKanban initiatives={initiatives} />
     </div>
