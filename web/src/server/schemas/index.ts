@@ -14,3 +14,4 @@ export * from "./closure";
 export * from "./action-templates";
 export * from "./api-responses";
 export * from "./orchestrator";
+export * from "./theme";

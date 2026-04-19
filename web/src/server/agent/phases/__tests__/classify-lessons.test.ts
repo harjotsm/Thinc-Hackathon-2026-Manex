@@ -220,6 +220,96 @@ describe("runClassify — lessons network effect", () => {
   });
 });
 
+describe("runClassify — signal_samples included in user content", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+
+    // Default Anthropic response used by all signal_samples tests
+    mockCreate.mockResolvedValue({
+      model: "claude-haiku-4-5-20251001",
+      content: [{ type: "text", text: JSON.stringify(FAKE_CLASSIFY_RESPONSE) }],
+      usage: { input_tokens: 150, output_tokens: 80 },
+    });
+
+    // Default invokeTool: lessons returns empty, contrib tools succeed
+    mockInvokeTool.mockImplementation(async (name: string) => ({
+      tool_call_id: `TC-${name}`,
+      tool: name,
+      summary: "ok",
+      data: name === "retrieve_lessons" ? [] : { ok: true },
+    }));
+  });
+
+  it("includes 'Recent signals (sampled):' section when signal_samples are provided", async () => {
+    const { runClassify } = await import("../classify");
+    const incidentWithSignals = {
+      ...FAKE_INCIDENT,
+      signal_samples: [
+        "batch SB-00007 cold solder on 100µF cap",
+        "ESR off-spec on CAP-100uF at incoming inspection",
+      ],
+    };
+
+    await runClassify("SES-SIGNAL-TEST", incidentWithSignals);
+
+    expect(mockCreate).toHaveBeenCalled();
+    const callArgs = mockCreate.mock.calls[0][0] as {
+      messages: Array<{ role: string; content: string }>;
+    };
+    const userMessage = callArgs.messages.find((m) => m.role === "user");
+    expect(userMessage?.content).toContain("Recent signals (sampled):");
+    expect(userMessage?.content).toContain("batch SB-00007 cold solder on 100µF cap");
+    expect(userMessage?.content).toContain("ESR off-spec on CAP-100uF at incoming inspection");
+  });
+
+  it("omits 'Recent signals (sampled):' section when signal_samples is empty", async () => {
+    const { runClassify } = await import("../classify");
+    const incidentNoSignals = { ...FAKE_INCIDENT, signal_samples: [] };
+
+    await runClassify("SES-NO-SIGNAL-TEST", incidentNoSignals);
+
+    expect(mockCreate).toHaveBeenCalled();
+    const callArgs = mockCreate.mock.calls[0][0] as {
+      messages: Array<{ role: string; content: string }>;
+    };
+    const userMessage = callArgs.messages.find((m) => m.role === "user");
+    expect(userMessage?.content).not.toContain("Recent signals (sampled):");
+  });
+
+  it("omits 'Recent signals (sampled):' section when signal_samples is absent", async () => {
+    const { runClassify } = await import("../classify");
+    // FAKE_INCIDENT has no signal_samples field at all
+    await runClassify("SES-ABSENT-SIGNAL-TEST", FAKE_INCIDENT);
+
+    expect(mockCreate).toHaveBeenCalled();
+    const callArgs = mockCreate.mock.calls[0][0] as {
+      messages: Array<{ role: string; content: string }>;
+    };
+    const userMessage = callArgs.messages.find((m) => m.role === "user");
+    expect(userMessage?.content).not.toContain("Recent signals (sampled):");
+  });
+
+  it("truncates signal samples at 280 characters", async () => {
+    const { runClassify } = await import("../classify");
+    const longText = "x".repeat(400);
+    const incidentLongSignal = {
+      ...FAKE_INCIDENT,
+      signal_samples: [longText],
+    };
+
+    await runClassify("SES-TRUNCATE-TEST", incidentLongSignal);
+
+    expect(mockCreate).toHaveBeenCalled();
+    const callArgs = mockCreate.mock.calls[0][0] as {
+      messages: Array<{ role: string; content: string }>;
+    };
+    const userMessage = callArgs.messages.find((m) => m.role === "user");
+    // The content should contain the truncated signal (280 x's), not the full 400
+    expect(userMessage?.content).toContain("x".repeat(280));
+    expect(userMessage?.content).not.toContain("x".repeat(281));
+  });
+});
+
 describe("parseClassifyOutput", () => {
   it("parses clean JSON", async () => {
     const { parseClassifyOutput } = await import("../classify");

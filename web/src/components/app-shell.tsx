@@ -3,106 +3,146 @@
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import {
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
+import {
+  AlertTriangle,
+  BookOpen,
+  Factory,
+  Inbox,
+  Layers,
+  ListChecks,
+  Plug,
+  Search,
+  Settings,
+  Wrench,
+} from "lucide-react";
 import { PROTOTYPE_DATA } from "@/lib/prototype-data";
+import { cn } from "@/lib/utils";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Skeleton } from "@/components/ui/skeleton";
 
 type NavItem = {
   href: string;
   label: string;
   section: "workspace" | "views" | "setup";
   icon: ReactNode;
-  badge?: string | number;
+  badge?: string | number | null;
   badgeHot?: boolean;
 };
+
+// ─── Live nav counts ──────────────────────────────────────────────────────────
+
+type LiveCounts = {
+  inbox: number | null;
+  incidents: number | null;
+  initiatives: number | null;
+};
+
+function useLiveNavCounts(): LiveCounts {
+  const [counts, setCounts] = useState<LiveCounts>({
+    inbox: null,
+    incidents: null,
+    initiatives: null,
+  });
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function fetchCounts() {
+      try {
+        const [themesRes, incidentsRes, initiativesRes] = await Promise.all([
+          fetch("/api/themes?lens=engineer&window=7d").then((r) =>
+            r.ok ? r.json() : null,
+          ),
+          fetch("/api/incidents?page_size=1").then((r) =>
+            r.ok ? r.json() : null,
+          ),
+          fetch("/api/initiatives?page_size=1").then((r) =>
+            r.ok ? r.json() : null,
+          ),
+        ]);
+
+        if (cancelled) return;
+
+        const inbox =
+          Array.isArray(themesRes?.themes)
+            ? (themesRes.themes as unknown[]).length
+            : null;
+        const incidents =
+          typeof incidentsRes?.pagination?.total === "number"
+            ? incidentsRes.pagination.total
+            : null;
+        const initiatives =
+          typeof initiativesRes?.pagination?.total === "number"
+            ? initiativesRes.pagination.total
+            : null;
+
+        setCounts({ inbox, incidents, initiatives });
+      } catch {
+        // silently keep showing Skeleton on any network error
+      }
+    }
+
+    void fetchCounts();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  return counts;
+}
+
+const ICON_SIZE = 16;
 
 const navItems: NavItem[] = [
   {
     href: "/inbox",
     label: "Inbox",
     section: "workspace",
-    badge: PROTOTYPE_DATA.counts.openIncidents,
     badgeHot: true,
-    icon: (
-      <path d="M4 6.5A1.5 1.5 0 0 1 5.5 5h13A1.5 1.5 0 0 1 20 6.5v11a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 17.5zm0 6.5h4l1.6 2h4.8L16 13h4" />
-    ),
+    icon: <Inbox size={ICON_SIZE} />,
   },
   {
-    href: "/incident/INC-00001",
+    href: "/incidents",
     label: "Incidents",
     section: "workspace",
-    badge: "127",
-    icon: (
-      <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0zM12 9v4M12 17h.01" />
-    ),
+    icon: <AlertTriangle size={ICON_SIZE} />,
   },
   {
     href: "/initiatives",
     label: "Initiatives",
     section: "workspace",
-    badge: PROTOTYPE_DATA.counts.activeInitiatives,
-    icon: (
-      <path d="M5 6h14M5 12h9M5 18h14M16 9l3 3-3 3" />
-    ),
+    icon: <ListChecks size={ICON_SIZE} />,
   },
   {
     href: "/lessons",
     label: "Lessons",
     section: "workspace",
-    icon: (
-      <>
-        <path d="M5 6.5A2.5 2.5 0 0 1 7.5 4H20v15.5A1.5 1.5 0 0 0 18.5 18H7.5A2.5 2.5 0 0 0 5 20.5z" />
-        <path d="M8 8h7M8 11h9M8 14h8" />
-      </>
-    ),
+    icon: <BookOpen size={ICON_SIZE} />,
   },
-  {
-    href: "/leadership",
-    label: "Leadership",
-    section: "views",
-    icon: (
-      <>
-        <path d="M5 19V9M12 19V5M19 19v-8" />
-        <path d="M4 19h16" />
-      </>
-    ),
-  },
-  {
-    href: "/floor",
-    label: "Floor",
-    section: "views",
-    icon: (
-      <>
-        <rect x="8" y="3.5" width="8" height="17" rx="2.5" />
-        <path d="M10.5 6.5h3M11.5 17.5h1" />
-      </>
-    ),
-  },
+  // Leadership / Floor live in the top-right lens switcher only — duplicating
+  // them in the sidebar makes the lens concept feel redundant.
   {
     href: "/connectors",
     label: "Connectors",
     section: "setup",
     badge: "12",
-    icon: (
-      <path d="M8 7V5a2 2 0 1 1 4 0v2m0 10v2a2 2 0 1 0 4 0v-2M6 7h8v4H6zm4 6h8v4h-8z" />
-    ),
+    icon: <Plug size={ICON_SIZE} />,
   },
   {
     href: "/settings",
     label: "Settings",
     section: "setup",
-    icon: (
-      <path d="m12 4 1.1 2.4 2.6.4-1.9 1.8.5 2.6L12 10l-2.3 1.2.5-2.6-1.9-1.8 2.6-.4zm0 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8Z" />
-    ),
+    icon: <Settings size={ICON_SIZE} />,
   },
 ];
-
-function AppIcon({ children }: { children: ReactNode }) {
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden="true" className="nav-icon-svg">
-      {children}
-    </svg>
-  );
-}
 
 function routeMeta(pathname: string) {
   if (pathname.startsWith("/investigate/")) {
@@ -165,6 +205,12 @@ function routeMeta(pathname: string) {
       subtitle: "Report unusual behavior on the line",
       lens: "Floor",
     },
+    "/incidents": {
+      crumbs: ["Engineer Lens", "Incidents"],
+      title: "Incident list",
+      subtitle: "All active and recent incidents",
+      lens: "Engineer",
+    },
     "/initiatives": {
       crumbs: ["Engineer Lens", "Initiatives"],
       title: "Initiative tracker",
@@ -203,8 +249,31 @@ function routeMeta(pathname: string) {
 
 function isActive(pathname: string, href: string) {
   if (href === "/inbox") return pathname === "/inbox" || pathname.startsWith("/investigate/");
-  if (href === "/incident/INC-00001") return pathname.startsWith("/incident/");
+  if (href === "/incidents") return pathname === "/incidents" || pathname.startsWith("/incident/");
   return pathname === href || pathname.startsWith(`${href}/`);
+}
+
+function NavBadge({
+  count,
+  hot,
+}: {
+  count: number | string | null | undefined;
+  hot?: boolean;
+}) {
+  if (count === null) {
+    return <Skeleton className="ml-auto h-4 w-6 rounded-full" />;
+  }
+  if (count === undefined) return null;
+  return (
+    <Badge
+      variant={hot ? "default" : "secondary"}
+      className={cn(
+        "ml-auto h-5 text-[10px] font-semibold px-1.5",
+      )}
+    >
+      {count}
+    </Badge>
+  );
 }
 
 export function AppShell({ children }: { children: ReactNode }) {
@@ -215,6 +284,24 @@ export function AppShell({ children }: { children: ReactNode }) {
     return window.localStorage.getItem("resolve.nav.collapsed") === "true";
   });
   const meta = useMemo(() => routeMeta(pathname), [pathname]);
+  const liveCounts = useLiveNavCounts();
+
+  const resolvedNavItems = useMemo(
+    () =>
+      navItems.map((item) => {
+        if (item.href === "/inbox") {
+          return { ...item, badge: liveCounts.inbox };
+        }
+        if (item.href === "/incidents") {
+          return { ...item, badge: liveCounts.incidents };
+        }
+        if (item.href === "/initiatives") {
+          return { ...item, badge: liveCounts.initiatives };
+        }
+        return item;
+      }),
+    [liveCounts],
+  );
 
   useEffect(() => {
     window.localStorage.setItem("resolve.nav.collapsed", String(collapsed));
@@ -225,129 +312,206 @@ export function AppShell({ children }: { children: ReactNode }) {
   }
 
   return (
-    <div className={`app-shell${collapsed ? " nav-collapsed" : ""}`}>
-      <aside className={`nav${collapsed ? " collapsed" : ""}`}>
-        <Link href="/" className="nav-brand">
-          <Image src="/manex-mark.png" className="brand-mark" alt="Resolve by Manex" width={32} height={32} />
+    <div
+      className={cn(
+        "grid min-h-screen w-full bg-muted/40",
+        collapsed
+          ? "grid-cols-[56px_minmax(0,1fr)]"
+          : "grid-cols-[232px_minmax(0,1fr)]",
+      )}
+    >
+      <aside
+        className={cn(
+          "relative flex flex-col bg-card border-r border-border",
+          collapsed ? "px-1.5 py-3.5 items-center" : "px-2.5 py-3.5",
+        )}
+      >
+        <Link
+          href="/"
+          className={cn(
+            "flex items-center gap-2.5 pb-4 mb-2.5 border-b border-border",
+            collapsed ? "justify-center w-full" : "px-2",
+          )}
+        >
+          <Image
+            src="/manex-mark.png"
+            alt="Resolve by Manex"
+            width={28}
+            height={28}
+            className="shrink-0 object-contain"
+          />
           {!collapsed && (
-            <>
-              <div>
-                <div className="brand-name">Resolve</div>
-                <div className="brand-kicker">by Manex</div>
+            <div className="flex-1 min-w-0">
+              <div className="text-[15px] font-semibold tracking-tight leading-tight">
+                Resolve
               </div>
-              <div className="brand-sub">v0.1</div>
-            </>
+              <div className="text-[9px] uppercase tracking-widest text-muted-foreground font-semibold leading-tight">
+                by Manex
+              </div>
+            </div>
           )}
         </Link>
 
         <button
-          className="nav-collapse-btn"
           type="button"
-          onClick={() => setCollapsed((value) => !value)}
+          onClick={() => setCollapsed((v) => !v)}
           aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          className="absolute top-5 -right-3 flex size-6 items-center justify-center rounded-full bg-card border border-border text-muted-foreground hover:border-primary hover:text-primary shadow-sm transition-colors z-20"
         >
-          {collapsed ? "›" : "‹"}
+          <span className="leading-none text-sm">
+            {collapsed ? "›" : "‹"}
+          </span>
         </button>
 
-        {(["workspace", "views", "setup"] as const).map((section) => (
-          <div key={section}>
-            {!collapsed && (
-              <div className="nav-group">
-                {section === "workspace" ? "Workspace" : section === "views" ? "Views" : "Setup"}
-              </div>
-            )}
-            {collapsed && <div className="nav-sep" />}
-            {navItems
-              .filter((item) => item.section === section)
-              .map((item) => (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  className={`nav-item${isActive(pathname, item.href) ? " active" : ""}`}
-                  title={collapsed ? item.label : undefined}
-                >
-                  <span className="nav-icon">
-                    <AppIcon>{item.icon}</AppIcon>
-                  </span>
-                  {!collapsed && <span className="nav-label">{item.label}</span>}
-                  {!collapsed && item.badge != null && (
-                    <span className={`nav-badge${item.badgeHot ? " hot" : ""}`}>{item.badge}</span>
-                  )}
-                  {collapsed && item.badgeHot && item.badge != null ? <span className="nav-dot" /> : null}
-                </Link>
-              ))}
-          </div>
-        ))}
+        <nav className="flex flex-col gap-0.5 w-full">
+          {(["workspace", "setup"] as const).map((section) => {
+            const sectionItems = resolvedNavItems.filter(
+              (item) => item.section === section,
+            );
+            if (sectionItems.length === 0) return null;
+            return (
+            <div key={section} className={cn("flex flex-col gap-0.5", collapsed && "items-center")}>
+              {!collapsed && (
+                <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold px-2.5 pt-3.5 pb-1">
+                  {section === "workspace" ? "Workspace" : "Setup"}
+                </div>
+              )}
+              {collapsed && <div className="h-px w-6 bg-border my-2" />}
+              {sectionItems.map((item) => {
+                  const active = isActive(pathname, item.href);
+                  return (
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      title={collapsed ? item.label : undefined}
+                      className={cn(
+                        "relative flex items-center gap-2.5 rounded-md text-sm font-medium transition-colors",
+                        collapsed
+                          ? "size-10 justify-center"
+                          : "px-2.5 py-1.5",
+                        active
+                          ? "bg-primary/10 text-primary font-semibold"
+                          : "text-foreground/75 hover:bg-muted hover:text-foreground",
+                      )}
+                    >
+                      {active && !collapsed ? (
+                        <span
+                          aria-hidden
+                          className="absolute left-0 top-2 bottom-2 w-[3px] bg-primary rounded-full"
+                        />
+                      ) : null}
+                      <span
+                        className={cn(
+                          "shrink-0 flex items-center justify-center",
+                          active ? "text-primary" : "text-muted-foreground",
+                        )}
+                      >
+                        {item.icon}
+                      </span>
+                      {!collapsed && (
+                        <>
+                          <span className="flex-1 truncate">{item.label}</span>
+                          <NavBadge count={item.badge} hot={item.badgeHot} />
+                        </>
+                      )}
+                      {collapsed && item.badgeHot && item.badge != null ? (
+                        <span className="absolute top-1.5 right-1.5 size-1.5 rounded-full bg-primary ring-2 ring-card" />
+                      ) : null}
+                    </Link>
+                  );
+                })}
+            </div>
+            );
+          })}
+        </nav>
 
-        <div className="nav-foot">
-          <div className="user-chip">
-            <div className="avatar">{PROTOTYPE_DATA.user.initials}</div>
+        <div className="mt-auto pt-3 border-t border-border w-full">
+          <div
+            className={cn(
+              "flex items-center gap-2.5 px-2 py-1",
+              collapsed && "justify-center px-0",
+            )}
+          >
+            <Avatar size="sm" className="shrink-0">
+              <AvatarFallback className="text-[10px] font-semibold bg-primary/10 text-primary">
+                {PROTOTYPE_DATA.user.initials}
+              </AvatarFallback>
+            </Avatar>
             {!collapsed && (
-              <div style={{ lineHeight: 1.25 }}>
-                <div>{PROTOTYPE_DATA.user.name}</div>
-                <div className="muted tt">{PROTOTYPE_DATA.user.role} · {PROTOTYPE_DATA.user.plant}</div>
+              <div className="flex-1 min-w-0 leading-tight">
+                <div className="text-xs font-semibold truncate">
+                  {PROTOTYPE_DATA.user.name}
+                </div>
+                <div className="text-[10px] text-muted-foreground truncate">
+                  {PROTOTYPE_DATA.user.role} · {PROTOTYPE_DATA.user.plant}
+                </div>
               </div>
             )}
           </div>
         </div>
       </aside>
 
-      <div className="main-shell">
-        <div className="topbar">
-          <div className="bc">
+      <div className="flex flex-col min-w-0 min-h-screen">
+        <div className="bg-card border-b border-border flex items-center gap-3 px-5 min-h-[52px] flex-shrink-0">
+          <div className="text-xs text-muted-foreground flex items-center gap-1.5">
             {meta.crumbs.map((crumb, index) => (
-              <span key={`${crumb}-${index}`}>
-                {index > 0 ? <span style={{ margin: "0 6px" }}>/</span> : null}
-                {index === meta.crumbs.length - 1 ? <b>{crumb}</b> : crumb}
+              <span key={`${crumb}-${index}`} className="flex items-center gap-1.5">
+                {index > 0 ? <span className="text-muted-foreground/40">/</span> : null}
+                <span className={cn(index === meta.crumbs.length - 1 && "text-foreground font-semibold")}>
+                  {crumb}
+                </span>
               </span>
             ))}
           </div>
-          <div className="spacer" />
-          <div className="cmdk">
-            <span className="nav-icon">
-              <AppIcon>
-                <circle cx="11" cy="11" r="5.5" />
-                <path d="m15.5 15.5 4 4" />
-              </AppIcon>
-            </span>
-            <span>Search incidents, lessons, signals…</span>
-            <span className="kbd">⌘K</span>
+          <div className="flex-1" />
+          <div className="relative hidden lg:block">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground pointer-events-none" />
+            <Input
+              type="search"
+              placeholder="Search…"
+              className="h-8 w-48 xl:w-72 pl-8 pr-12 bg-muted/40 border-border text-xs"
+            />
+            <kbd className="absolute right-2 top-1/2 -translate-y-1/2 rounded border border-border bg-card px-1.5 py-0.5 text-[10px] font-mono font-medium text-muted-foreground">
+              ⌘K
+            </kbd>
           </div>
-          <div className="lens-switch" aria-label="Current lens">
-            {["Engineer", "Floor", "Leadership"].map((lens) => (
-              <button key={lens} className={meta.lens === lens ? "on" : ""} type="button">
-                <span className="licon">
-                  {lens === "Engineer" ? (
-                    <AppIcon>
-                      <>
-                        <path d="M5 19V9M12 19V5M19 19v-8" />
-                        <path d="M4 19h16" />
-                      </>
-                    </AppIcon>
-                  ) : lens === "Floor" ? (
-                    <AppIcon>
-                      <>
-                        <rect x="8" y="3.5" width="8" height="17" rx="2.5" />
-                        <path d="M10.5 6.5h3M11.5 17.5h1" />
-                      </>
-                    </AppIcon>
-                  ) : (
-                    <AppIcon>
-                      <>
-                        <path d="M4 18h16" />
-                        <path d="M6 15V9m6 6V6m6 9v-4" />
-                      </>
-                    </AppIcon>
+          <div
+            role="tablist"
+            aria-label="Current lens"
+            className="inline-flex items-center gap-0.5 p-0.5 bg-muted/60 border border-border rounded-md"
+          >
+            {(
+              [
+                { name: "Engineer", href: "/inbox" },
+                { name: "Floor", href: "/floor" },
+                { name: "Leadership", href: "/leadership" },
+              ] as const
+            ).map(({ name, href }) => {
+              const active = meta.lens === name;
+              const Icon =
+                name === "Engineer" ? Wrench : name === "Floor" ? Factory : Layers;
+              return (
+                <Link
+                  key={name}
+                  href={href}
+                  role="tab"
+                  aria-selected={active}
+                  className={cn(
+                    "inline-flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-semibold transition-colors",
+                    active
+                      ? "bg-primary text-primary-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-foreground",
                   )}
-                </span>
-                <span className="llabel">{lens}</span>
-              </button>
-            ))}
+                >
+                  <Icon size={12} />
+                  <span className="hidden xl:inline">{name}</span>
+                </Link>
+              );
+            })}
           </div>
-          <button className="btn ghost sm" type="button">Show notes</button>
         </div>
 
-        <div className="page-shell">
+        <div className="flex-1 overflow-auto relative bg-muted/30">
           {children}
         </div>
       </div>

@@ -15,6 +15,7 @@ export type IncidentSeed = {
   summary: string | null;
   primary_product_id: string | null;
   primary_part: string | null;
+  signal_samples?: string[]; // up to 8 short text excerpts from linked signals
 };
 
 const ClassifyOutputSchema = z.object({
@@ -84,7 +85,7 @@ export const runClassify = async (
   });
   const t0 = Date.now();
 
-  const userContent = [
+  let userContent = [
     `Incident to classify:`,
     ``,
     `Title: ${incident.title ?? "(none)"}`,
@@ -95,6 +96,12 @@ export const runClassify = async (
     `Return JSON only matching this shape:`,
     `{ "archetype": "supplier|drift|design|operator|unknown", "signature_text": "one-sentence canonical", "initial_hypotheses": ["...", "..."], "confidence": 0.75 }`,
   ].join("\n");
+
+  if (incident.signal_samples && incident.signal_samples.length > 0) {
+    userContent +=
+      `\n\nRecent signals (sampled):\n` +
+      incident.signal_samples.map((s, i) => `${i + 1}. ${s.slice(0, 280)}`).join("\n");
+  }
 
   const resp = await client.messages.create({
     model: "claude-haiku-4-5-20251001",

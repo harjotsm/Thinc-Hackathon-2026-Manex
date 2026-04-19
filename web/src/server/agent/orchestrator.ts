@@ -61,7 +61,35 @@ const loadIncidentSeed = async (incidentId: string): Promise<IncidentSeed> => {
     throw new Error(`Incident not found: ${error?.message ?? incidentId}`);
   }
 
-  return data as IncidentSeed;
+  // Pull up to 8 signal text samples for richer classification.
+  // Two-hop join mirrors the pattern in web/src/server/incident/loaders.ts.
+  const linkRes = await supabase
+    .from("incident_signal")
+    .select("signal_id")
+    .eq("incident_id", incidentId)
+    .limit(20);
+
+  const signalIds = ((linkRes.data ?? []) as { signal_id: string }[]).map(
+    (r) => r.signal_id,
+  );
+
+  let signalSamples: string[] = [];
+  if (signalIds.length > 0) {
+    const sigRes = await supabase
+      .from("signal")
+      .select("signal_id,raw_text,text_payload")
+      .in("signal_id", signalIds)
+      .limit(8);
+
+    signalSamples = ((sigRes.data ?? []) as { raw_text: string | null; text_payload: string | null }[])
+      .map((s) => (s.raw_text ?? s.text_payload ?? "").trim())
+      .filter((t) => t.length > 0);
+  }
+
+  return {
+    ...(data as Omit<IncidentSeed, "signal_samples">),
+    signal_samples: signalSamples,
+  };
 };
 
 // ─── Session-aware orchestrator ───────────────────────────────────────────────
@@ -137,6 +165,26 @@ export const runOrchestratorWithSession = async (
           } as unknown as Record<string, unknown>,
         })
         .eq("id", report_id);
+    }
+
+    // Write archetype back to incident so drilldown filters stay in sync.
+    // Non-fatal: a failure here must not abort the orchestrator result.
+    try {
+      const supabase = getSupabaseServerClient();
+      const { error: archetypeWriteErr } = await supabase
+        .from("incident")
+        .update({ archetype: classified.archetype })
+        .eq("incident_id", p.incident_id);
+      if (archetypeWriteErr) {
+        console.warn(
+          `[orchestrator] archetype writeback failed for ${p.incident_id}: ${archetypeWriteErr.message}`,
+        );
+      }
+    } catch (archetypeErr) {
+      console.warn(
+        `[orchestrator] archetype writeback threw for ${p.incident_id}:`,
+        archetypeErr,
+      );
     }
 
     await updateSessionStatus(p.session_id, {

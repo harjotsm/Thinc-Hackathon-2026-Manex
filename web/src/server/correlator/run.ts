@@ -1,5 +1,6 @@
 import { getSupabaseServerClient } from "@/lib/supabase-server";
 import { makeId } from "@/server/utils/id";
+import { maybeDispatchOrchestrator } from "@/server/agent/dispatch";
 
 type SignalRecord = {
   signal_id: string;
@@ -212,6 +213,25 @@ export const runCorrelator = async (): Promise<{ linkedSignals: number; incident
 
     linkedSignals += group.length;
     incidentIds.push(incidentId);
+
+    // Auto-dispatch the LLM orchestrator for each newly created incident.
+    // Non-blocking: maybeDispatchOrchestrator registers an after() callback so
+    // the correlator (and the enclosing HTTP response) is not delayed.
+    // Idempotent: the helper skips if a running or recent session already exists.
+    // Wrapped in try/catch so a dispatch failure never breaks the correlator.
+    try {
+      await maybeDispatchOrchestrator({
+        incidentId,
+        triggeredBy: "correlator",
+      });
+    } catch (dispatchErr) {
+      // Log but do not propagate — incident creation succeeded; orchestrator
+      // can be re-triggered manually or by the next intake call.
+      console.error(
+        `[correlator] failed to dispatch orchestrator for ${incidentId}:`,
+        dispatchErr,
+      );
+    }
   }
 
   return { linkedSignals, incidentIds };
