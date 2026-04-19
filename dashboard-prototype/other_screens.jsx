@@ -655,11 +655,20 @@ window.ConnectorsScreen = ConnectorsScreen;
 
 // ============ LEADERSHIP ============
 function LeadershipScreen() {
-  const { showAnno } = useApp();
+  const { showAnno, setRoute } = useApp();
   const [variant, setVariant] = React.useState(() => localStorage.getItem("lead.var") || "exec");
   React.useEffect(() => { localStorage.setItem("lead.var", variant); }, [variant]);
 
   const max = Math.max(...DATA.pareto.map(p => p.cost));
+
+  // Cross-screen drill-down — stash filter then route to inbox
+  const drillTo = (filter) => {
+    if (filter) localStorage.setItem("inbox.drillFilter", filter);
+    setRoute("inbox");
+  };
+
+  // € at risk hover state
+  const [hoverMetric, setHoverMetric] = React.useState(null);
 
   const Spark = ({data, color="var(--ink-muted)"}) => (
     <svg viewBox="0 0 80 22" preserveAspectRatio="none" style={{width:"100%", height:22}}>
@@ -706,56 +715,83 @@ function LeadershipScreen() {
           value={variant} onChange={setVariant}/>
       </div>
 
-      <div style={{flex:1, overflow:"auto", padding:18, position:"relative"}}>
+      <div className={"lead-body " + (variant === "dense" ? "lead-dense" : "")} style={{flex:1, overflow:"auto", padding: variant === "dense" ? 12 : 18, position:"relative"}}>
         {/* Top metrics with correct delta semantics (CC4) */}
-        <div className="panel" style={{display:"grid", gridTemplateColumns:"repeat(4, 1fr)", marginBottom:16}}>
+        <div className="panel" style={{display:"grid", gridTemplateColumns:"repeat(4, 1fr)", marginBottom: variant === "dense" ? 10 : 16}}>
           {[
             {label:"Open incidents", value:14, delta:"↑ 3 vs 7d", cls:"bad", data:[1,2,3,4,5,6,5,7], accent:true},
-            {label:"€ at risk", value:"€312k", delta:"↓ 8% vs 7d", cls:"good", data:[7,6,5,5,4,4,3,3]},
+            {label:"€ at risk", value:"€312k", delta:"↓ 8% vs 7d", cls:"good", data:[7,6,5,5,4,4,3,3], tip:"↓ €27k from SB-00007 containment\n↓ €11k from R33 thermal fix\n↓ €6k from solder paste lot recall"},
             {label:"Avg time-to-close", value:"3.4d", delta:"↓ 0.8d vs 30d", cls:"good", data:[5,5,4,4,3,3,3,3]},
             {label:"Claims avoided · Q2", value:"84", delta:"↑ 28 vs Q1", cls:"good", data:[3,4,5,5,6,7,8,9]},
           ].map((m,i) => (
-            <div key={i} className="metric" style={{borderRight: i<3 ? "1px solid var(--line)" : "none"}}>
-              <span className="label">{m.label}</span>
+            <div key={i} className="metric"
+              onMouseEnter={() => m.tip && setHoverMetric(i)}
+              onMouseLeave={() => setHoverMetric(null)}
+              style={{borderRight: i<3 ? "1px solid var(--line)" : "none", position:"relative", cursor: m.tip ? "help" : "default"}}>
+              <span className="label">{m.label}{m.tip && <span style={{marginLeft:6, fontSize:9, color:"var(--ink-muted)", verticalAlign:"middle"}}>ⓘ</span>}</span>
               <span className={"value " + (m.accent ? "accent" : "")}>{m.value}</span>
               <div className="row" style={{justifyContent:"space-between"}}>
                 <span className={"delta " + m.cls}>{m.delta}</span>
                 <Spark data={m.data} color={m.accent ? "var(--cta)" : "var(--ink-muted)"}/>
               </div>
+              {hoverMetric === i && m.tip && (
+                <div style={{position:"absolute", top:"100%", left:14, marginTop:6, zIndex:50,
+                  background:"var(--ink-primary)", color:"#fff", padding:"10px 12px", borderRadius:6,
+                  fontSize:11, lineHeight:1.5, whiteSpace:"pre-line", maxWidth:240,
+                  boxShadow:"0 8px 24px rgba(22,0,66,0.18)", pointerEvents:"none"}}>
+                  <div style={{fontWeight:600, marginBottom:4, opacity:0.7, fontSize:9, letterSpacing:"0.1em", textTransform:"uppercase"}}>Why it dropped</div>
+                  {m.tip}
+                </div>
+              )}
             </div>
           ))}
         </div>
 
         {/* Pareto + Plant heatmap */}
-        <div style={{display:"grid", gridTemplateColumns:"2fr 1fr", gap:16, marginBottom:16}}>
-          <div className="panel" style={{padding:18}}>
+        <div style={{display:"grid", gridTemplateColumns:"2fr 1fr", gap: variant === "dense" ? 10 : 16, marginBottom: variant === "dense" ? 10 : 16}}>
+          <div className="panel" style={{padding: variant === "dense" ? 12 : 18}}>
             <div className="eyebrow" style={{marginBottom:6}}>Incident Pareto · by cost impact</div>
             <div style={{fontSize:14, fontWeight:600, marginBottom:14}}>Top drivers, last 30 days</div>
-            {DATA.pareto.map((p,i) => (
-              <div key={p.code} className="row" style={{gap:10, marginBottom:8}}>
-                <span style={{width:200, fontSize:12, fontWeight: p.primary ? 600 : 500}}>{p.code}</span>
-                <div style={{flex:1, height:14, background:"var(--bg-inset)", borderRadius:3, overflow:"hidden"}}>
-                  <div style={{width: (p.cost / max * 100) + "%", height:"100%",
-                    background: p.primary ? "var(--cta)" : "#94A3B8"}}/>
+            {DATA.pareto.map((p,i) => {
+              // Extract first meaningful word as filter (e.g. "Cold solder — SB-00007" → "cold")
+              const filterTerm = p.code.split(/[\s—]/)[0];
+              return (
+                <div key={p.code} className="row pareto-row" onClick={() => drillTo(filterTerm)}
+                  style={{gap:10, marginBottom:8, cursor:"pointer", padding:"3px 6px", margin:"0 -6px 5px", borderRadius:4,
+                    transition:"background 120ms"}}
+                  onMouseEnter={e => e.currentTarget.style.background = "var(--bg-subtle)"}
+                  onMouseLeave={e => e.currentTarget.style.background = "transparent"}
+                  title={`Click to filter Inbox by "${filterTerm}"`}>
+                  <span style={{width:200, fontSize:12, fontWeight: p.primary ? 600 : 500}}>{p.code}</span>
+                  <div style={{flex:1, height:14, background:"var(--bg-inset)", borderRadius:3, overflow:"hidden"}}>
+                    <div style={{width: (p.cost / max * 100) + "%", height:"100%",
+                      background: p.primary ? "var(--cta)" : "#94A3B8"}}/>
+                  </div>
+                  <span className="mono tt" style={{width:50, textAlign:"right",
+                    color: p.primary ? "var(--cta)" : "var(--ink-muted)",
+                    fontWeight: p.primary ? 700 : 500}}>€{p.cost}k</span>
                 </div>
-                <span className="mono tt" style={{width:50, textAlign:"right",
-                  color: p.primary ? "var(--cta)" : "var(--ink-muted)",
-                  fontWeight: p.primary ? 700 : 500}}>€{p.cost}k</span>
-              </div>
-            ))}
+              );
+            })}
+            <div className="muted tt" style={{marginTop:10, fontStyle:"italic"}}>↳ Click any row to drill into Inbox</div>
           </div>
-          <div className="panel" style={{padding:18, position:"relative"}}>
+          <div className="panel" style={{padding: variant === "dense" ? 12 : 18, position:"relative"}}>
             <div className="eyebrow" style={{marginBottom:6}}>Plant heatmap · Werk München</div>
             <div style={{fontSize:14, fontWeight:600, marginBottom:14}}>Linien · incident density</div>
             <div style={{display:"grid", gridTemplateColumns:"1fr 1fr", gap:6}}>
               {plantZones.map(z => (
-                <div key={z.name} style={{
+                <div key={z.name}
+                  onClick={() => drillTo(z.name.split(" ").pop())}
+                  title={`Drill into Inbox · ${z.name}`}
+                  style={{
                   padding:10,
                   background: z.bias ? "rgba(224,165,58,0.12)" : heatFill(z.n, z.hot),
                   border: "1px solid " + (z.bias ? "rgba(224,165,58,0.4)" : z.hot ? "rgba(244,138,92,0.35)" : "var(--line)"),
                   borderRadius:6, minHeight:80,
-                  position:"relative"
-                }}>
+                  position:"relative", cursor:"pointer", transition:"transform 120ms"
+                }}
+                onMouseEnter={e => e.currentTarget.style.transform = "translateY(-1px)"}
+                onMouseLeave={e => e.currentTarget.style.transform = "translateY(0)"}>
                   <div style={{fontSize:11, fontWeight:600, color:"var(--ink-primary)"}}>{z.name}</div>
                   <div style={{fontSize:20, fontWeight:700, color: z.hot ? "var(--sev-high)" : z.bias ? "#9a6b14" : "var(--ink-primary)", marginTop:4, lineHeight:1}}>
                     {z.n}
@@ -783,84 +819,71 @@ function LeadershipScreen() {
         </div>
 
         {/* Cross-plant map (Europe stylized) + initiatives */}
-        <div style={{display:"grid", gridTemplateColumns:"1.3fr 1fr", gap:16}}>
-          <div className="panel" style={{padding:18}}>
-            <div className="row" style={{justifyContent:"space-between", marginBottom:6}}>
-              <div className="eyebrow">Cross-plant incidents · Europe heatmap</div>
-              <div className="row" style={{gap:10}}>
-                <span className="mono tt muted">Low</span>
-                {[0.12, 0.3, 0.55, 0.78, 1].map((op,i) => (
-                  <span key={i} style={{width:14, height:10, background:`rgba(244,138,92,${op})`, borderRadius:2}}/>
-                ))}
-                <span className="mono tt muted">High</span>
-              </div>
-            </div>
-            <div style={{fontSize:14, fontWeight:600, marginBottom:14}}>Incidents per plant, last 30 days</div>
+        <div style={{display:"grid", gridTemplateColumns:"1.3fr 1fr", gap: variant === "dense" ? 10 : 16}}>
+          <div className="panel" style={{padding: variant === "dense" ? 12 : 18}}>
+            <div className="eyebrow" style={{marginBottom:6}}>Cross-plant incidents</div>
+            <div style={{fontSize:14, fontWeight:600, marginBottom:14}}>Network-wide view</div>
             {(() => {
-              // Country grid (rows approximate latitude). Each cell = country code;
-              // plants sit inside their country and carry the heat value.
-              const plants = {
-                "UK":  {count:2, plant:"Birmingham"},
-                "NL":  {count:5, plant:"Eindhoven"},
-                "DE-N":{count:6, plant:"Hamburg"},
-                "PL":  {count:4, plant:"Wrocław"},
-                "FR":  {count:3, plant:"Lyon"},
-                "DE-S":{count:14, plant:"München", hot:true},
-                "CZ":  {count:7, plant:"Brno"},
-                "AT":  {count:2, plant:"Graz"},
-                "RO":  {count:3, plant:"Cluj"},
-                "ES":  {count:9, plant:"Valencia"},
-                "IT":  {count:5, plant:"Torino"},
-                "HU":  {count:4, plant:"Győr"},
-              };
-              const others = ["IE","BE","DK","SE","SK","CH","SI","HR","BG","PT","GR"];
-              // 4-row grid laid out to roughly echo Europe's geography
-              const grid = [
-                [null, null, "UK",  null, "NL",  "DE-N","PL",  null, null],
-                [null, "IE", null,  "BE", "DE-S","CZ",  "SK",  null, null],
-                [null, null, "FR",  "CH", "AT",  "HU",  "RO",  null, null],
-                ["PT", "ES", null,  "IT", "SI",  "HR",  "BG",  null, null],
+              const plants = [
+                {code:"UK",  plant:"Birmingham", count:2,  x:22, y:22},
+                {code:"NL",  plant:"Eindhoven",  count:5,  x:32, y:30},
+                {code:"DE-N",plant:"Werk Hamburg", count:6,x:48, y:28},
+                {code:"DE-E",plant:"Werk Leipzig", count:4,x:60, y:36},
+                {code:"PL",  plant:"Wrocław",    count:4,  x:72, y:32},
+                {code:"FR",  plant:"Lyon",       count:3,  x:34, y:56},
+                {code:"DE-S",plant:"Werk München", count:8,x:54, y:48, hot:true},
+                {code:"CZ",  plant:"Brno",       count:7,  x:70, y:50},
+                {code:"AT",  plant:"Graz",       count:2,  x:60, y:62},
+                {code:"ES",  plant:"Valencia",   count:9,  x:18, y:78},
+                {code:"IT",  plant:"Torino",     count:5,  x:40, y:70},
+                {code:"HU",  plant:"Győr",       count:4,  x:68, y:62},
               ];
-              const maxCount = Math.max(...Object.values(plants).map(p => p.count));
+              const maxCount = Math.max(...plants.map(p => p.count));
+              const minR = 6, maxR = 14;
               return (
-                <div style={{display:"grid", gridTemplateRows:"repeat(4, 54px)", gap:4,
-                  background:"var(--bg-subtle)", padding:10, borderRadius:8, border:"1px solid var(--line)"}}>
-                  {grid.map((row, ri) => (
-                    <div key={ri} style={{display:"grid", gridTemplateColumns:"repeat(9, 1fr)", gap:4}}>
-                      {row.map((code, ci) => {
-                        if (!code) return <div key={ci}/>;
-                        const p = plants[code];
-                        if (p) {
-                          const t = p.count / maxCount;
-                          const op = 0.12 + t * 0.78;
-                          return (
-                            <div key={ci} style={{
-                              borderRadius:4, padding:"4px 5px",
-                              background: p.hot ? `rgba(239,93,58,${op})` : `rgba(244,138,92,${op})`,
-                              border: p.hot ? "1.5px solid var(--sev-high)" : "1px solid rgba(244,138,92,0.3)",
-                              display:"flex", flexDirection:"column", justifyContent:"space-between", minWidth:0
-                            }}>
-                              <span className="mono" style={{fontSize:8, letterSpacing:"0.05em",
-                                color: t > 0.5 ? "#fff" : "var(--ink-secondary)", fontWeight:700,
-                                overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>{p.plant}</span>
-                              <span className="mono" style={{fontSize: p.hot ? 16 : 13, fontWeight:700,
-                                color: t > 0.5 ? "#fff" : "var(--ink-primary)"}}>{p.count}</span>
-                            </div>
-                          );
-                        }
-                        // non-plant country — muted tile
-                        return (
-                          <div key={ci} style={{
-                            borderRadius:4, background:"rgba(99,159,196,0.08)",
-                            border:"1px solid rgba(99,159,196,0.15)",
-                            display:"flex", alignItems:"center", justifyContent:"center"
-                          }}>
-                            <span className="mono" style={{fontSize:9, color:"var(--ink-muted)", fontWeight:600}}>{code}</span>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  ))}
+                <div style={{position:"relative", height:220,
+                  background:"var(--bg-subtle)", borderRadius:8, border:"1px solid var(--line)",
+                  overflow:"hidden"}}>
+                  {/* Subtle grid */}
+                  <svg viewBox="0 0 100 100" preserveAspectRatio="none"
+                    style={{position:"absolute", inset:0, width:"100%", height:"100%", pointerEvents:"none"}}>
+                    <defs>
+                      <pattern id="plant-grid" width="10" height="10" patternUnits="userSpaceOnUse">
+                        <path d="M 10 0 L 0 0 0 10" fill="none" stroke="rgba(99,159,196,0.10)" strokeWidth="0.3"/>
+                      </pattern>
+                    </defs>
+                    <rect width="100" height="100" fill="url(#plant-grid)"/>
+                  </svg>
+
+                  {/* Plant bubbles with labels below */}
+                  {plants.map(p => {
+                    const t = p.count / maxCount;
+                    const r = minR + t * (maxR - minR);
+                    return (
+                      <React.Fragment key={p.code}>
+                        <div title={`${p.plant} · ${p.count} incidents · click to drill in`}
+                          onClick={() => drillTo(p.plant.split(" ").pop())}
+                          style={{position:"absolute",
+                            left:`calc(${p.x}% - ${r}px)`, top:`calc(${p.y}% - ${r}px)`,
+                            width:r*2, height:r*2,
+                            borderRadius:"50%",
+                            background: p.hot ? "var(--accent)" : "rgba(99,159,196,0.6)",
+                            cursor:"pointer", transition:"transform 120ms",
+                            zIndex:1}}
+                          onMouseEnter={e => e.currentTarget.style.transform = "scale(1.25)"}
+                          onMouseLeave={e => e.currentTarget.style.transform = "scale(1)"}/>
+                        <div style={{position:"absolute",
+                          left:`${p.x}%`, top:`calc(${p.y}% + ${r + 3}px)`,
+                          transform:"translateX(-50%)",
+                          fontSize:10,
+                          color: p.hot ? "var(--accent)" : "var(--ink-secondary)",
+                          fontWeight: p.hot ? 600 : 500,
+                          whiteSpace:"nowrap", pointerEvents:"none", zIndex:2}}>
+                          {p.plant} · {p.count}
+                        </div>
+                      </React.Fragment>
+                    );
+                  })}
                 </div>
               );
             })()}
@@ -869,7 +892,7 @@ function LeadershipScreen() {
               <span className="mono" style={{color:"var(--sev-high)", fontWeight:600}}>München outlier: 14 incidents</span>
             </div>
           </div>
-          <div className="panel" style={{padding:18}}>
+          <div className="panel" style={{padding: variant === "dense" ? 12 : 18}}>
             <div className="eyebrow" style={{marginBottom:6}}>Open initiatives</div>
             <div style={{fontSize:14, fontWeight:600, marginBottom:14}}>37 across 5 swimlanes</div>
             <div style={{display:"flex", flexDirection:"column", gap:8}}>
@@ -905,340 +928,3 @@ function LeadershipScreen() {
   );
 }
 window.LeadershipScreen = LeadershipScreen;
-
-// ============ FLOOR ============
-function FloorScreen() {
-  const { setLens, showAnno } = useApp();
-  const [recording, setRecording] = React.useState(false);
-  const [submitted, setSubmitted] = React.useState(false);
-  const [photos, setPhotos] = React.useState([]);
-  const [selectedIssue, setSelectedIssue] = React.useState(null);
-  const [variant, setVariant] = React.useState(() => localStorage.getItem("floor.var") || "classic");
-  const fileRef = React.useRef(null);
-  React.useEffect(() => { localStorage.setItem("floor.var", variant); }, [variant]);
-
-  const submit = () => {
-    setRecording(false);
-    setSubmitted(true);
-    setTimeout(() => {
-      setSubmitted(false);
-      setPhotos([]);
-      setSelectedIssue(null);
-    }, 4000);
-  };
-
-  const addPhoto = () => {
-    // Simulated capture — add a placeholder tile
-    setPhotos(p => [...p, { id: Date.now(), label: "Photo " + (p.length + 1) }]);
-  };
-
-  const ISSUES = [
-    { id:"scratch", label:"Scratch / dent",     icon:"✦", color:"var(--sev-high)" },
-    { id:"noise",   label:"Strange noise",      icon:"~", color:"var(--accent)" },
-    { id:"batch",   label:"Batch looks off",    icon:"◆", color:"var(--cta)" },
-    { id:"label",   label:"Wrong label",        icon:"▤", color:"var(--sev-med)" },
-    { id:"heat",    label:"Heat warning",       icon:"△", color:"var(--sev-crit)" },
-    { id:"other",   label:"Something else",     icon:"?", color:"var(--ink-muted)" },
-  ];
-
-  // Shared photo strip component
-  const PhotoStrip = ({ small }) => (
-    <div style={{display:"flex", gap:8, flexWrap:"wrap"}}>
-      {photos.map(p => (
-        <div key={p.id} style={{
-          width: small ? 56 : 72, height: small ? 56 : 72, borderRadius: 10,
-          background: "linear-gradient(135deg, #c4d4e2, #8fa8bf)",
-          border: "1px solid var(--line)",
-          position:"relative", flexShrink:0,
-          display:"flex", alignItems:"flex-end", padding:6,
-          fontSize:9, color:"#fff", fontWeight:600,
-          boxShadow:"inset 0 0 0 1px rgba(255,255,255,0.2)"
-        }}>
-          <span style={{textShadow:"0 1px 2px rgba(0,0,0,0.4)"}}>{p.label}</span>
-          <button onClick={() => setPhotos(ph => ph.filter(x => x.id !== p.id))}
-            style={{position:"absolute", top:3, right:3, width:18, height:18, borderRadius:"50%",
-              background:"rgba(0,0,0,0.5)", color:"#fff", fontSize:10, border:"none",
-              display:"flex", alignItems:"center", justifyContent:"center"}}>×</button>
-        </div>
-      ))}
-      <button onClick={addPhoto}
-        style={{
-          width: small ? 56 : 72, height: small ? 56 : 72, borderRadius: 10,
-          background: "#fff", border: "1.5px dashed var(--accent)", color:"var(--accent)",
-          display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center",
-          gap:2, flexShrink:0, cursor:"pointer", fontSize: small ? 9 : 10
-        }}>
-        <div style={{fontSize: small ? 18 : 22, lineHeight:1}}>+</div>
-        <div>Photo</div>
-      </button>
-    </div>
-  );
-
-  return (
-    <div style={{width:"100%", height:"100%", display:"flex", alignItems:"center", justifyContent:"center",
-      background:"#eef3f7", position:"relative"}}>
-
-      {/* Floating controls */}
-      <div style={{position:"absolute", top:16, right:16, display:"flex", gap:6, zIndex:10}}>
-        <VarTabs options={[{id:"classic", label:"Tiles"},{id:"minimal", label:"Minimal"},{id:"chat", label:"Chat"}]}
-          value={variant} onChange={setVariant}/>
-        <button className="btn ghost sm" onClick={() => setLens("engineer")}>← exit floor lens</button>
-      </div>
-
-      {/* Phone frame */}
-      <div style={{width:390, height:844, background:"#ffffff", borderRadius:40,
-        border:"10px solid #1a1a1a", overflow:"hidden", position:"relative",
-        boxShadow:"0 40px 80px rgba(16,50,207,0.25)"}}>
-
-        {/* Status bar */}
-        <div style={{height:44, padding:"0 22px", display:"flex", alignItems:"center", justifyContent:"space-between", fontSize:13, fontWeight:600, color:"var(--ink-primary)"}}>
-          <span className="mono">{DATA.now}</span>
-          <div style={{width:100, height:28, background:"#1a1a1a", borderRadius:20}}/>
-          <span className="mono" style={{fontSize:11, letterSpacing:"0.04em"}}>●●● 82%</span>
-        </div>
-
-        {variant === "classic" && (
-          <div style={{padding:"8px 20px 20px", overflow:"auto", height:"calc(100% - 44px)"}}>
-            {/* Greeting */}
-            <div className="row" style={{gap:10, marginBottom:18}}>
-              <div style={{width:32, height:32, borderRadius:"50%", background:"var(--accent)", color:"#fff",
-                display:"flex", alignItems:"center", justifyContent:"center", fontSize:12, fontWeight:700}}>M</div>
-              <div>
-                <div style={{fontSize:14, fontWeight:600}}>Hi Markus</div>
-                <div className="muted tt">Montage Linie 1 · {DATA.shift}</div>
-              </div>
-            </div>
-
-            <div style={{fontSize:20, fontWeight:700, letterSpacing:"-0.01em", marginBottom:4, color:"var(--ink-primary)"}}>
-              What did you notice?
-            </div>
-            <div className="muted" style={{fontSize:13, marginBottom:16}}>Tap what fits, or hold the mic.</div>
-
-            {/* Issue tiles — 2 cols of rounded squares */}
-            <div style={{display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:18}}>
-              {ISSUES.map(iss => {
-                const on = selectedIssue === iss.id;
-                return (
-                  <button key={iss.id} onClick={() => setSelectedIssue(on ? null : iss.id)}
-                    style={{
-                      height: 60,
-                      background: on ? "var(--accent-bg)" : "#ffffff",
-                      border: on ? "2px solid var(--accent)" : "1px solid var(--line)",
-                      borderRadius: 12,
-                      padding: "0 10px",
-                      display:"flex", flexDirection:"row", alignItems:"center", gap:10,
-                      textAlign:"left", cursor:"pointer",
-                      boxShadow: on ? "0 3px 12px rgba(99,159,196,0.18)" : "0 1px 2px rgba(22,0,66,0.04)",
-                      transition:"all 180ms"
-                    }}>
-                    <div style={{
-                      width:32, height:32, borderRadius:8,
-                      background: on ? iss.color : "var(--bg-subtle)",
-                      color: on ? "#fff" : iss.color,
-                      display:"flex", alignItems:"center", justifyContent:"center",
-                      fontSize:16, fontWeight:700, flexShrink:0
-                    }}>{iss.icon}</div>
-                    <div style={{fontSize:12, fontWeight:600, color:"var(--ink-primary)", lineHeight:1.2}}>{iss.label}</div>
-                  </button>
-                );
-              })}
-            </div>
-
-            {/* Photo capture */}
-            <div style={{marginBottom:16}}>
-              <div className="muted" style={{fontSize:10, letterSpacing:"0.1em", textTransform:"uppercase", fontWeight:600, marginBottom:8}}>
-                Add a photo (optional)
-              </div>
-              <PhotoStrip />
-            </div>
-
-            {/* Mic row */}
-            <div style={{display:"flex", gap:10, alignItems:"center", marginBottom:14,
-              padding:12, background:"var(--bg-subtle)", borderRadius:14, border:"1px solid var(--line)"}}>
-              <button
-                onMouseDown={() => setRecording(true)}
-                onMouseUp={() => setRecording(false)}
-                onTouchStart={() => setRecording(true)}
-                onTouchEnd={() => setRecording(false)}
-                style={{width:52, height:52, borderRadius:"50%",
-                  background: recording ? "var(--cta)" : "var(--accent)",
-                  color:"#fff", display:"flex", alignItems:"center", justifyContent:"center",
-                  border:"none", flexShrink:0, transition:"all 150ms",
-                  boxShadow: recording ? "0 0 0 6px rgba(16,50,207,0.15)" : "0 4px 12px rgba(99,159,196,0.35)"}}>
-                <I.mic size={22}/>
-              </button>
-              <div style={{flex:1}}>
-                <div style={{fontSize:13, fontWeight:600}}>
-                  {recording ? "Listening…" : "Hold to add voice note"}
-                </div>
-                <div className="muted tt" style={{marginTop:2}}>
-                  {recording ? "…der dritte Kratzer in dieser Schicht…" : "Or type a quick note below"}
-                </div>
-              </div>
-            </div>
-
-            {/* Submit */}
-            <button onClick={submit}
-              disabled={!selectedIssue && photos.length === 0}
-              style={{
-                width:"100%", padding:"14px", borderRadius:12,
-                background: (selectedIssue || photos.length) ? "var(--cta)" : "var(--bg-inset)",
-                color: (selectedIssue || photos.length) ? "#fff" : "var(--ink-muted)",
-                fontWeight:600, fontSize:14, border:"none",
-                cursor: (selectedIssue || photos.length) ? "pointer" : "not-allowed"
-              }}>
-              Send report
-            </button>
-
-            {/* My reports */}
-            <div style={{marginTop:22}}>
-              <div className="muted" style={{fontSize:10, letterSpacing:"0.1em", textTransform:"uppercase", fontWeight:600, marginBottom:8}}>
-                My reports today
-              </div>
-              {DATA.floorReports.map((r,i) => {
-                const color = r.status === "Resolved" ? "var(--sev-low)" : r.status === "Investigating" ? "var(--accent)" : "var(--ink-muted)";
-                return (
-                  <div key={i} className="card" style={{padding:10, marginBottom:6, borderRadius:10}}>
-                    <div className="row" style={{justifyContent:"space-between"}}>
-                      <div className="row" style={{gap:8}}>
-                        <span style={{width:8, height:8, borderRadius:4, background:color}}/>
-                        <span style={{fontSize:12, fontWeight:500}}>{r.text}</span>
-                      </div>
-                      <span className="muted tt">{r.time}</span>
-                    </div>
-                    <div className="muted tt" style={{marginLeft:16, marginTop:2, color}}>{r.status}</div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
-
-        {variant === "minimal" && (
-          <div style={{padding:"50px 22px", display:"flex", flexDirection:"column", alignItems:"center", height:"calc(100% - 44px)", overflow:"auto"}}>
-            <div style={{fontSize:24, fontWeight:700, textAlign:"center", marginBottom:6, lineHeight:1.2, color:"var(--ink-primary)"}}>
-              What did you notice?
-            </div>
-            <div className="muted" style={{textAlign:"center", marginBottom:36, fontSize:13}}>
-              Just tell us. We'll handle the rest.
-            </div>
-            <button
-              onMouseDown={() => setRecording(true)}
-              onMouseUp={() => setRecording(false)}
-              style={{width:200, height:200, borderRadius:"50%",
-                background: recording ? "var(--cta)" : "var(--accent)", color:"#fff",
-                display:"flex", alignItems:"center", justifyContent:"center",
-                border:"none",
-                boxShadow: recording ? "0 0 0 10px rgba(16,50,207,0.15)" : "0 10px 40px rgba(99,159,196,0.40)",
-                animation: recording ? "none" : "pulse 2.5s infinite",
-                transition:"all 200ms"}}>
-              <I.mic size={76}/>
-            </button>
-            <div className="muted" style={{marginTop:22, fontSize:12}}>
-              {recording ? "Listening…" : "Tap & hold to talk"}
-            </div>
-
-            {/* Photo button, small */}
-            <div style={{marginTop:28, width:"100%"}}>
-              <div className="muted" style={{fontSize:10, letterSpacing:"0.1em", textTransform:"uppercase", fontWeight:600, marginBottom:8, textAlign:"center"}}>
-                or add a photo
-              </div>
-              <div style={{display:"flex", justifyContent:"center"}}>
-                <PhotoStrip small />
-              </div>
-            </div>
-
-            <div style={{marginTop:"auto", paddingTop:20, fontSize:12, color:"var(--ink-muted)"}}>
-              Markus · Linie 1 · Shift 2
-            </div>
-          </div>
-        )}
-
-        {variant === "chat" && (
-          <div style={{padding:"16px 16px", display:"flex", flexDirection:"column", height:"calc(100% - 44px)"}}>
-            <div style={{fontSize:15, fontWeight:700, marginBottom:12}}>Report</div>
-            <div className="card" style={{padding:11, marginBottom:10, maxWidth:"82%", borderRadius:12, background:"var(--bg-subtle)"}}>
-              <div className="muted tt" style={{marginBottom:2}}>Just now</div>
-              <div style={{fontSize:13}}>What did you notice on the line?</div>
-            </div>
-
-            {/* Tile options */}
-            <div style={{display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginBottom:10}}>
-              {ISSUES.slice(0,4).map(iss => {
-                const on = selectedIssue === iss.id;
-                return (
-                  <button key={iss.id} onClick={() => setSelectedIssue(on ? null : iss.id)}
-                    style={{
-                      padding:"14px 12px", borderRadius:12,
-                      background: on ? "var(--accent-bg)" : "#fff",
-                      border: on ? "2px solid var(--accent)" : "1px solid var(--line)",
-                      textAlign:"left", cursor:"pointer",
-                      display:"flex", gap:10, alignItems:"center"
-                    }}>
-                    <div style={{width:28, height:28, borderRadius:8,
-                      background: on ? iss.color : "var(--bg-subtle)", color: on ? "#fff" : iss.color,
-                      display:"flex", alignItems:"center", justifyContent:"center", fontWeight:700}}>{iss.icon}</div>
-                    <div style={{fontSize:12, fontWeight:600, lineHeight:1.2}}>{iss.label}</div>
-                  </button>
-                );
-              })}
-            </div>
-
-            {photos.length > 0 && (
-              <div style={{marginBottom:10}}>
-                <PhotoStrip small />
-              </div>
-            )}
-
-            <div style={{flex:1}}/>
-
-            <div className="card" style={{padding:8, display:"flex", gap:6, alignItems:"center", borderRadius:24}}>
-              <button onClick={addPhoto}
-                style={{width:36, height:36, borderRadius:"50%", background:"var(--bg-subtle)", color:"var(--ink-secondary)",
-                  display:"flex", alignItems:"center", justifyContent:"center", border:"1px solid var(--line)", fontSize:18}}>
-                📷
-              </button>
-              <span className="muted" style={{fontSize:12, flex:1}}>Type or hold mic…</span>
-              <button
-                onMouseDown={() => setRecording(true)}
-                onMouseUp={() => setRecording(false)}
-                style={{width:36, height:36, borderRadius:"50%",
-                  background: recording ? "var(--cta)" : "var(--accent)",
-                  color:"#fff", display:"flex", alignItems:"center", justifyContent:"center", border:"none"}}>
-                <I.mic size={16}/>
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Submitted toast */}
-        {submitted && (
-          <div style={{position:"absolute", bottom:30, left:20, right:20,
-            background:"#ffffff", border:"1.5px solid var(--accent)", borderRadius:14, padding:14,
-            boxShadow:"0 10px 30px rgba(16,50,207,0.20)"}}>
-            <div style={{fontSize:13, fontWeight:600, color:"var(--ink-primary)"}}>Thanks — we're looking into it.</div>
-            <div className="muted" style={{fontSize:12, marginTop:4}}>3 similar reports this shift. Tap to see what we're checking.</div>
-          </div>
-        )}
-      </div>
-
-      {showAnno && (
-        <>
-          <Anno tag="F1 · No jargon" style={{left:30, top:80}}>
-            Zero instances of "AI", "LLM", "incident", "hypothesis", "8D", "agent", "initiative" on this screen. Only "what we noticed / we're checking".
-          </Anno>
-          <Anno tag="F2 · Issue tiles" style={{right:30, top:180, maxWidth:240}}>
-            Square rounded tiles with colored glyphs. One tap picks a category; selected tile gets blue ring + filled glyph. Multi-select disabled — keep it one-thumb.
-          </Anno>
-          <Anno tag="F3 · Photo capture" style={{right:30, top:360, maxWidth:240}}>
-            Dashed blue "+" tile opens camera / file picker. Captured photos stack as thumbnails; tap × to remove. Voice note sits alongside — a report can be tile-only, photo-only, voice-only, or any combination.
-          </Anno>
-          <Anno tag="F4 · Re-entry" style={{right:30, bottom:80, maxWidth:240}}>
-            After submission the toast shows "N similar reports" — the one moment the foreman sees the signal is being correlated with others.
-          </Anno>
-        </>
-      )}
-    </div>
-  );
-}
-window.FloorScreen = FloorScreen;

@@ -1,14 +1,34 @@
 // Incident Canvas — the hero screen. 3 variations.
-const { useState: uS1 } = React;
+const { useState: uS1, useEffect: uE1 } = React;
+
+// Maps each signal → its primary hypothesis. Drives signal-click → graph-focus.
+const SIGNAL_TO_HYP = {
+  "SIG-412": "HYP-material",   // warranty thermal failure → supplier batch
+  "SIG-411": "HYP-material",
+  "SIG-408": "HYP-material",   // ESR out of spec
+  "SIG-399": "HYP-process",    // EOL near-miss → process drift
+  "SIG-387": "HYP-process",    // Cpk erosion at Stn-04
+  "SIG-361": "HYP-material",   // premature field failure
+  "SIG-358": "HYP-operator",   // voice of floor on shift
+  "SIG-340": "HYP-design",     // social signal → broader
+};
 
 function SignalCard({ sig, onClick, focused }) {
+  const linkedHyp = SIGNAL_TO_HYP[sig.id];
   const icon = I[sig.srcIcon] || I.chart;
   return (
     <div className="card" onClick={onClick}
+      title={linkedHyp ? "Click → focus matching hypothesis" : undefined}
       style={{padding:10, cursor:"pointer",
         borderColor: focused ? "var(--accent-ring)" : "var(--line)",
-        boxShadow: focused ? "0 0 0 1px var(--accent-ring)" : "none",
-        minWidth:0}}>
+        boxShadow: focused ? "0 0 0 2px var(--accent-ring), 0 4px 16px rgba(99,159,196,0.18)" : "none",
+        background: focused ? "var(--accent-bg)" : "var(--bg-surface)",
+        transition:"all 180ms",
+        minWidth:0, position:"relative"}}>
+      {focused && linkedHyp && (
+        <div style={{position:"absolute", top:6, right:6, fontSize:9, fontWeight:600,
+          color:"var(--accent)", textTransform:"uppercase", letterSpacing:"0.05em"}}>→ graph</div>
+      )}
       <div className="row" style={{justifyContent:"space-between", gap:8}}>
         <div className="row" style={{gap:6, color:"var(--ink-secondary)", fontSize:11, minWidth:0, flex:1, overflow:"hidden"}}>
           <span style={{color:"var(--ink-muted)", flexShrink:0}}>{icon({size:12})}</span>
@@ -22,6 +42,57 @@ function SignalCard({ sig, onClick, focused }) {
       <div className="mono muted" style={{fontSize:10, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>{sig.ref}</div>
       <div className="row" style={{justifyContent:"space-between", marginTop:6}}>
         <span className="mono muted" style={{fontSize:10}}>{sig.id}</span>
+      </div>
+    </div>
+  );
+}
+
+// Near-miss surfacing: marginal signals the correlator scored weakly but related.
+// Tapping individual rows promotes them into the active signal set + auto-focuses
+// the matching hypothesis in the graph.
+function NearMissCard() {
+  const [added, setAdded] = uS1(new Set());
+  const items = DATA.incident.nearMiss || [];
+  const remaining = items.filter(i => !added.has(i.id));
+
+  if (remaining.length === 0) {
+    return (
+      <div className="card" style={{padding:10, border:"1px solid var(--line)", background:"var(--bg-subtle)"}}>
+        <div style={{fontSize:11, fontWeight:500, color:"var(--ink-secondary)"}}>
+          ✓ All near-miss signals reviewed
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="card ai-marked" style={{padding:10, border:"1px dashed var(--accent-ring)", background:"var(--accent-bg)"}}>
+      <div className="row" style={{justifyContent:"space-between", marginBottom:6}}>
+        <div style={{fontSize:11, fontWeight:600, color:"var(--ink-primary)"}}>
+          <span className="ai-spark">✦</span>+ {remaining.length} near-miss results
+        </div>
+        <button className="btn ghost sm" onClick={() => setAdded(new Set(items.map(i => i.id)))}
+          style={{padding:"2px 6px", fontSize:10}}>Add all</button>
+      </div>
+      <div className="muted tt" style={{marginBottom:8}}>
+        Correlator scored these MARGINAL but possibly related.
+      </div>
+      <div style={{display:"flex", flexDirection:"column", gap:4}}>
+        {remaining.map(item => (
+          <button key={item.id} onClick={() => setAdded(s => new Set([...s, item.id]))}
+            style={{
+              display:"flex", alignItems:"flex-start", gap:6, padding:"6px 8px",
+              background:"#fff", border:"1px solid var(--line)", borderRadius:6,
+              cursor:"pointer", textAlign:"left"
+            }}>
+            <span style={{color:"var(--accent)", fontSize:13, lineHeight:1, marginTop:1}}>+</span>
+            <div style={{flex:1, minWidth:0}}>
+              <div className="mono tt" style={{color:"var(--ink-muted)"}}>{item.id} · {item.src}</div>
+              <div style={{fontSize:11, fontWeight:500, color:"var(--ink-primary)", lineHeight:1.3, marginTop:2,
+                overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>{item.text}</div>
+            </div>
+          </button>
+        ))}
       </div>
     </div>
   );
@@ -146,45 +217,45 @@ function InlineHypNode({ h, active, onClick }) {
 // Graph variant B — left-to-right tree
 function GraphTree({ active, setActive }) {
   const H = DATA.incident.hypotheses;
-  const positions = {
-    "HYP-material": { x: 280, y: 14 },
-    "HYP-process":  { x: 280, y: 114 },
-    "HYP-design":   { x: 280, y: 214 },
-    "HYP-operator": { x: 280, y: 314 },
-  };
-  const IC = { x: 20, y: 170, w: 150, h: 72 };
-
   return (
-    <div style={{position:"relative", width:"100%", height:"100%", minHeight:420}}>
-      <svg style={{position:"absolute", inset:0, width:"100%", height:"100%"}}>
-        {H.map(h => {
-          const p = positions[h.id];
-          const isActive = h.id === active;
+    <div style={{position:"relative", width:"100%", minHeight:520,
+      display:"grid", gridTemplateColumns:"180px 80px minmax(0,1fr)",
+      gridTemplateRows:`repeat(${H.length}, minmax(90px, 1fr))`,
+      alignItems:"center", gap:"14px 0", padding:"20px 8px"}}>
+
+      <svg style={{gridColumn:2, gridRow:`1 / span ${H.length}`, width:"100%", height:"100%",
+        alignSelf:"stretch", pointerEvents:"none"}}
+        preserveAspectRatio="none" viewBox="0 0 80 100">
+        {H.map((_, i) => {
+          const y = ((i + 0.5) / H.length) * 100;
           return (
-            <path key={h.id}
-              d={`M ${IC.x + IC.w} ${IC.y + IC.h/2} C ${IC.x + IC.w + 80} ${IC.y + IC.h/2}, ${p.x - 80} ${p.y + 40}, ${p.x} ${p.y + 40}`}
-              fill="none"
-              stroke={isActive ? "var(--accent)" : "rgba(255,255,255,0.18)"}
-              strokeWidth={isActive ? 2 : 1.2}
-              strokeDasharray={h.speculation ? "4 4" : "0"}
-            />
+            <path key={i}
+              d={`M 0 50 C 40 50, 40 ${y}, 80 ${y}`}
+              fill="none" stroke="rgba(99,159,196,0.5)" strokeWidth="1"
+              vectorEffect="non-scaling-stroke" />
           );
         })}
       </svg>
 
-      <div className="ring-accent" style={{position:"absolute", left:IC.x, top:IC.y, width:IC.w, height:IC.h,
-        background:"var(--bg-elevated)", border:"1.5px solid var(--accent)", borderRadius:10,
-        padding:10, display:"flex", flexDirection:"column", justifyContent:"center", alignItems:"center", textAlign:"center"}}>
-        <div className="eyebrow" style={{color:"var(--accent)"}}>INCIDENT</div>
-        <div style={{fontSize:12, fontWeight:600, lineHeight:1.3, marginTop:4}}>{DATA.incident.title.split("—")[0].trim()}</div>
-        <div className="muted tt mono" style={{marginTop:2}}>{DATA.incident.id} · 17 signals</div>
+      <div style={{gridColumn:1, gridRow:`1 / span ${H.length}`,
+        justifySelf:"end", alignSelf:"center",
+        width:170, position:"relative", zIndex:1}}>
+        <div className="ring-accent" style={{width:"100%",
+          background:"var(--bg-elevated)", border:"1.5px solid var(--accent)", borderRadius:10,
+          padding:12, display:"flex", flexDirection:"column", textAlign:"left"}}>
+          <div className="eyebrow" style={{color:"var(--accent)"}}>INCIDENT · ROOT</div>
+          <div style={{fontSize:13, fontWeight:600, lineHeight:1.3, marginTop:4}}>
+            {DATA.incident.title.split("—")[0].trim()}
+          </div>
+          <div className="muted tt mono" style={{marginTop:4}}>{DATA.incident.id}</div>
+          <div className="muted tt" style={{marginTop:2}}>17 signals · {H.length} hypotheses</div>
+        </div>
       </div>
 
-      {H.map(h => (
-        <HypothesisNode key={h.id} h={h}
-          x={positions[h.id].x} y={positions[h.id].y} w={200}
-          active={h.id === active}
-          onClick={() => setActive(h.id)} />
+      {H.map((h, i) => (
+        <div key={h.id} style={{gridColumn:3, gridRow:i+1, minWidth:0, position:"relative", zIndex:1, paddingLeft:4}}>
+          <InlineHypNode h={h} active={h.id === active} onClick={() => setActive(h.id)} />
+        </div>
       ))}
     </div>
   );
@@ -325,48 +396,85 @@ function CanvasScreen() {
   const [variant, setVariant] = uS1(() => localStorage.getItem("canvas.var") || "radial");
   const [active, setActive] = uS1("HYP-material");
   const [focusedSignal, setFocusedSignal] = uS1(null);
+  const [leftCollapsed, setLeftCollapsed] = uS1(false);
+  const [rightCollapsed, setRightCollapsed] = uS1(false);
   const inc = DATA.incident;
 
   React.useEffect(() => { localStorage.setItem("canvas.var", variant); }, [variant]);
+  // Side panels are user-controlled — no auto-collapse when switching variants.
+
+  // 8D provenance bridge: if a signal id was stashed (e.g. by clicking SIG-412 in the 8D
+  // doc), focus it here on mount + auto-activate matching hypothesis.
+  React.useEffect(() => {
+    const target = localStorage.getItem("canvas.focusSignal");
+    if (target) {
+      setFocusedSignal(target);
+      const hyp = SIGNAL_TO_HYP[target];
+      if (hyp) setActive(hyp);
+      localStorage.removeItem("canvas.focusSignal");
+      // Scroll the matching card into the rail viewport (manual, not scrollIntoView)
+      setTimeout(() => {
+        const el = document.querySelector(`[data-sig-id="${target}"]`);
+        if (el) {
+          const scrollParent = el.closest('[data-signal-rail-scroll]');
+          if (scrollParent) {
+            scrollParent.scrollTop = el.offsetTop - scrollParent.offsetTop - 80;
+          }
+        }
+      }, 100);
+    }
+  }, []);
 
   const Graph = { radial: GraphRadial, tree: GraphTree, stack: GraphStack }[variant];
 
   return (
     <div style={{position:"relative", height:"calc(100vh - 48px)", display:"flex", flexDirection:"column"}}>
       {/* Sub-topbar with tabs */}
-      <div style={{display:"flex", alignItems:"center", gap:12, padding:"10px 18px",
-        borderBottom:"1px solid var(--line)", background:"var(--bg-surface)"}}>
-        <button className="btn ghost sm" onClick={() => setRoute("inbox")}><I.back size={11}/>Back</button>
-        <span className={"sev-ring " + inc.severity} />
-        <div>
-          <div style={{fontSize:14, fontWeight:600}}>{inc.title}</div>
-          <div className="muted tt mono" style={{marginTop:1}}>
+      <div style={{display:"flex", alignItems:"center", gap:10, padding:"10px 18px",
+        borderBottom:"1px solid var(--line)", background:"var(--bg-surface)", minWidth:0}}>
+        <button className="btn ghost sm" onClick={() => setRoute("inbox")} style={{flexShrink:0}}><I.back size={11}/>Back</button>
+        <span className={"sev-ring " + inc.severity} style={{flexShrink:0}} />
+        <div style={{minWidth:0, flex:"0 1 320px", overflow:"hidden"}}>
+          <div style={{fontSize:14, fontWeight:600, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis"}}>{inc.title}</div>
+          <div className="muted tt mono" style={{marginTop:1, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis"}}>
             {inc.id} · opened {inc.opened} · {inc.signals.length} signals · assigned {DATA.user.initials}
           </div>
         </div>
-        <div className="row" style={{gap:6, marginLeft:12}}>
-          <span className="chip sev-high">high</span>
-          <span className="chip">reasoning</span>
-        </div>
+        <span className="chip sev-high" style={{flexShrink:0}}>high</span>
         <div className="spacer" />
         {/* Tab bar */}
-        <div className="lens-switch">
+        <div className="lens-switch" style={{flexShrink:0}}>
           <button className="on">Canvas</button>
           <button onClick={() => setRoute("eightd")}>8D</button>
           <button>FMEA</button>
           <button>Ishikawa</button>
           <button>Timeline</button>
-          <button onClick={() => setRoute("resolve")} style={{color:"var(--accent)"}}>Resolve ▸</button>
         </div>
         <VarTabs
           options={[{id:"radial", label:"Radial"},{id:"tree", label:"Tree"},{id:"stack", label:"Stack"}]}
           value={variant} onChange={setVariant} />
+        <div style={{width:1, height:20, background:"var(--line)", flexShrink:0}} />
+        <button className="btn primary sm" onClick={() => setRoute("resolve")} style={{flexShrink:0}}>Dispatch →</button>
       </div>
 
       {/* 3-panel body */}
-      <div style={{flex:1, display:"grid", gridTemplateColumns:"280px 1fr 300px", minHeight:0}}>
+      <div style={{flex:1, display:"grid",
+        gridTemplateColumns:`${leftCollapsed ? 32 : 280}px 1fr ${rightCollapsed ? 32 : 300}px`,
+        minHeight:0, transition:"grid-template-columns 220ms ease"}}>
         {/* LEFT: Signals + BOM */}
         <div style={{borderRight:"1px solid var(--line)", display:"flex", flexDirection:"column", minHeight:0, position:"relative"}}>
+          {leftCollapsed ? (
+            <button onClick={() => setLeftCollapsed(false)} title="Expand signals"
+              style={{flex:1, width:"100%", background:"var(--bg-surface)", border:"none",
+                cursor:"pointer", padding:"10px 0", display:"flex", flexDirection:"column",
+                alignItems:"center", gap:10, color:"var(--ink-secondary)"}}>
+              <span style={{fontSize:11}}>▸</span>
+              <div style={{writingMode:"vertical-rl", transform:"rotate(180deg)",
+                fontSize:11, fontWeight:500, letterSpacing:0.3}}>
+                Signals · {inc.signals.length}
+              </div>
+            </button>
+          ) : (<>
           <div style={{padding:"12px 14px", borderBottom:"1px solid var(--line)"}}>
             <div className="row" style={{justifyContent:"space-between"}}>
               <div className="row" style={{gap:8}}>
@@ -377,27 +485,25 @@ function CanvasScreen() {
                 <button className="btn ghost sm">All</button>
                 <button className="btn ghost sm">Internal</button>
                 <button className="btn ghost sm">External</button>
+                <button className="btn ghost sm" onClick={() => setLeftCollapsed(true)} title="Collapse">◂</button>
               </div>
             </div>
           </div>
-          <div style={{overflow:"auto", padding:12, display:"flex", flexDirection:"column", gap:8, flex:1}}>
+          <div data-signal-rail-scroll style={{overflow:"auto", padding:12, display:"flex", flexDirection:"column", gap:8, flex:1}}>
             {inc.signals.map(s => (
-              <SignalCard key={s.id} sig={s}
-                focused={focusedSignal === s.id}
-                onClick={() => setFocusedSignal(s.id)} />
+              <div key={s.id} data-sig-id={s.id}>
+                <SignalCard sig={s}
+                  focused={focusedSignal === s.id}
+                  onClick={() => {
+                    setFocusedSignal(s.id);
+                    // Bridge: clicking a signal also focuses the matching hypothesis in the graph.
+                    const hyp = SIGNAL_TO_HYP[s.id];
+                    if (hyp) setActive(hyp);
+                  }} />
+              </div>
             ))}
-            {/* Near-miss affordance */}
-            <div className="card ai-marked" style={{padding:10, border:"1px dashed var(--accent-ring)", background:"var(--accent-bg)"}}>
-              <div className="row" style={{justifyContent:"space-between"}}>
-                <div style={{fontSize:11, fontWeight:500}}>
-                  <span className="ai-spark">✦</span>+ 3 near-miss results you may want to include
-                </div>
-              </div>
-              <div className="muted tt" style={{marginTop:4}}>
-                Correlator scored these MARGINAL but related. Tap to add.
-              </div>
-              <button className="btn sm" style={{marginTop:8}}>Add all 3</button>
-            </div>
+            {/* Near-miss affordance — surfaces marginal correlator results that DIDN'T auto-link. */}
+            <NearMissCard />
 
             {/* BOM traceability */}
             <div className="card" style={{padding:10, marginTop:8}}>
@@ -412,7 +518,9 @@ function CanvasScreen() {
             </div>
           </div>
 
-          {showAnno && (
+          </>)}
+
+          {showAnno && !leftCollapsed && (
             <Anno tag="A1 · Signals rail" style={{left:280, top:60}}>
               Left rail groups every signal correlated into this incident. Click → focus node in graph. Near-miss chip at bottom surfaces MARGINAL-scored data the correlator thinks is related.
             </Anno>
@@ -425,16 +533,6 @@ function CanvasScreen() {
             <Graph active={active} setActive={setActive} />
           </div>
           <Timeline />
-
-          {/* Floating action bar */}
-          <div style={{position:"absolute", bottom:240, left:"50%", transform:"translateX(-50%)",
-            background:"var(--bg-elevated)", border:"1px solid var(--line-hi)", borderRadius:10,
-            padding:"6px", boxShadow:"0 12px 30px rgba(0,0,0,0.5)", display:"flex", gap:4, zIndex:5}}>
-            <button className="btn ghost sm"><I.plus size={12}/>Add signal</button>
-            <button className="btn ghost sm"><I.pencil size={12}/>Annotate</button>
-            <button className="btn ghost sm"><I.link size={12}/>Share</button>
-            <button className="btn primary sm" onClick={() => setRoute("resolve")}>Dispatch to Resolve →</button>
-          </div>
 
           {showAnno && (
             <>
@@ -450,10 +548,24 @@ function CanvasScreen() {
 
         {/* RIGHT: Contributions + AI Reasoning */}
         <div style={{borderLeft:"1px solid var(--line)", display:"flex", flexDirection:"column", minHeight:0, position:"relative"}}>
+          {rightCollapsed ? (
+            <button onClick={() => setRightCollapsed(false)} title="Expand contributions"
+              style={{flex:1, width:"100%", background:"var(--bg-surface)", border:"none",
+                cursor:"pointer", padding:"10px 0", display:"flex", flexDirection:"column",
+                alignItems:"center", gap:10, color:"var(--ink-secondary)"}}>
+              <span style={{fontSize:11}}>◂</span>
+              <div style={{writingMode:"vertical-rl", fontSize:11, fontWeight:500, letterSpacing:0.3}}>
+                Contributions · 9
+              </div>
+            </button>
+          ) : (<>
           <div style={{padding:"12px 14px", borderBottom:"1px solid var(--line)"}}>
             <div className="row" style={{justifyContent:"space-between"}}>
               <span style={{fontSize:13, fontWeight:600}}>Stakeholder contributions</span>
-              <span className="chip">9</span>
+              <div className="row" style={{gap:6}}>
+                <span className="chip">9</span>
+                <button className="btn ghost sm" onClick={() => setRightCollapsed(true)} title="Collapse">▸</button>
+              </div>
             </div>
           </div>
           <div style={{overflow:"auto", padding:12, flex:1}}>
@@ -479,11 +591,12 @@ function CanvasScreen() {
             </div>
           </div>
 
-          {showAnno && (
+          {showAnno && !rightCollapsed && (
             <Anno tag="A4 · Contributions" style={{left:-230, top:70}}>
               Nine stakeholder domains — each either pending, live (AI fetching now), contributed (human or AI landed), or dismissed. Live dots pulse.
             </Anno>
           )}
+          </>)}
         </div>
       </div>
     </div>

@@ -92,6 +92,8 @@ input, textarea { font-family: inherit; color: inherit; }
 }
 .app.floor { grid-template-columns: 1fr; background: #f7f9fc; }
 .app.nav-collapsed { grid-template-columns: 56px 1fr; }
+.app.nav-hidden { grid-template-columns: 0 1fr; }
+.app.nav-hidden .nav { display: none; }
 
 .nav {
   background: #ffffff;
@@ -141,24 +143,27 @@ input, textarea { font-family: inherit; color: inherit; }
 
 .nav-collapse-btn {
   position: absolute;
-  top: 22px;
-  right: -11px;
-  width: 22px; height: 22px;
+  top: 20px;
+  right: -12px;
+  width: 24px; height: 24px;
   border-radius: 50%;
   background: #fff;
   border: 1px solid var(--line-hi);
   color: var(--ink-secondary);
+  cursor: pointer;
   display: flex; align-items: center; justify-content: center;
-  font-size: 16px; line-height: 1;
-  box-shadow: 0 2px 6px rgba(0,0,0,0.06);
-  z-index: 10;
-  transition: all 150ms;
+  font-size: 14px; line-height: 1; font-weight: 500;
+  box-shadow: 0 1px 3px rgba(22,0,66,0.08), 0 2px 8px rgba(22,0,66,0.04);
+  z-index: 20;
+  transition: all 160ms ease;
+  padding: 0;
 }
 .nav-collapse-btn:hover {
-  background: var(--cta);
-  color: #fff;
   border-color: var(--cta);
+  color: var(--cta);
+  box-shadow: 0 2px 6px rgba(16,50,207,0.14);
 }
+.nav-collapse-btn:active { transform: scale(0.94); }
 .nav-brand {
   display: flex; align-items: center; gap: 10px;
   padding: 6px 10px 18px;
@@ -250,6 +255,11 @@ input, textarea { font-family: inherit; color: inherit; }
   box-shadow: 0 2px 6px rgba(16,50,207,0.25);
 }
 .lens-switch button.on .licon { color: #fff; }
+/* Collapse labels to icon-only when the topbar gets tight */
+@media (max-width: 1280px) {
+  .lens-switch button .llabel { display: none; }
+  .lens-switch button { padding: 6px 10px; }
+}
 
 .tag {
   font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase;
@@ -310,6 +320,11 @@ input, textarea { font-family: inherit; color: inherit; }
 .chip.sev-crit { color: var(--sev-crit); border-color: rgba(196,68,61,0.25); background: rgba(196,68,61,0.08); }
 
 @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.35} }
+
+@keyframes toastIn {
+  0% { opacity:0; transform: translateX(-50%) translateY(8px); }
+  100% { opacity:1; transform: translateX(-50%) translateY(0); }
+}
 
 /* AI marker — primary left bar */
 .ai-marked { position: relative; padding-left: 10px; }
@@ -477,6 +492,18 @@ input, textarea { font-family: inherit; color: inherit; }
 .metric .delta.good { color: var(--sev-low); font-weight: 600; }
 .metric .delta.bad  { color: var(--sev-crit); font-weight: 600; }
 .metric .delta.neu  { color: var(--ink-muted); font-weight: 500; }
+
+/* Leadership · Dense variant — tighter spacing, compressed type */
+.lead-dense .metric { padding: 10px 14px; gap: 4px; }
+.lead-dense .metric .value { font-size: 22px; }
+.lead-dense .metric .label { font-size: 9px; }
+.lead-dense .metric .delta { font-size: 10px; }
+.lead-dense .eyebrow { font-size: 9px; }
+.lead-dense h1 { font-size: 18px; }
+.lead-dense .panel .row { gap: 6px; }
+.lead-dense .pareto-row { margin-bottom: 3px !important; padding: 2px 6px !important; }
+.lead-dense .pareto-row > span:first-child { font-size: 11px; }
+.lead-dense svg[viewBox="0 0 80 22"] { height: 16px; }
 
 .row { display: flex; align-items: center; gap: 8px; }
 .col { display: flex; flex-direction: column; gap: 8px; }

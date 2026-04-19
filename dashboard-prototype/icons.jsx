@@ -45,6 +45,7 @@ const I = {
   trend:   (p) => <Icon {...p} d="M23 6l-9.5 9.5-5-5L1 18M17 6h6v6" />,
   mobile:  (p) => <Icon {...p} d="M5 2h14a2 2 0 0 1 2 2v16a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2zM12 18h.01" />,
   wave:    (p) => <Icon {...p} d="M2 12h2l2-6 4 12 4-18 4 12 2-6h2" />,
+  home:    (p) => <Icon {...p} d="M3 12l9-9 9 9M5 10v10h5v-6h4v6h5V10" />,
 };
 
 window.I = I;
