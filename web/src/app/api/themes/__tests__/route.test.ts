@@ -9,7 +9,8 @@ const mockData = [
     last_activity_at: "2026-04-19T12:00:00Z",
     signal_count: 8,
     primary_product_id: "PM-00008",
-    primary_part_number: null,
+    // DB column is "primary_part" (route maps it to primary_part_number internally)
+    primary_part: null,
     centroid_embedding: null,
   },
   {
@@ -20,7 +21,8 @@ const mockData = [
     last_activity_at: "2026-04-19T11:00:00Z",
     signal_count: 12,
     primary_product_id: "PM-00012",
-    primary_part_number: "R33",
+    // DB column is "primary_part" (route maps it to primary_part_number internally)
+    primary_part: "R33",
     centroid_embedding: null,
   },
 ];

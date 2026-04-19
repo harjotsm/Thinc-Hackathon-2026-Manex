@@ -23,7 +23,8 @@ const QuerySchema = z.object({
 const VALID_ARCHETYPE = new Set(["supplier", "drift", "design", "operator", "unknown"]);
 const VALID_SEVERITY = new Set(["low", "medium", "high", "critical"]);
 
-const FLOOR_ARCHETYPES = ["process", "operator", "drift"];
+// "process" is not a DB archetype_t value — floor shows operator + drift only.
+const FLOOR_ARCHETYPES = ["operator", "drift"];
 
 const parseCommaSep = (raw: string | undefined, valid: Set<string>): string[] | null => {
   if (!raw) return null;
@@ -85,8 +86,9 @@ export async function GET(request: NextRequest) {
     const days = windowDays(q.window);
     const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
 
+    // DB column is "primary_part"; the app uses "primary_part_number" internally.
     const select =
-      "incident_id,title,archetype,severity,last_activity_at,signal_count,primary_product_id,primary_part_number,centroid_embedding";
+      "incident_id,title,archetype,severity,last_activity_at,signal_count,primary_product_id,primary_part,centroid_embedding";
 
     let qb = supabase
       .from("incident")
@@ -115,7 +117,8 @@ export async function GET(request: NextRequest) {
         archetype:
           (row.archetype as AggregatorIncidentInput["archetype"]) ?? "unknown",
         primary_product_id: (row.primary_product_id as string | null) ?? null,
-        primary_part_number: (row.primary_part_number as string | null) ?? null,
+        // DB uses "primary_part"; map to the app-internal "primary_part_number"
+        primary_part_number: (row.primary_part as string | null) ?? null,
         title: (row.title as string | null) ?? null,
         severity: (row.severity as string | null) ?? null,
         last_activity_at: (row.last_activity_at as string | null) ?? null,
