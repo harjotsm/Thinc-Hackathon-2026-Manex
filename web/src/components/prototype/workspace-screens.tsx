@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { PROTOTYPE_DATA } from "@/lib/prototype-data";
+import { VoiceRecorder } from "@/components/voice/voice-recorder";
 
 function systemClass(target: string) {
   return `sys-pill ${target.toLowerCase()}`;
@@ -539,9 +540,9 @@ export function PrototypeFloorScreen() {
 
   const [selectedIssue, setSelectedIssue] = useState<string | null>(null);
   const [submitted, setSubmitted] = useState(false);
-  const [recording, setRecording] = useState(false);
   const [transcript, setTranscript] = useState("");
   const [note, setNote] = useState("");
+  const [voiceError, setVoiceError] = useState<string | null>(null);
   const issues = [
     { id: "scratch", label: "Kratzer / Beule", color: "var(--sev-high)" },
     { id: "noise", label: "Komisches Geräusch", color: "var(--accent)" },
@@ -569,6 +570,20 @@ export function PrototypeFloorScreen() {
   };
 
   const hasInput = Boolean(selectedIssue || note.trim() || transcript.trim());
+  const recorderLanguage = lang === "de" ? "de" : "en";
+  const handleVoiceSuccess = (result: { signalId: string; transcript: string }) => {
+    if (result.transcript?.trim()) {
+      setTranscript(result.transcript);
+      setNote((current) => (current.trim() ? current : result.transcript));
+    }
+    setVoiceError(null);
+  };
+  const handleVoiceInterimTranscript = (text: string) => {
+    setTranscript(text);
+  };
+  const handleVoiceError = (msg: string) => {
+    setVoiceError(msg);
+  };
 
   return (
     <main style={{ width: "100%", height: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "#eef3f7", position: "relative" }}>
@@ -632,37 +647,69 @@ export function PrototypeFloorScreen() {
 
             {variant === "minimal" ? (
               <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-                <button
-                  type="button"
-                  onMouseDown={() => {
-                    setRecording(true);
-                    setTranscript(t.sample);
+                <VoiceRecorder
+                  sourceSystem="voice_floor"
+                  actorUserId="user_042"
+                  language={recorderLanguage}
+                  defaultNote={note.trim() || undefined}
+                  onSuccess={handleVoiceSuccess}
+                  onInterimTranscript={handleVoiceInterimTranscript}
+                  onError={handleVoiceError}
+                  render={({ state, startRecording, stopAndUpload }) => {
+                    const isRecording = state === "recording";
+                    const isBusy = state === "uploading";
+                    return (
+                      <div style={{ display: "flex", flexDirection: "column", gap: 12, width: "100%" }}>
+                        <button
+                          type="button"
+                          onMouseDown={() => {
+                            if (isRecording || isBusy) return;
+                            void startRecording();
+                          }}
+                          onMouseUp={() => {
+                            if (!isRecording) return;
+                            void stopAndUpload();
+                          }}
+                          onMouseLeave={() => {
+                            if (!isRecording) return;
+                            void stopAndUpload();
+                          }}
+                          onTouchStart={() => {
+                            if (isRecording || isBusy) return;
+                            void startRecording();
+                          }}
+                          onTouchEnd={() => {
+                            if (!isRecording) return;
+                            void stopAndUpload();
+                          }}
+                          disabled={isBusy}
+                          style={{
+                            width: 180,
+                            height: 180,
+                            alignSelf: "center",
+                            borderRadius: "50%",
+                            border: "none",
+                            background: isRecording ? "var(--cta)" : "var(--accent)",
+                            color: "#fff",
+                            fontSize: 22,
+                            fontWeight: 700,
+                            boxShadow: isRecording ? "0 0 0 12px rgba(16,50,207,0.14)" : "0 12px 26px rgba(99,159,196,0.30)",
+                            cursor: isBusy ? "wait" : "pointer",
+                          }}
+                        >
+                          ●
+                        </button>
+                        <div className="card" style={{ padding: 12 }}>
+                          <div style={{ fontSize: 12, fontWeight: 600 }}>{isRecording ? "Listening…" : t.mic}</div>
+                          <div className="muted tt" style={{ marginTop: 4 }}>{transcript || t.chatPlaceholder}</div>
+                          {voiceError ? (
+                            <div style={{ marginTop: 6, fontSize: 11, color: "var(--sev-crit)" }}>{voiceError}</div>
+                          ) : null}
+                        </div>
+                      </div>
+                    );
                   }}
-                  onMouseUp={() => setRecording(false)}
-                  onTouchStart={() => {
-                    setRecording(true);
-                    setTranscript(t.sample);
-                  }}
-                  onTouchEnd={() => setRecording(false)}
-                  style={{
-                    width: 180,
-                    height: 180,
-                    alignSelf: "center",
-                    borderRadius: "50%",
-                    border: "none",
-                    background: recording ? "var(--cta)" : "var(--accent)",
-                    color: "#fff",
-                    fontSize: 22,
-                    fontWeight: 700,
-                    boxShadow: recording ? "0 0 0 12px rgba(16,50,207,0.14)" : "0 12px 26px rgba(99,159,196,0.30)",
-                  }}
-                >
-                  ●
-                </button>
-                <div className="card" style={{ padding: 12 }}>
-                  <div style={{ fontSize: 12, fontWeight: 600 }}>{recording ? "Listening…" : t.mic}</div>
-                  <div className="muted tt" style={{ marginTop: 4 }}>{transcript || t.chatPlaceholder}</div>
-                </div>
+                />
               </div>
             ) : null}
 
@@ -673,6 +720,72 @@ export function PrototypeFloorScreen() {
                 </div>
                 <div className="card" style={{ padding: 10, borderColor: "var(--accent-ring)", background: "var(--accent-bg)" }}>
                   <div style={{ fontSize: 12, lineHeight: 1.5 }}>{transcript || t.chatPlaceholder}</div>
+                </div>
+                <div className="card" style={{ padding: 12 }}>
+                  <VoiceRecorder
+                    sourceSystem="voice_floor"
+                    actorUserId="user_042"
+                    language={recorderLanguage}
+                    defaultNote={note.trim() || undefined}
+                    onSuccess={handleVoiceSuccess}
+                    onInterimTranscript={handleVoiceInterimTranscript}
+                    onError={handleVoiceError}
+                    render={({ state, startRecording, stopAndUpload }) => {
+                      const isRecording = state === "recording";
+                      const isBusy = state === "uploading";
+                      return (
+                        <div style={{ display: "flex", gap: 10, alignItems: "center", width: "100%" }}>
+                          <button
+                            type="button"
+                            onMouseDown={() => {
+                              if (isRecording || isBusy) return;
+                              void startRecording();
+                            }}
+                            onMouseUp={() => {
+                              if (!isRecording) return;
+                              void stopAndUpload();
+                            }}
+                            onMouseLeave={() => {
+                              if (!isRecording) return;
+                              void stopAndUpload();
+                            }}
+                            onTouchStart={() => {
+                              if (isRecording || isBusy) return;
+                              void startRecording();
+                            }}
+                            onTouchEnd={() => {
+                              if (!isRecording) return;
+                              void stopAndUpload();
+                            }}
+                            disabled={isBusy}
+                            style={{
+                              width: 54,
+                              height: 54,
+                              borderRadius: "50%",
+                              border: "none",
+                              background: isRecording ? "var(--cta)" : "linear-gradient(180deg, var(--cta), #1f42df)",
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              color: "#fff",
+                              fontSize: 18,
+                              fontWeight: 700,
+                              cursor: isBusy ? "wait" : "pointer",
+                            }}
+                          >
+                            ●
+                          </button>
+                          <div style={{ flex: 1 }}>
+                            <div style={{ fontSize: 13, fontWeight: 600, color: "var(--ink-primary)" }}>{isRecording ? "Listening…" : t.mic}</div>
+                            <div className="muted tt" style={{ marginTop: 4 }}>{transcript || t.sample}</div>
+                          </div>
+                        </div>
+                      );
+                    }}
+                  />
+                  {voiceError ? (
+                    <div style={{ marginTop: 8, fontSize: 11, color: "var(--sev-crit)" }}>{voiceError}</div>
+                  ) : null}
                 </div>
               </div>
             ) : null}
@@ -731,28 +844,76 @@ export function PrototypeFloorScreen() {
               }}
             />
 
-            <div style={{ display: "flex", gap: 10, alignItems: "center", marginBottom: 16, padding: 12, background: "var(--bg-subtle)", borderRadius: 14, border: "1px solid var(--line)" }}>
-              <button
-                type="button"
-                onMouseDown={() => {
-                  setRecording(true);
-                  setTranscript(t.sample);
-                }}
-                onMouseUp={() => setRecording(false)}
-                onTouchStart={() => {
-                  setRecording(true);
-                  setTranscript(t.sample);
-                }}
-                onTouchEnd={() => setRecording(false)}
-                style={{ width: 54, height: 54, borderRadius: "50%", border: "none", background: recording ? "var(--cta)" : "linear-gradient(180deg, var(--cta), #1f42df)", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontSize: 18, fontWeight: 700 }}
-              >
-                ●
-              </button>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 13, fontWeight: 600, color: "var(--ink-primary)" }}>{t.mic}</div>
-                <div className="muted tt" style={{ marginTop: 4 }}>{transcript || t.sample}</div>
+            {variant === "classic" ? (
+              <div style={{ display: "flex", gap: 10, alignItems: "center", marginBottom: 16, padding: 12, background: "var(--bg-subtle)", borderRadius: 14, border: "1px solid var(--line)" }}>
+                <div style={{ flex: 1 }}>
+                  <VoiceRecorder
+                    sourceSystem="voice_floor"
+                    actorUserId="user_042"
+                    language={recorderLanguage}
+                    defaultNote={note.trim() || undefined}
+                    onSuccess={handleVoiceSuccess}
+                    onInterimTranscript={handleVoiceInterimTranscript}
+                    onError={handleVoiceError}
+                    render={({ state, startRecording, stopAndUpload }) => {
+                      const isRecording = state === "recording";
+                      const isBusy = state === "uploading";
+                      return (
+                        <div style={{ display: "flex", gap: 10, alignItems: "center", width: "100%" }}>
+                          <button
+                            type="button"
+                            onMouseDown={() => {
+                              if (isRecording || isBusy) return;
+                              void startRecording();
+                            }}
+                            onMouseUp={() => {
+                              if (!isRecording) return;
+                              void stopAndUpload();
+                            }}
+                            onMouseLeave={() => {
+                              if (!isRecording) return;
+                              void stopAndUpload();
+                            }}
+                            onTouchStart={() => {
+                              if (isRecording || isBusy) return;
+                              void startRecording();
+                            }}
+                            onTouchEnd={() => {
+                              if (!isRecording) return;
+                              void stopAndUpload();
+                            }}
+                            disabled={isBusy}
+                            style={{
+                              width: 54,
+                              height: 54,
+                              borderRadius: "50%",
+                              border: "none",
+                              background: isRecording ? "var(--cta)" : "linear-gradient(180deg, var(--cta), #1f42df)",
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              color: "#fff",
+                              fontSize: 18,
+                              fontWeight: 700,
+                              cursor: isBusy ? "wait" : "pointer",
+                            }}
+                          >
+                            ●
+                          </button>
+                          <div style={{ flex: 1 }}>
+                            <div style={{ fontSize: 13, fontWeight: 600, color: "var(--ink-primary)" }}>{isRecording ? "Listening…" : t.mic}</div>
+                            <div className="muted tt" style={{ marginTop: 4 }}>{transcript || t.sample}</div>
+                          </div>
+                        </div>
+                      );
+                    }}
+                  />
+                  {voiceError ? (
+                    <div style={{ marginTop: 4, fontSize: 11, color: "var(--sev-crit)" }}>{voiceError}</div>
+                  ) : null}
+                </div>
               </div>
-            </div>
+            ) : null}
 
             <button
               className="btn primary"

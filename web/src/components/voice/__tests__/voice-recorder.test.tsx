@@ -6,6 +6,7 @@ import { VoiceRecorder } from "../voice-recorder";
 // --- MediaRecorder stub ---
 let mockRecorderMimeType = "audio/webm";
 let supportedRecorderMimeTypes: Set<string> | null = null;
+let speechInstances: MockSpeechRecognition[] = [];
 
 class MockMediaRecorder {
   state = "inactive";
@@ -39,6 +40,33 @@ class MockMediaRecorder {
 }
 (globalThis as unknown as Record<string, unknown>).MediaRecorder = MockMediaRecorder;
 
+class MockSpeechRecognition {
+  continuous = false;
+  interimResults = false;
+  lang = "de";
+  onresult: ((event: {
+    resultIndex: number;
+    results: ArrayLike<{ isFinal: boolean; 0: { transcript: string }; length: number }>;
+  }) => void) | null = null;
+  onerror: ((event: { error?: string }) => void) | null = null;
+  start = vi.fn();
+  stop = vi.fn();
+  constructor() {
+    speechInstances.push(this);
+  }
+  emitInterim(transcript: string) {
+    this.onresult?.({
+      resultIndex: 0,
+      results: [{ isFinal: false, 0: { transcript }, length: 1 }],
+    });
+  }
+}
+
+(globalThis as unknown as {
+  SpeechRecognition?: unknown;
+  webkitSpeechRecognition?: unknown;
+}).SpeechRecognition = MockSpeechRecognition;
+
 Object.defineProperty(navigator, "mediaDevices", {
   value: {
     getUserMedia: vi.fn().mockResolvedValue({ getTracks: () => [{ stop: vi.fn() }] }),
@@ -54,6 +82,7 @@ afterEach(() => {
 beforeEach(() => {
   mockRecorderMimeType = "audio/webm";
   supportedRecorderMimeTypes = null;
+  speechInstances = [];
   // Reset the getUserMedia mock to default success before each test
   (navigator.mediaDevices.getUserMedia as ReturnType<typeof vi.fn>).mockResolvedValue({
     getTracks: () => [{ stop: vi.fn() }],
@@ -84,6 +113,20 @@ describe("VoiceRecorder", () => {
 
     await waitFor(() => expect(screen.queryByText(/Stop/)).toBeTruthy());
     expect(onError).not.toHaveBeenCalled();
+  });
+
+  it("emits interim transcript while recording when browser speech recognition is available", async () => {
+    const onInterimTranscript = vi.fn();
+    render(<VoiceRecorder onInterimTranscript={onInterimTranscript} />);
+
+    await act(async () => { fireEvent.click(screen.getByText(/Voice note/)); });
+    await waitFor(() => expect(speechInstances.length).toBe(1));
+
+    act(() => {
+      speechInstances[0].emitInterim("Ich höre ein Kratzen");
+    });
+
+    expect(onInterimTranscript).toHaveBeenCalledWith("Ich höre ein Kratzen");
   });
 
   it("Stop triggers fetch with FormData containing the right keys", async () => {
@@ -119,12 +162,12 @@ describe("VoiceRecorder", () => {
   });
 
   it.each([
-    { supportedMimeTypes: ["audio/mp4"], emittedMimeType: "audio/mp4", expectedExtension: "mp4" },
-    { supportedMimeTypes: ["audio/ogg;codecs=opus"], emittedMimeType: "audio/ogg;codecs=opus", expectedExtension: "ogg" },
-    { supportedMimeTypes: ["audio/wav"], emittedMimeType: "audio/wav", expectedExtension: "wav" },
-    { supportedMimeTypes: ["audio/webm;codecs=opus"], emittedMimeType: "audio/webm;codecs=opus", expectedExtension: "webm" },
-    { supportedMimeTypes: [], emittedMimeType: "", expectedExtension: "bin" },
-  ])("uses .$expectedExtension filename extension for recorder mime settings", async ({ supportedMimeTypes, emittedMimeType, expectedExtension }) => {
+    { supportedMimeTypes: ["audio/mp4"], emittedMimeType: "audio/mp4", expectedExtension: "mp4", expectedMimeType: undefined },
+    { supportedMimeTypes: ["audio/ogg;codecs=opus"], emittedMimeType: "audio/ogg;codecs=opus", expectedExtension: "ogg", expectedMimeType: undefined },
+    { supportedMimeTypes: ["audio/wav"], emittedMimeType: "audio/wav", expectedExtension: "wav", expectedMimeType: undefined },
+    { supportedMimeTypes: ["audio/webm;codecs=opus"], emittedMimeType: "audio/webm;codecs=opus", expectedExtension: "webm", expectedMimeType: undefined },
+    { supportedMimeTypes: [], emittedMimeType: "", expectedExtension: "webm", expectedMimeType: "audio/webm" },
+  ])("uses .$expectedExtension filename extension for recorder mime settings", async ({ supportedMimeTypes, emittedMimeType, expectedExtension, expectedMimeType }) => {
     supportedRecorderMimeTypes = new Set(supportedMimeTypes);
     mockRecorderMimeType = emittedMimeType;
     vi.spyOn(Date, "now").mockReturnValue(1_700_000_000_000);
@@ -149,6 +192,9 @@ describe("VoiceRecorder", () => {
     const uploadedAudio = body.get("audio");
     expect(uploadedAudio).toBeTruthy();
     expect((uploadedAudio as File).name).toBe(`voice-1700000000000.${expectedExtension}`);
+    if (expectedMimeType) {
+      expect((uploadedAudio as File).type).toBe(expectedMimeType);
+    }
   });
 
   it("200 response transitions to success state and shows transcript snippet", async () => {

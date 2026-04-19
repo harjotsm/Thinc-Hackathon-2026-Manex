@@ -218,7 +218,6 @@ describe("POST /api/intake/voice", () => {
 
     const { POST } = await import("../route");
     const res = await POST(req);
-    const body = await res.json();
 
     expect(res.status).toBe(201);
     // The text_payload passed to the DB insert should include the note
@@ -239,7 +238,7 @@ describe("POST /api/intake/voice", () => {
 
   // ── Upstream failures ────────────────────────────────────────────────────────
 
-  it("502 — returns storage_error when upload fails", async () => {
+  it("201 — continues without attachment when upload fails but transcription succeeds", async () => {
     mockUploadVoiceClip.mockRejectedValue(new Error("Bucket not found"));
 
     const form = makeVoiceForm();
@@ -249,9 +248,15 @@ describe("POST /api/intake/voice", () => {
     const res = await POST(req);
     const body = await res.json();
 
-    expect(res.status).toBe(502);
-    expect(body.code).toBe("storage_error");
-    expect(body.retryable).toBe(true);
+    expect(res.status).toBe(201);
+    expect(body.signal).toBeDefined();
+    expect(mockInsert).toHaveBeenCalledOnce();
+
+    const insertPayload = mockInsert.mock.calls[0][0] as Record<string, unknown>;
+    expect(insertPayload.attachments).toEqual([]);
+    expect(insertPayload.raw_payload).toMatchObject({
+      storage_error: { message: "Bucket not found" },
+    });
   });
 
   it("201 — creates fallback signal when Whisper fails but note exists", async () => {
@@ -323,6 +328,33 @@ describe("POST /api/intake/voice", () => {
     expect(res.status).toBe(500);
     expect(body.code).toBe("db_error");
     expect(body.retryable).toBe(true);
+  });
+
+  it("201 — retries insert without created_by_user_id when DB schema lacks the column", async () => {
+    mockInsertSingle
+      .mockResolvedValueOnce({
+        data: null,
+        error: {
+          message: "Could not find the 'created_by_user_id' column of 'signal' in the schema cache",
+        },
+      })
+      .mockResolvedValueOnce({ data: fakeSignalRow, error: null });
+
+    const form = makeVoiceForm({ actor_user_id: "user_042" });
+    const req = makeRequest(form);
+
+    const { POST } = await import("../route");
+    const res = await POST(req);
+    const body = await res.json();
+
+    expect(res.status).toBe(201);
+    expect(body.signal).toBeDefined();
+    expect(mockInsert).toHaveBeenCalledTimes(2);
+
+    const firstInsertPayload = mockInsert.mock.calls[0][0] as Record<string, unknown>;
+    expect(firstInsertPayload.created_by_user_id).toBe("user_042");
+    const secondInsertPayload = mockInsert.mock.calls[1][0] as Record<string, unknown>;
+    expect(secondInsertPayload).not.toHaveProperty("created_by_user_id");
   });
 
   it("201 — correlator failure is non-fatal (signal still returned)", async () => {

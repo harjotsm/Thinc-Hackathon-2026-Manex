@@ -25,18 +25,6 @@ export const uploadVoiceClip = async (
   filenameHint: string,
   contentType: string,
 ): Promise<StoredAudioRef> => {
-  // Best-effort: ensure the bucket exists before uploading.
-  // If bucket creation is denied by RLS, we log a warning and attempt the upload
-  // anyway (it will fail with a clear message if the bucket truly doesn't exist).
-  try {
-    await ensureVoiceBucket();
-  } catch (bucketErr) {
-    console.warn(
-      `[supabase-storage] Could not ensure bucket "${VOICE_BUCKET}" exists — ` +
-        `create it manually in the Supabase dashboard if uploads fail. Error: ${String(bucketErr)}`,
-    );
-  }
-
   const c = getStorageClient();
   // Path schema: voice/<yyyy>/<mm>/<dd>/<uuid>-<safe-filename>
   const now = new Date();

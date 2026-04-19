@@ -58,16 +58,17 @@ export async function POST(request: Request) {
   // Derive a filename hint from the Blob or use a sensible default
   const filenameHint =
     (audioEntry as unknown as { name?: string }).name ||
-    `audio-${Date.now()}.${audioEntry.type?.split("/")[1] ?? "webm"}`;
-  const contentType = audioEntry.type || "audio/webm";
+    `audio-${Date.now()}.${audioEntry.type?.split("/")[1]?.split(";")[0] ?? "webm"}`;
+  const contentType = audioEntry.type?.split(";")[0] || "audio/webm";
 
   // 1. Upload to Supabase Storage
-  let storedRef: Awaited<ReturnType<typeof uploadVoiceClip>>;
+  let storedRef: Awaited<ReturnType<typeof uploadVoiceClip>> | null = null;
+  let storageError: { message: string } | null = null;
   try {
     storedRef = await uploadVoiceClip(audioEntry, filenameHint, contentType);
   } catch (uploadErr) {
     const msg = uploadErr instanceof Error ? uploadErr.message : String(uploadErr);
-    return err("storage_error", `Failed to store audio: ${msg}`, true, 502);
+    storageError = { message: msg };
   }
 
   // 2. Transcribe via Whisper
@@ -101,8 +102,6 @@ export async function POST(request: Request) {
   const idempotencyKey = (form.get("idempotency_key") as string | null) ?? `auto-${crypto.randomUUID()}`;
   const supabase = getSupabaseServerClient();
 
-  const attachmentUrl = storedRef.publicUrl ?? `${storedRef.bucket}/${storedRef.path}`;
-
   const insertPayload = {
     signal_id: signalId,
     idempotency_key: idempotencyKey,
@@ -114,33 +113,45 @@ export async function POST(request: Request) {
     text_payload: textPayload,
     raw_payload: {
       source: "voice_intake",
-      storage_path: storedRef.path,
-      storage_bucket: storedRef.bucket,
+      storage_path: storedRef?.path ?? null,
+      storage_bucket: storedRef?.bucket ?? null,
       content_type: contentType,
       filename: filenameHint,
       note: note ?? null,
       transcription_language: transcription?.language ?? null,
       transcription_duration_seconds: transcription?.duration_seconds ?? null,
+      ...(storageError ? { storage_error: storageError } : {}),
       ...(transcriptionError ? { transcription_error: transcriptionError } : {}),
     },
-    attachments: [
-      {
-        kind: "audio",
-        url: attachmentUrl,
-        transcript: transcription?.text ?? null,
-        status: transcription ? "transcribed" : "failed",
-      },
-    ],
+    attachments: storedRef
+      ? [
+          {
+            kind: "audio",
+            url: storedRef.publicUrl ?? `${storedRef.bucket}/${storedRef.path}`,
+            transcript: transcription?.text ?? null,
+            status: transcription ? "transcribed" : "failed",
+          },
+        ]
+      : [],
     embedding: vectorLiteral(embedding),
     created_by_user_id: typeof actorUserId === "string" && actorUserId.trim() ? actorUserId.trim() : null,
     severity_hint: 0.5,
   };
 
-  const { data: signal, error: insertError } = await supabase
-    .from("signal")
-    .insert(insertPayload)
-    .select("*")
-    .single();
+  const insertSignal = (payload: Record<string, unknown>) =>
+    supabase.from("signal").insert(payload).select("*").single();
+
+  let { data: signal, error: insertError } = await insertSignal(insertPayload);
+
+  if (
+    insertError &&
+    /created_by_user_id/i.test(insertError.message)
+  ) {
+    const { created_by_user_id: _ignored, ...withoutCreatorId } = insertPayload;
+    const retry = await insertSignal(withoutCreatorId);
+    signal = retry.data;
+    insertError = retry.error;
+  }
 
   if (insertError) {
     return err("db_error", insertError.message, true, 500);
