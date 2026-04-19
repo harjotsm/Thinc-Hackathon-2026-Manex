@@ -93,13 +93,30 @@ describe("transcribeAudio", () => {
 });
 
 describe("env", () => {
-  it("requires OPENAI_API_KEY at startup", async () => {
+  it("does not require OPENAI_API_KEY when loading env", async () => {
     const previous = process.env.OPENAI_API_KEY;
     delete process.env.OPENAI_API_KEY;
     vi.resetModules();
 
     try {
-      await expect(import("@/lib/env?fresh=" + Date.now())).rejects.toThrow(
+      const { env } = await import("@/lib/env?fresh=" + Date.now());
+      expect(env.openAiApiKey).toBeUndefined();
+    } finally {
+      if (previous === undefined) {
+        delete process.env.OPENAI_API_KEY;
+      } else {
+        process.env.OPENAI_API_KEY = previous;
+      }
+    }
+  });
+
+  it("requires OPENAI_API_KEY in server-only OpenAI client path", async () => {
+    const previous = process.env.OPENAI_API_KEY;
+    delete process.env.OPENAI_API_KEY;
+    vi.resetModules();
+
+    try {
+      await expect(import("@/lib/openai?fresh=" + Date.now())).rejects.toThrow(
         /Missing environment variable: OPENAI_API_KEY/,
       );
     } finally {
