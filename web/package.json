@@ -10,7 +10,8 @@
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
     "test": "vitest",
-    "test:integration": "vitest run src/**/*.integration.test.ts"
+    "test:integration": "vitest run src/**/*.integration.test.ts",
+    "test:voice-smoke": "vitest run src/app/api/intake/voice/__tests__/route.live.integration.test.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.90.0",

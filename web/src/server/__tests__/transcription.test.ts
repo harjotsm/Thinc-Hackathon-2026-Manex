@@ -5,14 +5,15 @@ vi.mock("server-only", () => ({}));
 
 // Mock the OpenAI client singleton
 const mockCreate = vi.fn();
-vi.mock("@/lib/openai", () => ({
-  getOpenAIClient: () => ({
-    audio: {
-      transcriptions: {
-        create: mockCreate,
-      },
+const mockGetOpenAIClient = vi.fn(() => ({
+  audio: {
+    transcriptions: {
+      create: mockCreate,
     },
-  }),
+  },
+}));
+vi.mock("@/lib/openai", () => ({
+  getOpenAIClient: mockGetOpenAIClient,
 }));
 
 describe("transcribeAudio", () => {
@@ -56,6 +57,79 @@ describe("transcribeAudio", () => {
     expect(result.model).toBe("whisper-1");
   });
 
+  it("forwards Blob MIME type to OpenAI file payload", async () => {
+    mockCreate.mockResolvedValue({ text: "ok", language: "en", duration: 1.0 });
+
+    const { transcribeAudio } = await import("../transcription");
+    const blob = new Blob(["fake-audio"], { type: "audio/ogg" });
+    await transcribeAudio(blob, "clip.ogg");
+
+    expect(mockCreate).toHaveBeenCalledOnce();
+    const callArg = mockCreate.mock.calls[0][0];
+    const sentFile = callArg.file as File;
+    expect(sentFile.name).toBe("clip.ogg");
+    expect(sentFile.type).toBe("audio/ogg");
+  });
+
+  it("derives MIME type from filename when Blob type is missing", async () => {
+    mockCreate.mockResolvedValue({ text: "ok", language: "en", duration: 1.0 });
+
+    const { transcribeAudio } = await import("../transcription");
+    const blob = new Blob(["fake-audio"]);
+    await transcribeAudio(blob, "clip.wav");
+
+    expect(mockCreate).toHaveBeenCalledOnce();
+    const callArg = mockCreate.mock.calls[0][0];
+    const sentFile = callArg.file as File;
+    expect(sentFile.type).toBe("audio/wav");
+  });
+
+  it("normalizes unsupported filename extensions to .webm before calling OpenAI", async () => {
+    mockCreate.mockResolvedValue({ text: "ok", language: "en", duration: 1.0 });
+
+    const { transcribeAudio } = await import("../transcription");
+    const blob = new Blob(["fake-audio"]);
+    await transcribeAudio(blob, "clip.bin");
+
+    expect(mockCreate).toHaveBeenCalledOnce();
+    const callArg = mockCreate.mock.calls[0][0];
+    const sentFile = callArg.file as File;
+    expect(sentFile.name).toBe("clip.webm");
+    expect(sentFile.type).toBe("audio/webm");
+  });
+
+  it("strips MIME codec parameters before creating OpenAI file payload", async () => {
+    mockCreate.mockResolvedValue({ text: "ok", language: "en", duration: 1.0 });
+
+    const { transcribeAudio } = await import("../transcription");
+    const blob = new Blob(["fake-audio"], { type: "audio/webm;codecs=opus" });
+    await transcribeAudio(blob, "clip.webm");
+
+    expect(mockCreate).toHaveBeenCalledOnce();
+    const callArg = mockCreate.mock.calls[0][0];
+    const sentFile = callArg.file as File;
+    expect(sentFile.name).toBe("clip.webm");
+    expect(sentFile.type).toBe("audio/webm");
+  });
+
+  it("uses magic-byte sniffing to recover MP4 format when filename is unsupported", async () => {
+    mockCreate.mockResolvedValue({ text: "ok", language: "en", duration: 1.0 });
+
+    const { transcribeAudio } = await import("../transcription");
+    const mp4LikeHeader = new Uint8Array([
+      0x00, 0x00, 0x00, 0x18, 0x66, 0x74, 0x79, 0x70, 0x69, 0x73, 0x6f, 0x6d,
+      0x00, 0x00, 0x02, 0x00,
+    ]);
+    const blob = new Blob([mp4LikeHeader], { type: "" });
+    await transcribeAudio(blob, "capture.bin");
+
+    expect(mockCreate).toHaveBeenCalledOnce();
+    const callArg = mockCreate.mock.calls[0][0];
+    const sentFile = callArg.file as File;
+    expect(sentFile.name).toBe("capture.mp4");
+    expect(sentFile.type).toBe("audio/mp4");
+  });
+
   it("passes language parameter through to OpenAI when provided", async () => {
     mockCreate.mockResolvedValue({ text: "Prüfung abgeschlossen.", language: "de", duration: 1.0 });
 
@@ -80,15 +154,50 @@ describe("transcribeAudio", () => {
     expect(result.text).toBe("Short clip.");
   });
 
-  it("throws when OpenAI client is not configured", async () => {
-    vi.doMock("@/lib/openai", () => ({
-      getOpenAIClient: () => null,
-    }));
+  it("uses a configured OpenAI client", async () => {
+    mockCreate.mockResolvedValue({ text: "Configured client.", language: "en", duration: 1.2 });
 
-    // Reset module cache so the mock takes effect
-    const { transcribeAudio: fresh } = await import("../transcription?fresh=" + Date.now());
-    await expect(fresh(Buffer.from("x"), "clip.webm")).rejects.toThrow(
-      /OpenAI client is not configured/,
-    );
+    const { transcribeAudio } = await import("../transcription");
+    await transcribeAudio(Buffer.from("x"), "clip.webm");
+
+    expect(mockGetOpenAIClient).toHaveBeenCalledOnce();
+    expect(mockCreate).toHaveBeenCalledOnce();
+  });
+});
+
+describe("env", () => {
+  it("does not require OPENAI_API_KEY when loading env", async () => {
+    const previous = process.env.OPENAI_API_KEY;
+    delete process.env.OPENAI_API_KEY;
+    vi.resetModules();
+
+    try {
+      const { env } = await import("@/lib/env?fresh=" + Date.now());
+      expect(env.openAiApiKey).toBeUndefined();
+    } finally {
+      if (previous === undefined) {
+        delete process.env.OPENAI_API_KEY;
+      } else {
+        process.env.OPENAI_API_KEY = previous;
+      }
+    }
+  });
+
+  it("requires OPENAI_API_KEY in server-only OpenAI client path", async () => {
+    const previous = process.env.OPENAI_API_KEY;
+    delete process.env.OPENAI_API_KEY;
+    vi.resetModules();
+
+    try {
+      await expect(import("@/lib/openai?fresh=" + Date.now())).rejects.toThrow(
+        /Missing environment variable: OPENAI_API_KEY/,
+      );
+    } finally {
+      if (previous === undefined) {
+        delete process.env.OPENAI_API_KEY;
+      } else {
+        process.env.OPENAI_API_KEY = previous;
+      }
+    }
   });
 });

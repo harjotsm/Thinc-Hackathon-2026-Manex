@@ -29,14 +29,11 @@ vi.mock("@/server/transcription", () => ({
 }));
 
 const mockInsertSingle = vi.fn();
+const mockInsert = vi.fn();
 vi.mock("@/lib/supabase-server", () => ({
   getSupabaseServerClient: () => ({
     from: () => ({
-      insert: () => ({
-        select: () => ({
-          single: mockInsertSingle,
-        }),
-      }),
+      insert: (...args: unknown[]) => mockInsert(...args),
     }),
   }),
 }));
@@ -91,6 +88,11 @@ const fakeSignalRow = {
 describe("POST /api/intake/voice", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockInsert.mockReturnValue({
+      select: () => ({
+        single: mockInsertSingle,
+      }),
+    });
     // Default happy-path stubs
     mockUploadVoiceClip.mockResolvedValue({
       bucket: "voice-signals",
@@ -196,6 +198,7 @@ describe("POST /api/intake/voice", () => {
     expect(body.correlator).toBeDefined();
     expect(body.correlator.linkedSignals).toBe(0);
     expect(Array.isArray(body.correlator.incidentIds)).toBe(true);
+    expect(mockRunCorrelator).toHaveBeenCalledOnce();
   });
 
   it("201 — note is prepended to transcript in text_payload", async () => {
@@ -215,7 +218,6 @@ describe("POST /api/intake/voice", () => {
 
     const { POST } = await import("../route");
     const res = await POST(req);
-    const body = await res.json();
 
     expect(res.status).toBe(201);
     // The text_payload passed to the DB insert should include the note
@@ -236,7 +238,7 @@ describe("POST /api/intake/voice", () => {
 
   // ── Upstream failures ────────────────────────────────────────────────────────
 
-  it("502 — returns storage_error when upload fails", async () => {
+  it("201 — continues without attachment when upload fails but transcription succeeds", async () => {
     mockUploadVoiceClip.mockRejectedValue(new Error("Bucket not found"));
 
     const form = makeVoiceForm();
@@ -246,12 +248,57 @@ describe("POST /api/intake/voice", () => {
     const res = await POST(req);
     const body = await res.json();
 
-    expect(res.status).toBe(502);
-    expect(body.code).toBe("storage_error");
-    expect(body.retryable).toBe(true);
+    expect(res.status).toBe(201);
+    expect(body.signal).toBeDefined();
+    expect(mockInsert).toHaveBeenCalledOnce();
+
+    const insertPayload = mockInsert.mock.calls[0][0] as Record<string, unknown>;
+    expect(insertPayload.attachments).toEqual([]);
+    expect(insertPayload.raw_payload).toMatchObject({
+      storage_error: { message: "Bucket not found" },
+    });
   });
 
-  it("502 — returns transcription_error when Whisper fails", async () => {
+  it("201 — creates fallback signal when Whisper fails but note exists", async () => {
+    mockTranscribeAudio.mockRejectedValue(new Error("Whisper API rate limited"));
+
+    mockInsertSingle.mockResolvedValue({
+      data: {
+        ...fakeSignalRow,
+        text_payload: "Operator fallback note.",
+        attachments: [{ kind: "audio", url: "https://cdn.example.com/clip.webm", transcript: null, status: "failed" }],
+        raw_payload: { transcription_error: { message: "Whisper API rate limited" } },
+      },
+      error: null,
+    });
+
+    const form = makeVoiceForm({ note: "Operator fallback note." });
+    const req = makeRequest(form);
+
+    const { POST } = await import("../route");
+    const res = await POST(req);
+    const body = await res.json();
+
+    expect(res.status).toBe(201);
+    expect(mockInsert).toHaveBeenCalledOnce();
+    const insertPayload = mockInsert.mock.calls[0][0] as Record<string, unknown>;
+    expect(insertPayload.text_payload).toBe("Operator fallback note.");
+    expect(insertPayload.raw_payload).toMatchObject({
+      transcription_error: {
+        message: "Whisper API rate limited",
+      },
+    });
+    expect(insertPayload.attachments).toEqual([
+      expect.objectContaining({
+        status: "failed",
+        transcript: null,
+      }),
+    ]);
+    expect(mockRunCorrelator).toHaveBeenCalledOnce();
+    expect(body.signal).toBeDefined();
+  });
+
+  it("502 — returns transcription_error when Whisper fails and no note exists", async () => {
     mockTranscribeAudio.mockRejectedValue(new Error("Whisper API rate limited"));
 
     const form = makeVoiceForm();
@@ -264,6 +311,8 @@ describe("POST /api/intake/voice", () => {
     expect(res.status).toBe(502);
     expect(body.code).toBe("transcription_error");
     expect(body.retryable).toBe(true);
+    expect(mockInsert).not.toHaveBeenCalled();
+    expect(mockRunCorrelator).not.toHaveBeenCalled();
   });
 
   it("500 — returns db_error when signal insert fails", async () => {
@@ -279,6 +328,33 @@ describe("POST /api/intake/voice", () => {
     expect(res.status).toBe(500);
     expect(body.code).toBe("db_error");
     expect(body.retryable).toBe(true);
+  });
+
+  it("201 — retries insert without created_by_user_id when DB schema lacks the column", async () => {
+    mockInsertSingle
+      .mockResolvedValueOnce({
+        data: null,
+        error: {
+          message: "Could not find the 'created_by_user_id' column of 'signal' in the schema cache",
+        },
+      })
+      .mockResolvedValueOnce({ data: fakeSignalRow, error: null });
+
+    const form = makeVoiceForm({ actor_user_id: "user_042" });
+    const req = makeRequest(form);
+
+    const { POST } = await import("../route");
+    const res = await POST(req);
+    const body = await res.json();
+
+    expect(res.status).toBe(201);
+    expect(body.signal).toBeDefined();
+    expect(mockInsert).toHaveBeenCalledTimes(2);
+
+    const firstInsertPayload = mockInsert.mock.calls[0][0] as Record<string, unknown>;
+    expect(firstInsertPayload.created_by_user_id).toBe("user_042");
+    const secondInsertPayload = mockInsert.mock.calls[1][0] as Record<string, unknown>;
+    expect(secondInsertPayload).not.toHaveProperty("created_by_user_id");
   });
 
   it("201 — correlator failure is non-fatal (signal still returned)", async () => {

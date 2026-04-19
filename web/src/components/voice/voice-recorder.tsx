@@ -1,7 +1,19 @@
 "use client";
 import { useState, useRef, useCallback } from "react";
+import type { CSSProperties, ReactNode } from "react";
 
-type RecorderState = "idle" | "recording" | "uploading" | "success" | "error";
+export type RecorderState = "idle" | "recording" | "uploading" | "success" | "error";
+
+export type VoiceRecorderRenderControls = {
+  state: RecorderState;
+  duration: number;
+  errorMsg: string | null;
+  lastTranscript: string | null;
+  liveTranscript: string;
+  startRecording: () => Promise<void>;
+  stopAndUpload: (note?: string) => Promise<void>;
+  reset: () => void;
+};
 
 type Props = {
   sourceSystem?: string;
@@ -10,6 +22,73 @@ type Props = {
   defaultNote?: string;
   onSuccess?: (result: { signalId: string; transcript: string; incidentIds: string[] }) => void;
   onError?: (msg: string) => void;
+  onInterimTranscript?: (text: string) => void;
+  render?: (controls: VoiceRecorderRenderControls) => ReactNode;
+};
+
+type SpeechRecognitionEventLike = {
+  resultIndex: number;
+  results: ArrayLike<{
+    isFinal: boolean;
+    0: { transcript: string };
+    length: number;
+  }>;
+};
+
+type SpeechRecognitionLike = {
+  continuous: boolean;
+  interimResults: boolean;
+  lang: string;
+  onresult: ((event: SpeechRecognitionEventLike) => void) | null;
+  onerror: ((event: { error?: string }) => void) | null;
+  start: () => void;
+  stop: () => void;
+};
+
+const getAudioExtensionFromMime = (mimeType: string): string => {
+  const normalized = mimeType.toLowerCase();
+  if (normalized.includes("mpeg") || normalized.includes("mp3")) return "mp3";
+  if (normalized.includes("mp4")) return "mp4";
+  if (normalized.includes("ogg")) return "ogg";
+  if (normalized.includes("wav")) return "wav";
+  if (normalized.includes("webm")) return "webm";
+  return "webm";
+};
+
+const resolveRecorderMimeType = (): string | null => {
+  if (typeof MediaRecorder === "undefined" || typeof MediaRecorder.isTypeSupported !== "function") {
+    return null;
+  }
+
+  const candidates = [
+    "audio/webm;codecs=opus",
+    "audio/webm",
+    "audio/mp4;codecs=mp4a.40.2",
+    "audio/mp4",
+    "audio/ogg;codecs=opus",
+    "audio/ogg",
+    "audio/wav",
+    "audio/mpeg",
+  ];
+
+  for (const candidate of candidates) {
+    if (MediaRecorder.isTypeSupported(candidate)) {
+      return candidate;
+    }
+  }
+
+  return null;
+};
+
+const resolveSpeechRecognitionCtor = (): (new () => SpeechRecognitionLike) | null => {
+  if (typeof window === "undefined") return null;
+  const fromWindow = (
+    window as unknown as {
+      SpeechRecognition?: new () => SpeechRecognitionLike;
+      webkitSpeechRecognition?: new () => SpeechRecognitionLike;
+    }
+  );
+  return fromWindow.SpeechRecognition ?? fromWindow.webkitSpeechRecognition ?? null;
 };
 
 export const VoiceRecorder = ({
@@ -19,12 +98,16 @@ export const VoiceRecorder = ({
   defaultNote,
   onSuccess,
   onError,
+  onInterimTranscript,
+  render,
 }: Props) => {
   const [state, setState] = useState<RecorderState>("idle");
   const [duration, setDuration] = useState(0);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [lastTranscript, setLastTranscript] = useState<string | null>(null);
+  const [liveTranscript, setLiveTranscript] = useState("");
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const speechRecognitionRef = useRef<SpeechRecognitionLike | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const streamRef = useRef<MediaStream | null>(null);
   const tickRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -33,6 +116,10 @@ export const VoiceRecorder = ({
   const cleanup = useCallback(() => {
     if (tickRef.current) { clearInterval(tickRef.current); tickRef.current = null; }
     if (streamRef.current) { streamRef.current.getTracks().forEach((t) => t.stop()); streamRef.current = null; }
+    if (speechRecognitionRef.current) {
+      speechRecognitionRef.current.stop();
+      speechRecognitionRef.current = null;
+    }
     mediaRecorderRef.current = null;
     chunksRef.current = [];
   }, []);
@@ -41,12 +128,21 @@ export const VoiceRecorder = ({
     try {
       setErrorMsg(null);
       setState("recording");
+      setLiveTranscript("");
+      onInterimTranscript?.("");
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       streamRef.current = stream;
-      const mime = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
-        ? "audio/webm;codecs=opus"
-        : "audio/webm";
-      const rec = new MediaRecorder(stream, { mimeType: mime });
+      const mimeType = resolveRecorderMimeType();
+      let rec: MediaRecorder;
+      if (mimeType) {
+        try {
+          rec = new MediaRecorder(stream, { mimeType });
+        } catch {
+          rec = new MediaRecorder(stream);
+        }
+      } else {
+        rec = new MediaRecorder(stream);
+      }
       mediaRecorderRef.current = rec;
       chunksRef.current = [];
       rec.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data); };
@@ -55,6 +151,31 @@ export const VoiceRecorder = ({
       tickRef.current = setInterval(() => {
         setDuration(Math.floor((Date.now() - startedAtRef.current) / 1000));
       }, 250);
+
+      const SpeechRecognitionCtor = resolveSpeechRecognitionCtor();
+      if (SpeechRecognitionCtor) {
+        const speech = new SpeechRecognitionCtor();
+        speech.continuous = true;
+        speech.interimResults = true;
+        speech.lang = language ?? "de";
+        speech.onresult = (event) => {
+          let interim = "";
+          for (let i = event.resultIndex; i < event.results.length; i += 1) {
+            const segment = event.results[i]?.[0]?.transcript ?? "";
+            if (!event.results[i]?.isFinal) {
+              interim += segment;
+            }
+          }
+          const text = interim.trim();
+          setLiveTranscript(text);
+          onInterimTranscript?.(text);
+        };
+        speech.onerror = () => {
+          // Non-fatal: keep audio recording/upload path active.
+        };
+        speech.start();
+        speechRecognitionRef.current = speech;
+      }
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Microphone access denied";
       setErrorMsg(msg);
@@ -62,15 +183,21 @@ export const VoiceRecorder = ({
       cleanup();
       onError?.(msg);
     }
-  }, [cleanup, onError]);
+  }, [cleanup, language, onError, onInterimTranscript]);
 
   const stopAndUpload = useCallback(async (note?: string) => {
     const rec = mediaRecorderRef.current;
     if (!rec || rec.state === "inactive") return;
+    if (speechRecognitionRef.current) {
+      speechRecognitionRef.current.stop();
+      speechRecognitionRef.current = null;
+    }
     rec.stop();
     // Wait for the final dataavailable event
     await new Promise<void>((resolve) => { rec.onstop = () => resolve(); });
-    const blob = new Blob(chunksRef.current, { type: rec.mimeType });
+    const chunkType = chunksRef.current.find((chunk) => chunk.type)?.type ?? "";
+    const resolvedType = rec.mimeType || chunkType || "audio/webm";
+    const blob = new Blob(chunksRef.current, { type: resolvedType });
     cleanup();
     if (blob.size === 0) {
       setErrorMsg("No audio captured");
@@ -79,7 +206,8 @@ export const VoiceRecorder = ({
     }
     setState("uploading");
     const fd = new FormData();
-    fd.append("audio", blob, `voice-${Date.now()}.webm`);
+    const extension = getAudioExtensionFromMime(blob.type || rec.mimeType || chunkType);
+    fd.append("audio", blob, `voice-${Date.now()}.${extension}`);
     fd.append("source_system", sourceSystem);
     if (actorUserId) fd.append("actor_user_id", actorUserId);
     if (language) fd.append("language", language);
@@ -94,6 +222,7 @@ export const VoiceRecorder = ({
       }
       setLastTranscript(json.transcript?.text ?? null);
       setState("success");
+      setLiveTranscript("");
       onSuccess?.({
         signalId: json.signal?.signal_id ?? "",
         transcript: json.transcript?.text ?? "",
@@ -105,7 +234,15 @@ export const VoiceRecorder = ({
     }
   }, [sourceSystem, actorUserId, language, defaultNote, onSuccess, onError, cleanup]);
 
-  const reset = () => { setState("idle"); setDuration(0); setLastTranscript(null); setErrorMsg(null); };
+  const reset = () => { setState("idle"); setDuration(0); setLastTranscript(null); setErrorMsg(null); setLiveTranscript(""); onInterimTranscript?.(""); };
+
+  if (render) {
+    return (
+        <div data-testid="voice-recorder" style={{ display: "inline-flex", alignItems: "center", gap: 12 }}>
+        {render({ state, duration, errorMsg, lastTranscript, liveTranscript, startRecording, stopAndUpload, reset })}
+      </div>
+    );
+  }
 
   return (
     <div data-testid="voice-recorder" style={{ display: "inline-flex", alignItems: "center", gap: 12 }}>
@@ -143,8 +280,8 @@ export const VoiceRecorder = ({
   );
 };
 
-const btnStyle = (s: RecorderState): React.CSSProperties => {
-  const base: React.CSSProperties = {
+const btnStyle = (s: RecorderState): CSSProperties => {
+  const base: CSSProperties = {
     border: "none", borderRadius: 999, padding: "10px 18px",
     fontSize: 13, fontWeight: 600, cursor: "pointer",
   };
@@ -157,7 +294,7 @@ const btnStyle = (s: RecorderState): React.CSSProperties => {
     default:          return base;
   }
 };
-const resetStyle: React.CSSProperties = {
+const resetStyle: CSSProperties = {
   background: "transparent", border: "1px solid #cbd5e1",
   padding: "4px 10px", borderRadius: 6, fontSize: 12, cursor: "pointer", color: "#475569",
 };

@@ -279,10 +279,8 @@ function NavBadge({
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const isFloorRoute = pathname === "/floor" || pathname === "/capture";
-  const [collapsed, setCollapsed] = useState(() => {
-    if (typeof window === "undefined") return false;
-    return window.localStorage.getItem("resolve.nav.collapsed") === "true";
-  });
+  const [collapsed, setCollapsed] = useState(false);
+  const [hydrated, setHydrated] = useState(false);
   const meta = useMemo(() => routeMeta(pathname), [pathname]);
   const liveCounts = useLiveNavCounts();
 
@@ -304,8 +302,17 @@ export function AppShell({ children }: { children: ReactNode }) {
   );
 
   useEffect(() => {
+    const stored = window.localStorage.getItem("resolve.nav.collapsed");
+    if (stored === "true") {
+      setCollapsed(true);
+    }
+    setHydrated(true);
+  }, []);
+
+  useEffect(() => {
+    if (!hydrated) return;
     window.localStorage.setItem("resolve.nav.collapsed", String(collapsed));
-  }, [collapsed]);
+  }, [collapsed, hydrated]);
 
   if (isFloorRoute) {
     return <div className="floor-shell">{children}</div>;

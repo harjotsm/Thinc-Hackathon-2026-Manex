@@ -3,15 +3,13 @@ import "server-only";
 import OpenAI from "openai";
 import { env } from "@/lib/env";
 
-let client: OpenAI | null = null;
+const openAiApiKey = env.required("OPENAI_API_KEY");
 
-export const getOpenAIClient = () => {
-  if (!env.openAiApiKey) {
-    return null;
-  }
+let client: OpenAI | undefined;
 
+export const getOpenAIClient = (): OpenAI => {
   if (!client) {
-    client = new OpenAI({ apiKey: env.openAiApiKey });
+    client = new OpenAI({ apiKey: openAiApiKey });
   }
 
   return client;
