@@ -127,22 +127,27 @@ export async function GET(request: NextRequest) {
       }),
     );
 
+    // confidence_avg defaults to 0 from the aggregator. The UI renders 0 as "—".
+    // TODO: enrich per-theme from incident_contribution data once the contributions fetch lands.
     const themes = aggregateThemes(incidents);
 
     // Enrich unknown-archetype clusters with LLM-generated titles
-    for (const t of themes) {
-      if (t.archetype !== "unknown") continue;
-      const signalTexts = t.incidents
-        .map((i) => i.title)
-        .filter((s): s is string => Boolean(s));
-      const r = await themeTitle({
-        archetype: "unknown",
-        dominantEntity: t.dominant_entity,
-        signalTexts,
-      });
-      t.title = r.title;
-      t.title_source = r.source;
-    }
+    await Promise.all(
+      themes
+        .filter((t) => t.archetype === "unknown")
+        .map(async (t) => {
+          const signalTexts = t.incidents
+            .map((i) => i.title)
+            .filter((s): s is string => Boolean(s));
+          const r = await themeTitle({
+            archetype: "unknown",
+            dominantEntity: t.dominant_entity,
+            signalTexts,
+          });
+          t.title = r.title;
+          t.title_source = r.source;
+        }),
+    );
 
     // Compute per-theme mean centroid for cross-theme similarity hint
     const centroidByGroup = new Map<string, number[][]>();
